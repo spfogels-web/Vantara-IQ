@@ -1,0 +1,73 @@
+import {
+  AlertTriangle,
+  BarChart3,
+  Banknote,
+  Bell,
+  Building2,
+  CalendarClock,
+  CheckCircle2,
+  ClipboardList,
+  Clock,
+  DollarSign,
+  FileText,
+  FileWarning,
+  FolderKanban,
+  Gauge,
+  HardHat,
+  LayoutDashboard,
+  LifeBuoy,
+  Package,
+  Receipt,
+  Route,
+  Settings,
+  ShieldCheck,
+  Sparkles,
+  TrendingUp,
+  Truck,
+  Users,
+  Wallet,
+  Zap,
+  type LucideIcon,
+} from "lucide-react";
+
+/**
+ * Icons are referenced by key in the data layer so payloads stay serializable
+ * across the server/client boundary. Components resolve keys here.
+ */
+export const iconRegistry = {
+  alert: AlertTriangle,
+  bank: Banknote,
+  bell: Bell,
+  billing: Wallet,
+  calendar: CalendarClock,
+  chart: BarChart3,
+  check: CheckCircle2,
+  clipboard: ClipboardList,
+  clock: Clock,
+  customers: Building2,
+  dashboard: LayoutDashboard,
+  dollar: DollarSign,
+  document: FileText,
+  documentWarning: FileWarning,
+  gauge: Gauge,
+  crew: HardHat,
+  materials: Package,
+  payapps: Receipt,
+  projects: FolderKanban,
+  reports: BarChart3,
+  route: Route,
+  settings: Settings,
+  shield: ShieldCheck,
+  sparkles: Sparkles,
+  support: LifeBuoy,
+  trending: TrendingUp,
+  truck: Truck,
+  users: Users,
+  zap: Zap,
+} satisfies Record<string, LucideIcon>;
+
+export type IconKey = keyof typeof iconRegistry;
+
+export function getIcon(key: IconKey): LucideIcon {
+  return iconRegistry[key];
+}

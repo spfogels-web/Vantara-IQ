@@ -1,0 +1,371 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ---------------------------------------------------------------------------
+   Vantara IQ — design tokens
+   Dark-only surface system. Every surface is a lift off #0B0F14 rather than a
+   separate colour, so cards stack without muddying the base.
+--------------------------------------------------------------------------- */
+
+:root {
+  /* Brand */
+  --vq-black: #0b0f14;
+  --vq-blue: #2f80ff;
+  --vq-blue-bright: #5b9cff;
+  --vq-green: #2fd07a;
+  --vq-orange: #ffa23a;
+  --vq-red: #ff5a52;
+  --vq-violet: #a78bfa;
+  --vq-cyan: #22d3ee;
+
+  /* Core shadcn contract */
+  --background: #0b0f14;
+  --foreground: #e7ecf3;
+  --card: #0e131a;
+  --card-foreground: #e7ecf3;
+  --popover: #10161e;
+  --popover-foreground: #e7ecf3;
+  --primary: #2f80ff;
+  --primary-foreground: #ffffff;
+  --secondary: #161d26;
+  --secondary-foreground: #e7ecf3;
+  --muted: #141a22;
+  --muted-foreground: #7e8a9c;
+  --accent: #18212c;
+  --accent-foreground: #ffffff;
+  --destructive: #ff5a52;
+  --destructive-foreground: #ffffff;
+  --border: oklch(1 0 0 / 7%);
+  --input: oklch(1 0 0 / 11%);
+  --ring: #2f80ff;
+  --radius: 0.75rem;
+
+  /* Semantic status */
+  --success: #2fd07a;
+  --success-muted: #143024;
+  --warning: #ffa23a;
+  --warning-muted: #33240f;
+  --critical: #ff5a52;
+  --critical-muted: #351817;
+  --info: #2f80ff;
+  --info-muted: #101f38;
+  --neutral: #8b97a8;
+  --neutral-muted: #1a212b;
+
+  /* Charts */
+  --chart-1: #2f80ff;
+  --chart-2: #2fd07a;
+  --chart-3: #a78bfa;
+  --chart-4: #ffa23a;
+  --chart-5: #22d3ee;
+
+  /* Sidebar */
+  --sidebar: #0a0e13;
+  --sidebar-foreground: #aeb8c6;
+  --sidebar-primary: #2f80ff;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: oklch(1 0 0 / 6%);
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: oklch(1 0 0 / 6%);
+  --sidebar-ring: #2f80ff;
+
+  /* Elevation — one inset hairline on top, one diffuse drop below */
+  --elev-1: inset 0 1px 0 0 oklch(1 0 0 / 5%), 0 1px 2px 0 rgb(0 0 0 / 40%);
+  --elev-2: inset 0 1px 0 0 oklch(1 0 0 / 6%), 0 8px 24px -12px rgb(0 0 0 / 80%);
+  --elev-3: inset 0 1px 0 0 oklch(1 0 0 / 8%), 0 24px 48px -20px rgb(0 0 0 / 90%);
+}
+
+.dark {
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-success: var(--success);
+  --color-success-muted: var(--success-muted);
+  --color-warning: var(--warning);
+  --color-warning-muted: var(--warning-muted);
+  --color-critical: var(--critical);
+  --color-critical-muted: var(--critical-muted);
+  --color-info: var(--info);
+  --color-info-muted: var(--info-muted);
+  --color-neutral: var(--neutral);
+  --color-neutral-muted: var(--neutral-muted);
+
+  --color-brand: var(--vq-blue);
+  --color-brand-bright: var(--vq-blue-bright);
+  --color-violet: var(--vq-violet);
+  --color-cyan: var(--vq-cyan);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-geist-sans);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.35);
+  --radius-2xl: calc(var(--radius) * 1.7);
+  --radius-3xl: calc(var(--radius) * 2.2);
+
+  --shadow-elev-1: var(--elev-1);
+  --shadow-elev-2: var(--elev-2);
+  --shadow-elev-3: var(--elev-3);
+
+  --animate-shimmer: shimmer 2s linear infinite;
+  --animate-fade-up: fade-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-fade-in: fade-in 0.4s ease both;
+  --animate-pulse-ring: pulse-ring 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  --animate-sweep: sweep 2.4s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+
+  @keyframes shimmer {
+    from {
+      background-position: -200% 0;
+    }
+    to {
+      background-position: 200% 0;
+    }
+  }
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes pulse-ring {
+    0%,
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.45;
+      transform: scale(1.6);
+    }
+  }
+  @keyframes sweep {
+    0% {
+      transform: translateX(-100%);
+    }
+    60%,
+    100% {
+      transform: translateX(220%);
+    }
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/40;
+  }
+
+  html {
+    @apply font-sans;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Numerals never reflow as values tick */
+  th,
+  td,
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--vq-blue) 35%, transparent);
+    color: #fff;
+  }
+
+  /* Scrollbars: present but recessive */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: oklch(1 0 0 / 12%) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: oklch(1 0 0 / 10%);
+    border-radius: 999px;
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: oklch(1 0 0 / 18%);
+    background-clip: content-box;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  /* Standard raised panel. Faint white wash reads as "lifted" without a
+     lighter fill colour that would clash against the near-black base. */
+  .surface {
+    background-color: color-mix(in oklab, #ffffff 2.2%, var(--background));
+    border: 1px solid var(--border);
+    box-shadow: var(--elev-2);
+    border-radius: var(--radius-xl);
+  }
+
+  .surface-interactive {
+    transition:
+      border-color 200ms ease,
+      background-color 200ms ease,
+      transform 200ms ease;
+  }
+  .surface-interactive:hover {
+    border-color: oklch(1 0 0 / 12%);
+    background-color: color-mix(in oklab, #ffffff 3.4%, var(--background));
+  }
+
+  /* Frosted layer for sticky chrome (topbar, popovers, command palette) */
+  .glass {
+    background-color: color-mix(in oklab, var(--background) 72%, transparent);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+  }
+
+  .hairline-b {
+    box-shadow: 0 1px 0 0 var(--border);
+  }
+
+  .text-gradient {
+    background: linear-gradient(180deg, #ffffff 0%, #a9b6c8 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Uppercase micro-label used above every metric */
+  .eyebrow {
+    @apply text-[10px] font-semibold uppercase tracking-[0.09em] text-muted-foreground;
+  }
+
+  .num {
+    @apply font-mono tracking-tight;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Ambient brand glow behind the app shell */
+  .aurora::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    background:
+      radial-gradient(
+        60rem 34rem at 12% -8%,
+        color-mix(in oklab, var(--vq-blue) 13%, transparent),
+        transparent 62%
+      ),
+      radial-gradient(
+        46rem 30rem at 92% -12%,
+        color-mix(in oklab, var(--vq-violet) 8%, transparent),
+        transparent 60%
+      );
+  }
+
+  /* Skeleton sweep — a moving highlight, not a flat opacity pulse */
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    background-color: oklch(1 0 0 / 4%);
+    border-radius: var(--radius-md);
+  }
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      oklch(1 0 0 / 6%) 45%,
+      oklch(1 0 0 / 9%) 50%,
+      oklch(1 0 0 / 6%) 55%,
+      transparent
+    );
+    animation: sweep 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+
+  .focus-ring {
+    @apply outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  }
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
