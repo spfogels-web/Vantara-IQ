@@ -616,21 +616,11 @@ export async function createDaily(input: {
 const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 
 /**
- * Upload → Claude extraction → draft rows. Creates a RateImport and its rows in
- * one shot; rows land as PENDING for review. Returns the import id (or an error).
+ * Turns an uploaded file into something Claude can read: PDFs and photos go up
+ * as base64 (a phone snap of a paper material list is a first-class input),
+ * spreadsheets are flattened to CSV per sheet, everything else is read as text.
  */
-export async function extractRateDocument(formData: FormData) {
-  if (!isConfigured()) {
-    return { ok: false as const, error: "Claude AI isn't connected yet — add an API key in Integrations." };
-  }
-
-  const file = formData.get("file") as File | null;
-  const docType = String(formData.get("docType") || "") as RateDocType;
-  const customer = String(formData.get("customer") || "");
-  const market = String(formData.get("market") || "");
-  const project = String(formData.get("project") || "");
-  if (!file || !docType) return { ok: false as const, error: "Pick a document type and a file." };
-
+async function readDocument(file: File) {
   const buf = Buffer.from(await file.arrayBuffer());
   const name = file.name;
   const lower = name.toLowerCase();
@@ -652,6 +642,27 @@ export async function extractRateDocument(formData: FormData) {
   } else {
     text = buf.toString("utf8"); // csv / txt
   }
+
+  return { name, mediaType, base64, text };
+}
+
+/**
+ * Upload → Claude extraction → draft rows. Creates a RateImport and its rows in
+ * one shot; rows land as PENDING for review. Returns the import id (or an error).
+ */
+export async function extractRateDocument(formData: FormData) {
+  if (!isConfigured()) {
+    return { ok: false as const, error: "Claude AI isn't connected yet — add an API key in Integrations." };
+  }
+
+  const file = formData.get("file") as File | null;
+  const docType = String(formData.get("docType") || "") as RateDocType;
+  const customer = String(formData.get("customer") || "");
+  const market = String(formData.get("market") || "");
+  const project = String(formData.get("project") || "");
+  if (!file || !docType) return { ok: false as const, error: "Pick a document type and a file." };
+
+  const { mediaType, base64, text, name } = await readDocument(file);
 
   const imp = await prisma.rateImport.create({
     data: { docType, fileName: name, mediaType, status: "PROCESSING", customer, market, project },
@@ -692,6 +703,183 @@ export async function extractRateDocument(formData: FormData) {
 
   revalidatePath("/rate-import");
   return { ok: true as const, id: imp.id };
+}
+
+/**
+ * Same extraction pipeline as the rate importer, entered from a project. The
+ * crew uploads or photographs the material list and Claude pulls every code
+ * off it — BFO, BFOV, flower pots, peds, markers — with quantities and reel
+ * numbers. Rows land PENDING: nothing is trusted until a human approves it.
+ */
+export async function extractProjectMaterials(formData: FormData) {
+  const file = formData.get("file") as File | null;
+  const projectId = String(formData.get("projectId") || "");
+  if (!file) return { ok: false as const, error: "Pick a file to upload." };
+  return runMaterialExtraction(projectId, file);
+}
+
+/**
+ * Blob path — the browser uploads straight to storage (no Server Action body
+ * limit), then hands us the URL. Used for material lists too big to post.
+ */
+export async function extractProjectMaterialsFromUrl(input: {
+  projectId: string;
+  url: string;
+  fileName: string;
+}) {
+  if (!input.url) return { ok: false as const, error: "Missing uploaded file." };
+  const res = await fetch(input.url);
+  if (!res.ok) return { ok: false as const, error: "Could not read the uploaded file back." };
+  const blob = await res.blob();
+  const file = new File([blob], input.fileName, { type: blob.type });
+  return runMaterialExtraction(input.projectId, file);
+}
+
+async function runMaterialExtraction(projectId: string, file: File) {
+  if (!isConfigured()) {
+    return { ok: false as const, error: "Claude AI isn't connected yet — add an API key in Integrations." };
+  }
+  if (!projectId) return { ok: false as const, error: "Missing project." };
+
+  const project = await prisma.project.findUnique({ where: { id: projectId } });
+  if (!project) return { ok: false as const, error: "Project not found." };
+
+  const { name, mediaType, base64, text } = await readDocument(file);
+
+  const imp = await prisma.rateImport.create({
+    data: {
+      docType: "MATERIAL_LIST",
+      fileName: name,
+      mediaType,
+      status: "PROCESSING",
+      project: project.name,
+      projectId: project.id,
+    },
+  });
+
+  try {
+    const result = await extractDocument({ docType: "MATERIAL_LIST", base64, mediaType, text });
+    await prisma.$transaction([
+      ...result.rows.map((r) =>
+        prisma.extractedRow.create({
+          data: {
+            importId: imp.id,
+            code: r.code ?? "",
+            description: r.description ?? "",
+            unit: r.unit ?? "",
+            rate: r.rate ?? null,
+            minimum: r.minimum ?? null,
+            rules: r.rules ?? "",
+            sourcePage: r.sourcePage ?? "",
+            confidence: typeof r.confidence === "number" ? r.confidence : 0,
+            warning: r.warning ?? "",
+            data: r as unknown as Prisma.InputJsonValue,
+          },
+        }),
+      ),
+      prisma.rateImport.update({
+        where: { id: imp.id },
+        data: { status: "EXTRACTED", summary: result.summary },
+      }),
+    ]);
+    revalidatePath(`/projects/${projectId}`);
+    revalidatePath("/rate-import");
+    return { ok: true as const, id: imp.id, count: result.rows.length, summary: result.summary };
+  } catch (e) {
+    const error = e instanceof Error ? e.message : "Extraction failed";
+    await prisma.rateImport.update({
+      where: { id: imp.id },
+      data: { status: "FAILED", error },
+    });
+    return { ok: false as const, error, id: imp.id };
+  }
+}
+
+/** Removes a material import and its rows from a project. */
+export async function deleteProjectMaterialImport(importId: string, projectId: string) {
+  await prisma.rateImport.delete({ where: { id: importId } });
+  revalidatePath(`/projects/${projectId}`);
+  return { ok: true as const };
+}
+
+/** Rough classification so the tracked list groups sensibly without asking. */
+function materialCategory(text: string): string {
+  const t = text.toLowerCase();
+  if (/fiber|strand|cable|reel|bfo|adss/.test(t)) return "Fiber";
+  if (/conduit|duct|innerduct|hdpe|pipe|bore/.test(t)) return "Conduit";
+  if (/ped|pedestal|vault|handhole|flower ?pot|enclosure|cabinet|closure/.test(t)) return "Structures";
+  return "Hardware";
+}
+
+/**
+ * Promote a reviewed import onto the project. Only APPROVED rows cross over —
+ * this is the line between "Claude read it" and "we're tracking it". Approving
+ * the same import twice replaces its previous rows rather than doubling them.
+ */
+export async function pushMaterialsToProject(importId: string, projectId: string) {
+  const [imp, rows] = await Promise.all([
+    prisma.rateImport.findUnique({ where: { id: importId } }),
+    prisma.extractedRow.findMany({ where: { importId, status: "APPROVED" } }),
+  ]);
+  if (!imp) return { ok: false as const, error: "Import not found." };
+  if (rows.length === 0) {
+    return {
+      ok: false as const,
+      error: "No approved rows yet — approve them on the review screen first.",
+    };
+  }
+
+  await prisma.projectMaterial.deleteMany({ where: { projectId, sourceImportId: importId } });
+  await prisma.projectMaterial.createMany({
+    data: rows.map((r) => {
+      const d = (r.data ?? {}) as Record<string, unknown>;
+      const qty = typeof d.plannedQty === "number" ? d.plannedQty : 0;
+      return {
+        projectId,
+        code: r.code || "",
+        item: r.description || r.code || "Unnamed material",
+        category: materialCategory(`${r.code} ${r.description}`),
+        unit: r.unit || "ea",
+        planned: qty,
+        issued: 0,
+        installed: 0,
+        manufacturer: typeof d.manufacturer === "string" ? d.manufacturer : "",
+        size: typeof d.size === "string" ? d.size : "",
+        reelNumber: typeof d.reelNumber === "string" ? d.reelNumber : "",
+        furnished: typeof d.furnished === "string" ? d.furnished : "",
+        sourceImportId: importId,
+      };
+    }),
+  });
+
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/materials");
+  return { ok: true as const, count: rows.length };
+}
+
+/** Field updates to tracked material — issued/installed move as work happens. */
+export async function updateProjectMaterial(
+  id: string,
+  patch: { issued?: number; installed?: number; planned?: number },
+) {
+  const row = await prisma.projectMaterial.update({
+    where: { id },
+    data: {
+      ...(patch.planned != null ? { planned: patch.planned } : {}),
+      ...(patch.issued != null ? { issued: patch.issued } : {}),
+      ...(patch.installed != null ? { installed: patch.installed } : {}),
+    },
+  });
+  revalidatePath(`/projects/${row.projectId}`);
+  revalidatePath("/materials");
+  return { ok: true as const };
+}
+
+export async function deleteProjectMaterial(id: string) {
+  const row = await prisma.projectMaterial.delete({ where: { id } });
+  revalidatePath(`/projects/${row.projectId}`);
+  revalidatePath("/materials");
+  return { ok: true as const };
 }
 
 export async function setRowStatus(id: string, status: "APPROVED" | "REJECTED") {

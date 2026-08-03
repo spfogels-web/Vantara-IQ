@@ -135,7 +135,37 @@ model Project {
   customer         Customer? @relation(fields: [customerId], references: [id])
   customerId       String?
   dailies          Daily[]
+  materials        ProjectMaterial[]
+  materialImports  RateImport[]
   createdAt        DateTime  @default(now())
+}
+
+/// Material actually tracked against a project — the thing the ops team manages.
+/// Rows arrive here only after a human approves them on the review screen, so
+/// nothing Claude extracted is ever counted as real stock on its own.
+model ProjectMaterial {
+  id             String   @id @default(cuid())
+  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId      String
+  /// Unit/material code as printed on the list (BFO, BFOV, ped, marker…).
+  code           String   @default("")
+  item           String   @default("")
+  category       String   @default("Hardware")
+  unit           String   @default("ea")
+  /// Quantity the material list calls for.
+  planned        Float    @default(0)
+  /// Quantity released to the crew, and how much of it is in the ground.
+  issued         Float    @default(0)
+  installed      Float    @default(0)
+  manufacturer   String   @default("")
+  size           String   @default("")
+  reelNumber     String   @default("")
+  furnished      String   @default("")
+  /// The RateImport these rows were approved from, for traceability.
+  sourceImportId String   @default("")
+  createdAt      DateTime @default(now())
+
+  @@index([projectId])
 }
 
 model Subcontractor {
@@ -252,7 +282,12 @@ model RateImport {
   // Optional scoping the user provides at upload.
   customer    String        @default("")
   market      String        @default("")
+  /// Free-text project label from the rate-import screen. When the import was
+  /// started from a project page, `projectId` below is the authoritative link —
+  /// this stays populated so renaming a project doesn't lose the label.
   project     String        @default("")
+  linkedProject Project?    @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  projectId   String?
   summary     String        @default("")
   error       String        @default("")
   rows        ExtractedRow[]

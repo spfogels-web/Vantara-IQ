@@ -313,3 +313,172 @@ export async function getReportDefinitions(): Promise<ReportDefinition[]> {
   await delay(LATENCY.brief);
   return reportDefinitions;
 }
+
+/* ------------------------------------------------------------------ *
+ * Project material lists — the rows Claude pulled off an uploaded or
+ * scanned material list, scoped to one project and kept in review
+ * state until a human approves them.
+ * ------------------------------------------------------------------ */
+
+export interface ProjectMaterialRow {
+  id: string;
+  code: string;
+  description: string;
+  unit: string;
+  quantity: number | null;
+  reelNumber: string;
+  manufacturer: string;
+  size: string;
+  furnished: string;
+  confidence: number;
+  warning: string;
+  status: "PENDING" | "APPROVED" | "REJECTED";
+}
+
+export interface ProjectMaterialImport {
+  id: string;
+  fileName: string;
+  summary: string;
+  status: string;
+  error: string;
+  createdAt: string;
+  rows: ProjectMaterialRow[];
+}
+
+export async function getProjectMaterialImports(
+  projectId: string,
+  projectName: string,
+): Promise<ProjectMaterialImport[]> {
+  if (!projectId && !projectName) return [];
+  const imports = await prisma.rateImport.findMany({
+    // `projectId` is the real link; the name match keeps imports created before
+    // the foreign key existed (or started from the rate-import screen) visible.
+    where: {
+      docType: "MATERIAL_LIST",
+      OR: [{ projectId }, { projectId: null, project: projectName }],
+    },
+    orderBy: { createdAt: "desc" },
+    include: { rows: { orderBy: { createdAt: "asc" } } },
+  });
+
+  return imports.map((imp) => ({
+    id: imp.id,
+    fileName: imp.fileName,
+    summary: imp.summary,
+    status: imp.status,
+    error: imp.error,
+    createdAt: imp.createdAt.toISOString(),
+    rows: imp.rows.map((r) => {
+      // The full per-doc-type field set lives in `data`; quantity, reel number,
+      // manufacturer and furnished-by only exist there for material lists.
+      const d = (r.data ?? {}) as Record<string, unknown>;
+      const qty = d.plannedQty;
+      return {
+        id: r.id,
+        code: r.code,
+        description: r.description,
+        unit: r.unit,
+        quantity: typeof qty === "number" ? qty : null,
+        reelNumber: typeof d.reelNumber === "string" ? d.reelNumber : "",
+        manufacturer: typeof d.manufacturer === "string" ? d.manufacturer : "",
+        size: typeof d.size === "string" ? d.size : "",
+        furnished: typeof d.furnished === "string" ? d.furnished : "",
+        confidence: r.confidence,
+        warning: r.warning,
+        status: r.status as ProjectMaterialRow["status"],
+      };
+    }),
+  }));
+}
+
+/**
+ * Material tracked on a project. The material list is the *plan* — what the
+ * job was issued before work started. The dailies are the *draw-down*: every
+ * unit code a crew bills (BHF, BMFAF, BM2F, BD4MPF, plow, missile, peds,
+ * flower pots) subtracts from its planned quantity. Remaining is arithmetic,
+ * not data entry.
+ */
+export interface TrackedMaterial {
+  id: string;
+  code: string;
+  item: string;
+  category: string;
+  unit: string;
+  /** From the material list. */
+  planned: number;
+  /** Summed from daily billing line items with this code. */
+  completed: number;
+  /** planned − completed, floored at 0. */
+  remaining: number;
+  /** How many dailies have billed against this code. */
+  dailyCount: number;
+  manufacturer: string;
+  size: string;
+  reelNumber: string;
+  furnished: string;
+  tone: Tone;
+}
+
+function materialTone(planned: number, completed: number): Tone {
+  if (planned <= 0) return "neutral";
+  const pct = completed / planned;
+  if (pct > 1) return "critical"; // billed past plan — worth a look
+  if (pct >= 0.9) return "warning";
+  if (pct > 0) return "success";
+  return "neutral";
+}
+
+/** Normalises codes so "bd4mpf", "BD4MPF " and "BD4MPF" all match. */
+const normCode = (c: string) => c.trim().toUpperCase().replace(/\s+/g, "");
+
+export async function getProjectMaterials(projectId: string): Promise<TrackedMaterial[]> {
+  const [rows, dailies] = await Promise.all([
+    prisma.projectMaterial.findMany({
+      where: { projectId },
+      orderBy: [{ category: "asc" }, { code: "asc" }],
+    }),
+    prisma.daily.findMany({ where: { projectId }, select: { lineItems: true } }),
+  ]);
+
+  // Roll every daily's line items up by unit code.
+  const billed = new Map<string, { qty: number; dailies: number }>();
+  for (const d of dailies) {
+    const items = Array.isArray(d.lineItems) ? (d.lineItems as unknown[]) : [];
+    const seen = new Set<string>();
+    for (const raw of items) {
+      const li = raw as { code?: unknown; quantity?: unknown };
+      if (typeof li?.code !== "string") continue;
+      const code = normCode(li.code);
+      if (!code) continue;
+      const qty = typeof li.quantity === "number" ? li.quantity : 0;
+      const prev = billed.get(code) ?? { qty: 0, dailies: 0 };
+      prev.qty += qty;
+      if (!seen.has(code)) {
+        prev.dailies += 1;
+        seen.add(code);
+      }
+      billed.set(code, prev);
+    }
+  }
+
+  return rows.map((r) => {
+    const hit = billed.get(normCode(r.code));
+    const completed = hit?.qty ?? 0;
+    return {
+      id: r.id,
+      code: r.code,
+      item: r.item,
+      category: r.category,
+      unit: r.unit,
+      planned: r.planned,
+      completed,
+      remaining: Math.max(0, r.planned - completed),
+      dailyCount: hit?.dailies ?? 0,
+      manufacturer: r.manufacturer,
+      size: r.size,
+      reelNumber: r.reelNumber,
+      furnished: r.furnished,
+      tone: materialTone(r.planned, completed),
+    };
+  });
+}

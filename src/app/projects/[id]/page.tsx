@@ -5,8 +5,9 @@ import { ArrowLeft, Boxes, Calendar, ClipboardList, TrendingUp } from "lucide-re
 import {
   getCustomers,
   getDailies,
-  getMaterials,
   getProject,
+  getProjectMaterialImports,
+  getProjectMaterials,
 } from "@/data/queries";
 import { cn } from "@/lib/utils";
 import { toneStyles } from "@/lib/tone";
@@ -23,6 +24,7 @@ import { HealthRing } from "@/components/common/health-ring";
 import { StatusPill } from "@/components/common/status-pill";
 import { Meter } from "@/components/common/metric";
 import { ProjectHeaderActions, ProjectMapPanel } from "@/components/projects/project-detail-client";
+import { ProjectMaterials } from "@/components/projects/project-materials";
 
 export const dynamic = "force-dynamic";
 
@@ -32,14 +34,18 @@ export default async function ProjectDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [project, customers, dailies, materials] = await Promise.all([
+  const [project, customers, dailies] = await Promise.all([
     getProject(id),
     getCustomers(),
     getDailies(),
-    getMaterials(),
   ]);
 
   if (!project) notFound();
+
+  const [materialImports, trackedMaterials] = await Promise.all([
+    getProjectMaterialImports(project.id, project.name),
+    getProjectMaterials(project.id),
+  ]);
 
   const customer = customers.find((c) => c.name === project.client);
   const rateItems = customer?.rateSheet.filter((r) => r.unit === "ft") ?? [];
@@ -58,7 +64,6 @@ export default async function ProjectDetailPage({
   const daysToFinish = Math.ceil(project.remainingFt / Math.max(project.actualFtPerDay, 1));
 
   const projectDailies = dailies.filter((d) => d.projectId === project.id);
-  const projectMaterials = materials.filter((m) => m.project === project.name);
 
   return (
     <PageShell
@@ -201,36 +206,21 @@ export default async function ProjectDetailPage({
             </PanelBody>
           </Panel>
 
+          {/* Upload or photograph the material list; Claude pulls the codes off
+              it; approved rows become tracked material on the project. */}
           <Panel>
             <PanelHeader
               title="Material on project"
-              count={projectMaterials.length}
+              count={trackedMaterials.length}
               icon={<Boxes className="size-3.5" />}
               action="Materials"
               actionHref="/materials"
             />
-            {projectMaterials.length === 0 ? (
-              <PanelBody className="py-8 text-center text-[12.5px] text-muted-foreground">
-                No material tracked here yet.
-              </PanelBody>
-            ) : (
-              <ul className="p-2">
-                {projectMaterials.map((m) => {
-                  const used = m.issued > 0 ? m.installed / m.issued : 0;
-                  return (
-                    <li key={m.id} className="rounded-lg px-2.5 py-2.5 hover:bg-foreground/[0.03]">
-                      <div className="flex items-center gap-2">
-                        <span className="min-w-0 flex-1 truncate text-[12.5px] text-foreground">{m.item}</span>
-                        <span className={cn("num shrink-0 text-[11.5px] font-medium", toneStyles[m.tone].text)}>
-                          {formatNumber(m.installed)}/{formatNumber(m.issued)} {m.unit}
-                        </span>
-                      </div>
-                      <Meter value={used} tone={m.tone} className="mt-1.5 h-1" />
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
+            <ProjectMaterials
+              projectId={project.id}
+              imports={materialImports}
+              tracked={trackedMaterials}
+            />
           </Panel>
         </div>
       </div>
