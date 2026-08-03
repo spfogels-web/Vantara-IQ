@@ -75,7 +75,7 @@ export function Sparkline({
     >
       <defs>
         <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.34" />
+          <stop offset="0%" stopColor={color} stopOpacity="var(--vibe-spark-fill)" />
           <stop offset="100%" stopColor={color} stopOpacity="0" />
         </linearGradient>
       </defs>
@@ -84,11 +84,15 @@ export function Sparkline({
         d={line}
         fill="none"
         stroke={color}
-        strokeWidth="1.85"
         strokeLinecap="round"
         strokeLinejoin="round"
         vectorEffect="non-scaling-stroke"
-        style={glow ? { filter: `drop-shadow(0 1px 4px ${color}80)` } : undefined}
+        style={{
+          strokeWidth: "var(--vibe-spark-stroke)",
+          filter: glow
+            ? `drop-shadow(0 1px 4px color-mix(in srgb, ${color} var(--vibe-spark-glow), transparent))`
+            : undefined,
+        }}
       />
       {showLastDot ? (
         <circle

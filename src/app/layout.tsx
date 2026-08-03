@@ -26,12 +26,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`dark ${GeistSans.variable} ${GeistMono.variable}`} suppressHydrationWarning>
+    <html
+      lang="en"
+      className={`dark vibe-chill ${GeistSans.variable} ${GeistMono.variable}`}
+      suppressHydrationWarning
+    >
       <head>
-        {/* Apply the saved theme before first paint so there's no flash. */}
+        {/* Apply the saved theme and vibe before first paint so there's no flash. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('vq-theme');if(t==='light'){var r=document.documentElement;r.classList.remove('dark');r.classList.add('light');}}catch(e){}})();`,
+            __html: `(function(){try{var r=document.documentElement;var t=localStorage.getItem('vq-theme');if(t==='light'){r.classList.remove('dark');r.classList.add('light');}var v=localStorage.getItem('vq-vibe');if(v==='vibrant'){r.classList.remove('vibe-chill');r.classList.add('vibe-vibrant');}}catch(e){}})();`,
           }}
         />
       </head>

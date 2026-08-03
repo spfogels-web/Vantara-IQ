@@ -3,7 +3,7 @@
 import * as React from "react";
 
 import { cn } from "@/lib/utils";
-import { healthTone, toneHex } from "@/lib/tone";
+import { healthTone, toneVar } from "@/lib/tone";
 
 /**
  * Circular health score. The arc animates from 0 on mount via a
@@ -24,7 +24,7 @@ export function HealthRing({
   className?: string;
 }) {
   const [progress, setProgress] = React.useState(0);
-  const color = toneHex(healthTone(score));
+  const color = toneVar(healthTone(score));
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (progress / 100) * circumference;
@@ -55,8 +55,8 @@ export function HealthRing({
           r={radius}
           fill="none"
           stroke="currentColor"
-          strokeWidth={stroke}
           className="text-foreground/[0.07]"
+          style={{ strokeWidth: `calc(var(--vibe-ring-stroke) * ${stroke / 3})` }}
         />
         <circle
           cx={size / 2}
@@ -64,13 +64,13 @@ export function HealthRing({
           r={radius}
           fill="none"
           stroke={`url(#${gradientId})`}
-          strokeWidth={stroke}
           strokeLinecap="round"
           strokeDasharray={circumference}
           strokeDashoffset={offset}
           style={{
+            strokeWidth: `calc(var(--vibe-ring-stroke) * ${stroke / 3})`,
             transition: "stroke-dashoffset 900ms cubic-bezier(0.16, 1, 0.3, 1)",
-            filter: `drop-shadow(0 0 5px ${color}55)`,
+            filter: `drop-shadow(0 0 5px color-mix(in srgb, ${color} var(--vibe-ring-glow), transparent))`,
           }}
         />
       </svg>

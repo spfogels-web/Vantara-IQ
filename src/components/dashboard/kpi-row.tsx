@@ -30,17 +30,19 @@ function KpiCard({ kpi, index }: { kpi: Kpi; index: number }) {
         {
           animation: "fade-up 0.5s cubic-bezier(0.16,1,0.3,1) both",
           animationDelay: `${index * 45}ms`,
-          "--kpi-accent": tone.hex,
+          "--kpi-accent": tone.cssVar,
         } as React.CSSProperties
       }
     >
       {/* Accent wash — a tone-coloured bloom that intensifies on hover, so six
-          cards read as six, and each carries its own light. */}
+          cards read as six, and each carries its own light. How strong the
+          bloom gets is a vibe knob, not a constant. */}
       <span
         aria-hidden
-        className="pointer-events-none absolute inset-x-0 top-0 h-28 opacity-70 transition-opacity duration-300 group-hover:opacity-100"
+        className="pointer-events-none absolute inset-x-0 top-0 h-28 transition-opacity duration-300 group-hover:opacity-100"
         style={{
-          background: `radial-gradient(130% 100% at 0% 0%, ${tone.hex}2e, transparent 62%)`,
+          opacity: "var(--vibe-wash-opacity)",
+          background: `radial-gradient(130% 100% at 0% 0%, color-mix(in srgb, ${tone.cssVar} var(--vibe-wash), transparent), transparent 62%)`,
         }}
       />
       {/* Full-card whisper of tone so the surface isn't dead flat */}
@@ -48,7 +50,7 @@ function KpiCard({ kpi, index }: { kpi: Kpi; index: number }) {
         aria-hidden
         className="pointer-events-none absolute inset-0 opacity-40"
         style={{
-          background: `linear-gradient(160deg, ${tone.hex}10, transparent 45%)`,
+          background: `linear-gradient(160deg, color-mix(in srgb, ${tone.cssVar} var(--vibe-wash-soft), transparent), transparent 45%)`,
         }}
       />
 
@@ -83,7 +85,7 @@ function KpiCard({ kpi, index }: { kpi: Kpi; index: number }) {
 
       {/* Sparkline bleeds into the card's bottom corners */}
       <div className="relative -mx-4 -mb-4 mt-3.5 opacity-90 transition-opacity duration-300 group-hover:opacity-100">
-        <Sparkline data={kpi.series} color={tone.hex} height={38} glow />
+        <Sparkline data={kpi.series} color={tone.cssVar} height={38} glow />
       </div>
     </Link>
   );

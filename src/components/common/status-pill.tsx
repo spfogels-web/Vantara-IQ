@@ -19,14 +19,27 @@ export function StatusPill({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-[3px] text-[11px] font-medium",
-        s.bg,
-        s.border,
+        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2 py-[3px] text-[11px]",
         s.text,
         className,
       )}
+      style={{
+        // Fill and border strength are vibe knobs: barely-there on chill,
+        // solid and loud on vibrant. The hue itself still comes from the tone.
+        backgroundColor: `color-mix(in srgb, ${s.cssVar} var(--vibe-pill-bg), transparent)`,
+        borderColor: `color-mix(in srgb, ${s.cssVar} var(--vibe-pill-border), transparent)`,
+        fontWeight: "var(--vibe-pill-weight)" as React.CSSProperties["fontWeight"],
+      }}
     >
-      {dot ? <span className={cn("size-1.5 rounded-full", s.dot)} /> : null}
+      {dot ? (
+        <span
+          className="size-1.5 shrink-0 rounded-full"
+          style={{
+            backgroundColor: s.cssVar,
+            boxShadow: `0 0 6px color-mix(in srgb, ${s.cssVar} var(--vibe-meter-glow), transparent)`,
+          }}
+        />
+      ) : null}
       {label}
     </span>
   );

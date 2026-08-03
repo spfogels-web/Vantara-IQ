@@ -180,6 +180,126 @@
   --aurora-cyan: 4%;
 }
 
+/* ---------------------------------------------------------------------------
+   Vibes — two personalities over the same layout, switched by a class on
+   <html>. A vibe only moves the status hues and a handful of intensity knobs
+   (how strong a wash is, how thick a ring is, how much a sparkline glows), so
+   nothing about structure or spacing changes when you flip it.
+
+   These come after `.light` on purpose: same specificity, later wins, so a
+   vibe overrides the theme's status hues. The `.light.vibe-*` pairs below are
+   more specific again, for hues that need to darken to read on white.
+--------------------------------------------------------------------------- */
+
+/* Intensity knobs, with the current look as the neutral default. */
+:root {
+  --vibe-wash: 18%; /* KPI corner bloom */
+  --vibe-wash-soft: 6%; /* full-card whisper */
+  --vibe-wash-opacity: 0.7;
+  --vibe-spark-fill: 0.34;
+  --vibe-spark-glow: 50%;
+  --vibe-spark-stroke: 1.85;
+  --vibe-ring-stroke: 3;
+  --vibe-ring-glow: 33%;
+  --vibe-pill-bg: 10%;
+  --vibe-pill-border: 25%;
+  --vibe-pill-weight: 500;
+  --vibe-meter-glow: 0%;
+  --vibe-thumb-sat: 42%;
+}
+
+/* ── Chill: desaturated, quiet. Colour still classifies, but stops shouting. */
+.vibe-chill {
+  --success: #6fae8d;
+  --success-muted: #1a2a22;
+  --warning: #d8a271;
+  --warning-muted: #2b2419;
+  --critical: #d2807c;
+  --critical-muted: #2c1e1e;
+  --info: #7a9dc4;
+  --info-muted: #1a2330;
+  --neutral: #8e97a3;
+  --neutral-muted: #1c2027;
+
+  --chart-1: #7a9dc4;
+  --chart-2: #6fae8d;
+  --chart-3: #a99ac9;
+  --chart-4: #d8a271;
+  --chart-5: #7fb8c4;
+
+  --vibe-wash: 9%;
+  --vibe-wash-soft: 3%;
+  --vibe-wash-opacity: 0.45;
+  --vibe-spark-fill: 0.18;
+  --vibe-spark-glow: 0%;
+  --vibe-spark-stroke: 1.5;
+  --vibe-ring-stroke: 2.5;
+  --vibe-ring-glow: 0%;
+  --vibe-pill-bg: 7%;
+  --vibe-pill-border: 16%;
+  --vibe-pill-weight: 500;
+  --vibe-meter-glow: 0%;
+  --vibe-thumb-sat: 20%;
+
+  --aurora-blue: 7%;
+  --aurora-violet: 5%;
+  --aurora-cyan: 3%;
+}
+
+.light.vibe-chill {
+  --success: #4f8a6a;
+  --warning: #a9743f;
+  --critical: #b05a55;
+  --info: #4d7aa8;
+  --neutral: #6b7684;
+}
+
+/* ── Vibrant: saturated, high contrast. At-risk should be unmissable. */
+.vibe-vibrant {
+  --success: #00e07a;
+  --success-muted: #05341f;
+  --warning: #ffab1f;
+  --warning-muted: #3a2606;
+  --critical: #ff3b30;
+  --critical-muted: #3d0f0d;
+  --info: #1f7bff;
+  --info-muted: #06203f;
+  --neutral: #94a3b8;
+  --neutral-muted: #1a212b;
+
+  --chart-1: #1f7bff;
+  --chart-2: #00e07a;
+  --chart-3: #b18cff;
+  --chart-4: #ffab1f;
+  --chart-5: #00d9f5;
+
+  --vibe-wash: 34%;
+  --vibe-wash-soft: 11%;
+  --vibe-wash-opacity: 1;
+  --vibe-spark-fill: 0.5;
+  --vibe-spark-glow: 85%;
+  --vibe-spark-stroke: 2.3;
+  --vibe-ring-stroke: 4;
+  --vibe-ring-glow: 70%;
+  --vibe-pill-bg: 18%;
+  --vibe-pill-border: 45%;
+  --vibe-pill-weight: 600;
+  --vibe-meter-glow: 55%;
+  --vibe-thumb-sat: 62%;
+
+  --aurora-blue: 24%;
+  --aurora-violet: 18%;
+  --aurora-cyan: 11%;
+}
+
+.light.vibe-vibrant {
+  --success: #00a457;
+  --warning: #d4820a;
+  --critical: #e5231a;
+  --info: #0b63e5;
+  --neutral: #64748b;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

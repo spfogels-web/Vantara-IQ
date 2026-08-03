@@ -41,6 +41,7 @@ import { SidebarContent } from "@/components/layout/sidebar";
 import { useSidebar } from "@/components/layout/sidebar-context";
 import { useCommandMenu } from "@/components/layout/command-menu";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
+import { VibeToggle } from "@/components/layout/vibe-toggle";
 import { FeedbackDialog } from "@/components/layout/feedback-dialog";
 import { LiveDot } from "@/components/common/status-pill";
 
@@ -347,6 +348,7 @@ export function Topbar() {
           <Search className="size-[18px]" />
         </button>
         <QuickActions />
+        <VibeToggle />
         <ThemeToggle />
         <NotificationsPopover />
         <span className="mx-1 hidden h-5 w-px bg-border sm:block" />

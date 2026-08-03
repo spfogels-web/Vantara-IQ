@@ -19,6 +19,12 @@ export const toneStyles: Record<
     glow: string;
     /** Raw hex for SVG/Recharts, which can't take a class. */
     hex: string;
+    /**
+     * The same colour as a CSS variable reference. SVG presentation attributes
+     * accept `var()`, so anything using this re-colours when the vibe or theme
+     * token set swaps — the hex above is frozen at build time and does not.
+     */
+    cssVar: string;
   }
 > = {
   success: {
@@ -29,6 +35,7 @@ export const toneStyles: Record<
     dot: "bg-success",
     glow: "shadow-[0_0_20px_-6px_var(--success)]",
     hex: "#2fd07a",
+    cssVar: "var(--success)",
   },
   warning: {
     text: "text-warning",
@@ -38,6 +45,7 @@ export const toneStyles: Record<
     dot: "bg-warning",
     glow: "shadow-[0_0_20px_-6px_var(--warning)]",
     hex: "#ffa23a",
+    cssVar: "var(--warning)",
   },
   critical: {
     text: "text-critical",
@@ -47,6 +55,7 @@ export const toneStyles: Record<
     dot: "bg-critical",
     glow: "shadow-[0_0_20px_-6px_var(--critical)]",
     hex: "#ff5a52",
+    cssVar: "var(--critical)",
   },
   info: {
     text: "text-info",
@@ -56,6 +65,7 @@ export const toneStyles: Record<
     dot: "bg-info",
     glow: "shadow-[0_0_20px_-6px_var(--info)]",
     hex: "#2f80ff",
+    cssVar: "var(--info)",
   },
   neutral: {
     text: "text-muted-foreground",
@@ -65,6 +75,7 @@ export const toneStyles: Record<
     dot: "bg-neutral",
     glow: "",
     hex: "#8b97a8",
+    cssVar: "var(--neutral)",
   },
 };
 
@@ -78,4 +89,14 @@ export function healthTone(score: number): Tone {
 
 export function toneHex(tone: Tone) {
   return toneStyles[tone].hex;
+}
+
+/** Live CSS-variable reference for a tone — follows theme and vibe swaps. */
+export function toneVar(tone: Tone) {
+  return toneStyles[tone].cssVar;
+}
+
+/** `color-mix` helper so SVG glows and washes can take a var() instead of hex+alpha. */
+export function toneAlpha(tone: Tone, pct: number) {
+  return `color-mix(in srgb, ${toneStyles[tone].cssVar} ${pct}%, transparent)`;
 }

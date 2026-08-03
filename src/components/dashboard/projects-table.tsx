@@ -10,6 +10,7 @@ import { formatFeet, formatNumber } from "@/lib/format";
 import type { Project } from "@/lib/types";
 import { Panel, PanelFooter, PanelHeader } from "@/components/common/panel";
 import { HealthRing } from "@/components/common/health-ring";
+import { ProjectThumb } from "@/components/common/project-thumb";
 import { StatusPill } from "@/components/common/status-pill";
 import { Meter } from "@/components/common/metric";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -58,27 +59,37 @@ function ProjectRow({ project }: { project: Project }) {
           it belongs to the project, and reclaiming that column is what lets the
           table fit an 8-of-12 panel without horizontal scroll. */}
       <td className="py-3 pl-4 pr-3 sm:pl-5">
-        <Link href={`/projects/${project.id}`} className="focus-ring block rounded">
-          <div className="flex items-center gap-1.5">
-            <span className="truncate text-[13px] font-medium text-foreground group-hover:text-white">
-              {project.name}
-            </span>
-            {project.tone === "critical" ? (
-              <AlertTriangle className="size-3.5 shrink-0 text-critical" />
-            ) : null}
-            <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground" />
-          </div>
-          <div className="mt-0.5 truncate text-[11.5px] text-muted-foreground">
-            {project.client} · {project.location}
-          </div>
-          <div className="mt-2 flex items-center gap-2">
-            <span className="num w-7 shrink-0 text-[10.5px] font-medium text-foreground">
-              {project.pctComplete}%
-            </span>
-            <Meter value={project.pctComplete / 100} tone={project.tone} className="h-1 flex-1" />
-            <span className="num shrink-0 text-[10.5px] text-muted-foreground">
-              {formatFeet(project.remainingFt)}
-            </span>
+        <Link href={`/projects/${project.id}`} className="focus-ring flex items-start gap-3 rounded">
+          <ProjectThumb
+            id={project.id}
+            name={project.name}
+            photoUrl={project.photoUrl}
+            mapUrl={project.mapUrl}
+            size={44}
+            className="mt-0.5 transition group-hover:border-brand/40"
+          />
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              <span className="truncate text-[13px] font-medium text-foreground group-hover:text-white">
+                {project.name}
+              </span>
+              {project.tone === "critical" ? (
+                <AlertTriangle className="size-3.5 shrink-0 text-critical" />
+              ) : null}
+              <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground" />
+            </div>
+            <div className="mt-0.5 truncate text-[11.5px] text-muted-foreground">
+              {project.client} · {project.location}
+            </div>
+            <div className="mt-2 flex items-center gap-2">
+              <span className="num w-7 shrink-0 text-[10.5px] font-medium text-foreground">
+                {project.pctComplete}%
+              </span>
+              <Meter value={project.pctComplete / 100} tone={project.tone} className="h-1 flex-1" />
+              <span className="num shrink-0 text-[10.5px] text-muted-foreground">
+                {formatFeet(project.remainingFt)}
+              </span>
+            </div>
           </div>
         </Link>
       </td>
@@ -123,6 +134,13 @@ function ProjectCard({ project }: { project: Project }) {
       className="focus-ring block border-t border-border/60 p-4 transition-colors first:border-t-0 active:bg-foreground/[0.03]"
     >
       <div className="flex items-start gap-3">
+        <ProjectThumb
+          id={project.id}
+          name={project.name}
+          photoUrl={project.photoUrl}
+          mapUrl={project.mapUrl}
+          size={40}
+        />
         <div className="min-w-0 flex-1">
           <p className="truncate text-[13px] font-medium text-foreground">{project.name}</p>
           <p className="mt-0.5 truncate text-[11.5px] text-muted-foreground">
