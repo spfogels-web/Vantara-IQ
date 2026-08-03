@@ -289,7 +289,13 @@ export interface Subcontractor {
  * Dailies — the digital version of the paper daily billing sheet.
  * ------------------------------------------------------------------ */
 
-export type DailyStatus = "Submitted" | "In review" | "Approved" | "Flagged" | "Draft";
+export type DailyStatus =
+  | "Submitted"
+  | "In review"
+  | "Approved"
+  | "Denied"
+  | "Flagged"
+  | "Draft";
 
 export interface DailyLineItem {
   location: string;
@@ -322,6 +328,10 @@ export interface DailyReport {
   hasAsBuilt: boolean;
   hasBoreLog: boolean;
   flags: DailyFlag[];
+  /** Supervisor decision — why it was approved or denied, and by whom. */
+  reviewNote?: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
 }
 
 /* ------------------------------------------------------------------ *

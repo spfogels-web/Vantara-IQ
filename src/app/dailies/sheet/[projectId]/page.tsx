@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { getDailySheet, getProject } from "@/data/queries";
+import { getCurrentUser, isStaff } from "@/lib/auth";
 import { PageShell } from "@/components/common/page-shell";
 import { DailyBillingSheet } from "@/components/dailies/daily-billing-sheet";
 
@@ -19,7 +20,12 @@ export default async function ProjectDailySheetPage({
   const project = await getProject(projectId);
   if (!project) notFound();
 
-  const saved = sp.sheet ? await getDailySheet(sp.sheet) : null;
+  const [saved, me] = await Promise.all([
+    sp.sheet ? getDailySheet(sp.sheet) : Promise.resolve(null),
+    getCurrentUser(),
+  ]);
+  // Staff review filed sheets; the crew that submitted one cannot reopen it.
+  const canReview = me ? isStaff(me.role) : false;
 
   return (
     <PageShell
@@ -46,6 +52,7 @@ export default async function ProjectDailySheetPage({
         }}
         initialSheetId={saved?.id}
         saved={saved}
+        canReview={canReview}
       />
     </PageShell>
   );

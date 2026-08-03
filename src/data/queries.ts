@@ -193,6 +193,9 @@ function toDaily(r: DailyRow): DailyReport {
     hasAsBuilt: r.hasAsBuilt,
     hasBoreLog: r.hasBoreLog,
     flags: (r.flags as unknown as DailyFlag[]) ?? [],
+    reviewNote: r.reviewNote,
+    reviewedBy: r.reviewedBy,
+    reviewedAt: r.reviewedAt,
   };
 }
 

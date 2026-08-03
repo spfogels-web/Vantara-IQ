@@ -240,12 +240,15 @@ export function DailyBillingSheet({
   project,
   initialSheetId,
   saved,
+  canReview = false,
 }: {
   project?: SheetProject;
   /** Set when reopening a saved draft, so saves update rather than duplicate. */
   initialSheetId?: string;
   /** A previously saved sheet to reopen — header, both grids and the redline. */
   saved?: SavedSheet | null;
+  /** Staff reviewing a filed sheet are not bound by the submit lock. */
+  canReview?: boolean;
 }) {
   const [header, setHeader] = React.useState<SheetHeader>(() =>
     saved?.header
@@ -288,11 +291,11 @@ export function DailyBillingSheet({
   const [photos, setPhotos] = React.useState<SheetPhoto[]>(() => parsePhotos(saved?.photos));
 
   /**
-   * A submitted daily is a filed record — read and print only. The server
-   * refuses edits to it as well, so this is not the only thing standing
-   * between a filed sheet and a change.
+   * A submitted sheet is closed to the crew that filed it — that is the point
+   * of submitting. Staff reviewing it are not editing their own work, so the
+   * lock does not apply to them; they approve or deny it instead.
    */
-  const locked = saved?.status === "SUBMITTED";
+  const locked = saved?.status === "SUBMITTED" && !canReview;
 
   const payload = React.useCallback(
     (): SheetPayload => ({

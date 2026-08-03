@@ -288,6 +288,11 @@ model Daily {
   hasAsBuilt     Boolean  @default(false)
   hasBoreLog     Boolean  @default(false)
   flags          Json     @default("[]")
+  /// Supervisor review. A denial without a reason is useless to the crew that
+  /// has to fix it, so the note is required when denying.
+  reviewNote     String   @default("")
+  reviewedBy     String   @default("")
+  reviewedAt     String   @default("")
   createdAt      DateTime @default(now())
 }
 

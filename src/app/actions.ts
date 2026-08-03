@@ -1313,6 +1313,52 @@ export async function submitDailySheet(input: SheetPayload) {
   return { ok: true as const, id: sheet.id, dailyId: daily.id, lines: lineItems.length };
 }
 
+/**
+ * Supervisor review of a submitted daily.
+ *
+ * The lock on a submitted sheet exists to stop the *crew* changing what they
+ * filed. Review is the other side of that: staff decide whether it stands, and
+ * a denial carries the reason, because "denied" with no explanation just sends
+ * the crew back to guess.
+ */
+export async function reviewDaily(input: {
+  dailyId: string;
+  decision: "APPROVED" | "DENIED";
+  note: string;
+  reviewedBy: string;
+}) {
+  const note = input.note.trim();
+  if (input.decision === "DENIED" && !note) {
+    return { ok: false as const, error: "Say why it's being denied — the crew needs to know what to fix." };
+  }
+
+  const daily = await prisma.daily.update({
+    where: { id: input.dailyId },
+    data: {
+      status: input.decision === "APPROVED" ? "Approved" : "Denied",
+      tone: input.decision === "APPROVED" ? "success" : "critical",
+      reviewNote: note,
+      reviewedBy: input.reviewedBy,
+      reviewedAt: new Date().toISOString(),
+    },
+  });
+
+  revalidatePath("/dailies");
+  if (daily.projectId) revalidatePath(`/projects/${daily.projectId}`);
+  return { ok: true as const };
+}
+
+/** Put a decided daily back in review — a reviewer can change their mind. */
+export async function reopenDailyReview(dailyId: string) {
+  const daily = await prisma.daily.update({
+    where: { id: dailyId },
+    data: { status: "In review", tone: "warning", reviewNote: "", reviewedBy: "", reviewedAt: "" },
+  });
+  revalidatePath("/dailies");
+  if (daily.projectId) revalidatePath(`/projects/${daily.projectId}`);
+  return { ok: true as const };
+}
+
 export async function deleteDailySheet(id: string) {
   await prisma.dailySheet.delete({ where: { id } });
   revalidatePath("/dailies");

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { FileText, Plus } from "lucide-react";
 
 import { getDailies, getSheetIndexByDaily } from "@/data/queries";
+import { getCurrentUser } from "@/lib/auth";
 import { PageShell } from "@/components/common/page-shell";
 import { DailiesView } from "@/components/dailies/dailies-view";
 
@@ -13,9 +14,10 @@ export default async function DailiesPage({
 }: {
   searchParams: Promise<{ sheet?: string; status?: string }>;
 }) {
-  const [dailies, sheetByDaily, sp] = await Promise.all([
+  const [dailies, sheetByDaily, me, sp] = await Promise.all([
     getDailies(),
     getSheetIndexByDaily(),
+    getCurrentUser(),
     searchParams,
   ]);
 
@@ -41,7 +43,12 @@ export default async function DailiesPage({
         </>
       }
     >
-      <DailiesView dailies={dailies} initialId={sp.sheet} sheetByDaily={sheetByDaily} />
+      <DailiesView
+        dailies={dailies}
+        initialId={sp.sheet}
+        sheetByDaily={sheetByDaily}
+        reviewerName={me?.name}
+      />
     </PageShell>
   );
 }

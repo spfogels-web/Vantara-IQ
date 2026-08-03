@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
   Camera,
@@ -21,18 +22,28 @@ import { formatCurrency, formatFeet, formatNumber, formatWhen } from "@/lib/form
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { StatusPill } from "@/components/common/status-pill";
 import { Button } from "@/components/ui/button";
+import { reopenDailyReview, reviewDaily } from "@/app/actions";
 
-const FILTERS: (DailyStatus | "All")[] = ["All", "In review", "Flagged", "Submitted", "Approved"];
+const FILTERS: (DailyStatus | "All")[] = [
+  "All",
+  "Submitted",
+  "In review",
+  "Approved",
+  "Denied",
+];
 
 export function DailiesView({
   dailies,
   initialId,
   sheetByDaily,
+  reviewerName,
 }: {
   dailies: DailyReport[];
   initialId?: string;
   /** dailyId -> { sheetId, projectId }, for dailies that came from a Globe sheet. */
   sheetByDaily?: Record<string, { sheetId: string; projectId: string }>;
+  /** Who is signed in — recorded on the approval or denial. */
+  reviewerName?: string;
 }) {
   const [items, setItems] = React.useState(dailies);
   const [filter, setFilter] = React.useState<(typeof FILTERS)[number]>("All");
@@ -119,6 +130,7 @@ export function DailiesView({
             daily={selected}
             onSetStatus={setStatus}
             sheet={sheetByDaily?.[selected.id]}
+            reviewerName={reviewerName}
           />
         ) : (
           <Panel className="items-center justify-center py-24 text-center text-[13px] text-muted-foreground">
@@ -134,11 +146,55 @@ function DailyDetail({
   daily: d,
   onSetStatus,
   sheet,
+  reviewerName,
 }: {
   daily: DailyReport;
   onSetStatus: (id: string, status: DailyStatus, tone: DailyReport["tone"]) => void;
   sheet?: { sheetId: string; projectId: string };
+  reviewerName?: string;
 }) {
+  const router = useRouter();
+  const [note, setNote] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const decided = d.status === "Approved" || d.status === "Denied";
+
+  // A different daily selected means a different decision — never carry a
+  // half-typed reason across.
+  React.useEffect(() => {
+    setNote("");
+    setError(null);
+  }, [d.id]);
+
+  async function decide(decision: "APPROVED" | "DENIED") {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    const res = await reviewDaily({
+      dailyId: d.id,
+      decision,
+      note,
+      reviewedBy: reviewerName ?? "",
+    });
+    setBusy(false);
+    if (res.ok) {
+      onSetStatus(d.id, decision === "APPROVED" ? "Approved" : "Denied", decision === "APPROVED" ? "success" : "critical");
+      router.refresh();
+    } else {
+      setError(res.error);
+    }
+  }
+
+  async function reopen() {
+    if (busy) return;
+    setBusy(true);
+    await reopenDailyReview(d.id);
+    setBusy(false);
+    onSetStatus(d.id, "In review", "warning");
+    router.refresh();
+  }
+
   return (
     <div className="flex flex-col gap-3">
       <Panel>
@@ -269,22 +325,69 @@ function DailyDetail({
           </table>
         </div>
 
-        <div className="mt-auto flex flex-wrap items-center justify-end gap-2 border-t border-border/70 px-4 py-3 sm:px-5">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onSetStatus(d.id, "Flagged", "critical")}
-            className="h-9 gap-1.5 rounded-lg border-critical/30 bg-critical/10 text-[12.5px] font-medium text-critical hover:bg-critical/15"
-          >
-            <X className="size-3.5" /> Flag
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => onSetStatus(d.id, "Approved", "success")}
-            className="h-9 gap-1.5 rounded-lg bg-brand px-3.5 text-[12.5px] font-semibold text-white hover:bg-brand-bright"
-          >
-            <Check className="size-3.5" /> Approve daily
-          </Button>
+        {/* Supervisor decision. Denials require a reason — "denied" with no
+            explanation sends the crew back to guess what to fix. */}
+        <div className="mt-auto flex flex-col gap-2 border-t border-border/70 px-4 py-3 sm:px-5">
+          {decided ? (
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p
+                  className={cn(
+                    "text-[12.5px] font-medium",
+                    d.status === "Approved" ? "text-success" : "text-critical",
+                  )}
+                >
+                  {d.status === "Approved" ? "Approved" : "Denied"}
+                  {d.reviewedBy ? ` by ${d.reviewedBy}` : ""}
+                  {d.reviewedAt ? ` · ${formatWhen(d.reviewedAt)}` : ""}
+                </p>
+                {d.reviewNote ? (
+                  <p className="mt-1 whitespace-pre-wrap text-[12px] text-muted-foreground">
+                    {d.reviewNote}
+                  </p>
+                ) : null}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void reopen()}
+                disabled={busy}
+                className="h-9 shrink-0 gap-1.5 rounded-lg text-[12.5px] font-medium"
+              >
+                Reopen review
+              </Button>
+            </div>
+          ) : (
+            <>
+              <textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                rows={2}
+                placeholder="Reason — required to deny, optional to approve"
+                className="w-full resize-y rounded-lg border border-foreground/[0.1] bg-foreground/[0.03] px-3 py-2 text-[12.5px] text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-brand/40"
+              />
+              {error ? <p className="text-[12px] text-critical">{error}</p> : null}
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void decide("DENIED")}
+                  disabled={busy}
+                  className="h-9 gap-1.5 rounded-lg border-critical/30 bg-critical/10 text-[12.5px] font-medium text-critical hover:bg-critical/15"
+                >
+                  <X className="size-3.5" /> Deny
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => void decide("APPROVED")}
+                  disabled={busy}
+                  className="h-9 gap-1.5 rounded-lg bg-brand px-3.5 text-[12.5px] font-semibold text-white hover:bg-brand-bright"
+                >
+                  <Check className="size-3.5" /> Approve daily
+                </Button>
+              </div>
+            </>
+          )}
         </div>
       </Panel>
     </div>
