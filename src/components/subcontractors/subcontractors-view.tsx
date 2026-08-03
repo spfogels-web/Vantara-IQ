@@ -11,10 +11,13 @@ import {
   Lock,
   Mail,
   MapPin,
+  Pencil,
   Phone,
+  Plus,
   Search,
   ShieldCheck,
   Star,
+  Trash2,
   UserPlus,
   Wrench,
   X,
@@ -29,8 +32,9 @@ import { StatusPill } from "@/components/common/status-pill";
 import { LogoUpload } from "@/components/common/logo-upload";
 import { Button } from "@/components/ui/button";
 import { InviteDialog } from "@/components/subcontractors/invite-dialog";
+import { SubcontractorForm } from "@/components/subcontractors/subcontractor-form";
 import { DocumentCenter, type SubDoc } from "@/components/subcontractors/document-center";
-import { approveSubcontractor, listSubDocuments } from "@/app/actions";
+import { approveSubcontractor, deleteSubcontractor, listSubDocuments } from "@/app/actions";
 
 const complianceTone: Record<ComplianceStatus, "success" | "warning" | "critical" | "neutral"> = {
   valid: "success",
@@ -74,9 +78,12 @@ export function SubcontractorsView({
   projects: Project[];
 }) {
   const [query, setQuery] = React.useState("");
-  const [selectedId, setSelectedId] = React.useState(subs[0]?.id ?? null);
+  const [selectedId, setSelectedId] = React.useState<string | null>(subs[0]?.id ?? null);
   const [inviteOpen, setInviteOpen] = React.useState(false);
   const [inviteCompany, setInviteCompany] = React.useState<string | undefined>();
+  const [formOpen, setFormOpen] = React.useState(false);
+  /** null = adding a new one; a sub = editing that one. */
+  const [editing, setEditing] = React.useState<Subcontractor | null>(null);
 
   function openInvite(company?: string) {
     setInviteCompany(company);
@@ -101,6 +108,16 @@ export function SubcontractorsView({
       <div className="lg:col-span-5 xl:col-span-4">
         <Panel>
           <PanelHeader title="Subcontractors" count={filtered.length} icon={<ShieldCheck className="size-3.5" />}>
+            <Button
+              size="sm"
+              onClick={() => {
+                setEditing(null);
+                setFormOpen(true);
+              }}
+              className="h-8 gap-1.5 rounded-lg border border-border bg-transparent px-2.5 text-[12px] font-medium text-foreground hover:bg-foreground/[0.05]"
+            >
+              <Plus className="size-3.5" /> Add
+            </Button>
             <Button
               size="sm"
               onClick={() => openInvite()}
@@ -153,7 +170,17 @@ export function SubcontractorsView({
       </div>
 
       <div className="lg:col-span-7 xl:col-span-8">
-        {selected ? <SubDetail sub={selected} onInvite={() => openInvite(selected.company)} /> : null}
+        {selected ? (
+          <SubDetail
+            sub={selected}
+            onInvite={() => openInvite(selected.company)}
+            onEdit={() => {
+              setEditing(selected);
+              setFormOpen(true);
+            }}
+            onDeleted={() => setSelectedId(null)}
+          />
+        ) : null}
       </div>
 
       <InviteDialog
@@ -162,11 +189,22 @@ export function SubcontractorsView({
         projects={projects}
         company={inviteCompany}
       />
+      <SubcontractorForm open={formOpen} onOpenChange={setFormOpen} sub={editing} />
     </div>
   );
 }
 
-function SubDetail({ sub: s, onInvite }: { sub: Subcontractor; onInvite: () => void }) {
+function SubDetail({
+  sub: s,
+  onInvite,
+  onEdit,
+  onDeleted,
+}: {
+  sub: Subcontractor;
+  onInvite: () => void;
+  onEdit: () => void;
+  onDeleted: () => void;
+}) {
   const sc = s.scorecard;
   const active = s.state === "Active";
   const gate = workReadiness(s);
@@ -174,6 +212,32 @@ function SubDetail({ sub: s, onInvite }: { sub: Subcontractor; onInvite: () => v
   const router = useRouter();
   const [approving, setApproving] = React.useState(false);
   const [docs, setDocs] = React.useState<SubDoc[] | null>(null);
+  const [confirmDelete, setConfirmDelete] = React.useState(false);
+  const [deleting, setDeleting] = React.useState(false);
+  const [deleteError, setDeleteError] = React.useState<string | null>(null);
+
+  // Reset the confirm state when switching subs, so an armed delete on one
+  // can't carry over to the next.
+  React.useEffect(() => {
+    setConfirmDelete(false);
+    setDeleteError(null);
+  }, [s.id]);
+
+  async function remove() {
+    if (deleting) return;
+    setDeleting(true);
+    setDeleteError(null);
+    const res = await deleteSubcontractor(s.id);
+    setDeleting(false);
+    if (res.ok) {
+      setConfirmDelete(false);
+      onDeleted();
+      router.refresh();
+    } else {
+      setDeleteError(res.error);
+      setConfirmDelete(false);
+    }
+  }
 
   React.useEffect(() => {
     let active = true;
@@ -225,7 +289,44 @@ function SubDetail({ sub: s, onInvite }: { sub: Subcontractor; onInvite: () => v
               ))}
             </div>
           </div>
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col items-end gap-2">
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={onEdit}
+                className="focus-ring inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-[12px] font-medium text-foreground hover:bg-foreground/[0.05]"
+              >
+                <Pencil className="size-3.5" /> Edit
+              </button>
+              {confirmDelete ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => void remove()}
+                    disabled={deleting}
+                    className="focus-ring inline-flex h-8 items-center gap-1.5 rounded-lg bg-critical px-2.5 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                  >
+                    {deleting ? "Deleting…" : "Confirm delete"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDelete(false)}
+                    className="focus-ring rounded-lg px-2 text-[12px] text-muted-foreground hover:text-foreground"
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(true)}
+                  title="Delete this subcontractor"
+                  className="focus-ring grid size-8 place-items-center rounded-lg border border-border text-muted-foreground hover:border-critical/40 hover:text-critical"
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
+              )}
+            </div>
             <a href={`mailto:${s.email}`} className="inline-flex items-center gap-1.5 text-[11.5px] text-muted-foreground hover:text-brand-bright">
               <Mail className="size-3.5" /> {s.email}
             </a>
@@ -234,6 +335,11 @@ function SubDetail({ sub: s, onInvite }: { sub: Subcontractor; onInvite: () => v
             </a>
           </div>
         </PanelBody>
+        {deleteError ? (
+          <p className="border-t border-border/70 px-4 py-2 text-[12px] text-critical sm:px-5">
+            {deleteError}
+          </p>
+        ) : null}
       </Panel>
 
       {/* Work-eligibility gate — must pass before this crew can be given work */}

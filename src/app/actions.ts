@@ -94,6 +94,98 @@ export async function approveSubcontractor(id: string) {
  * Creates the subcontractor record at the START of onboarding (account step) so
  * documents can be attached during the flow. Returns the id.
  */
+/* ------------------------------------------------------------------ *
+ * Subcontractors — add, edit, remove.
+ * ------------------------------------------------------------------ */
+
+export type SubcontractorInput = {
+  company: string;
+  lead: string;
+  email: string;
+  phone: string;
+  location: string;
+  /** Comma-separated in the form; stored as an array. */
+  trades: string;
+  equipment: string;
+  crewSize: number;
+  state: string;
+  since: string;
+};
+
+/** "Trenching, Conduit , Restoration" -> ["Trenching","Conduit","Restoration"] */
+const toList = (raw: string) =>
+  raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+const SUB_STATES = new Set(["INVITED", "ONBOARDING", "PENDING_REVIEW", "ACTIVE", "INACTIVE"]);
+
+function subcontractorData(input: SubcontractorInput) {
+  const state = SUB_STATES.has(input.state) ? input.state : "PENDING_REVIEW";
+  return {
+    company: input.company.trim(),
+    lead: input.lead.trim(),
+    email: input.email.trim(),
+    phone: input.phone.trim(),
+    location: input.location.trim(),
+    trades: toList(input.trades),
+    equipment: toList(input.equipment),
+    crewSize: Number.isFinite(input.crewSize) ? Math.max(0, Math.trunc(input.crewSize)) : 0,
+    state: state as "INVITED" | "ONBOARDING" | "PENDING_REVIEW" | "ACTIVE" | "INACTIVE",
+    tone: state === "ACTIVE" ? "success" : state === "INACTIVE" ? "neutral" : "warning",
+    since: input.since.trim(),
+  };
+}
+
+export async function createSubcontractor(input: SubcontractorInput) {
+  if (!input.company.trim()) return { ok: false as const, error: "Company name is required." };
+  const sub = await prisma.subcontractor.create({ data: subcontractorData(input) });
+  revalidatePath("/subcontractors");
+  return { ok: true as const, id: sub.id };
+}
+
+export async function updateSubcontractor(id: string, input: SubcontractorInput) {
+  if (!input.company.trim()) return { ok: false as const, error: "Company name is required." };
+  await prisma.subcontractor.update({ where: { id }, data: subcontractorData(input) });
+  revalidatePath("/subcontractors");
+  return { ok: true as const, id };
+}
+
+/**
+ * Removing a sub takes its onboarding documents with it (cascade), so this
+ * refuses while the sub is still assigned to a project — losing a compliance
+ * record for a crew that is actively working is not something to do quietly.
+ */
+export async function deleteSubcontractor(id: string) {
+  const sub = await prisma.subcontractor.findUnique({
+    where: { id },
+    select: { assignedProjects: true, company: true },
+  });
+  if (!sub) return { ok: false as const, error: "Subcontractor not found." };
+  if (sub.assignedProjects.length > 0) {
+    return {
+      ok: false as const,
+      error: `${sub.company} is still assigned to ${sub.assignedProjects.length} project${
+        sub.assignedProjects.length === 1 ? "" : "s"
+      }. Unassign it first.`,
+    };
+  }
+  await prisma.subcontractor.delete({ where: { id } });
+  revalidatePath("/subcontractors");
+  return { ok: true as const };
+}
+
+/** Assign / unassign a project by name — the list drives what a sub can see. */
+export async function setSubcontractorProjects(id: string, projects: string[]) {
+  await prisma.subcontractor.update({
+    where: { id },
+    data: { assignedProjects: projects.map((p) => p.trim()).filter(Boolean) },
+  });
+  revalidatePath("/subcontractors");
+  return { ok: true as const };
+}
+
 export async function createSubcontractorDraft(input: {
   company: string;
   name: string;
