@@ -24,6 +24,15 @@ export async function login(_prev: unknown, formData: FormData) {
     return { error: "Enter your email and password." };
   }
 
+  // Fail loudly on a misconfigured deployment rather than letting a correct
+  // password look wrong. Without AUTH_SECRET no session can be signed at all.
+  if (!process.env.AUTH_SECRET || process.env.AUTH_SECRET.length < 32) {
+    return {
+      error:
+        "This deployment is missing its AUTH_SECRET, so sessions can't be issued. Add it in the hosting environment settings and redeploy.",
+    };
+  }
+
   const user = await prisma.user.findUnique({ where: { email } });
   const ok = user?.passwordHash ? await verifyPassword(password, user.passwordHash) : false;
 
@@ -31,7 +40,12 @@ export async function login(_prev: unknown, formData: FormData) {
     return { error: "That email and password don't match an account." };
   }
 
-  const token = await signSession({ userId: user.id, role: user.role as SessionRole });
+  let token: string;
+  try {
+    token = await signSession({ userId: user.id, role: user.role as SessionRole });
+  } catch {
+    return { error: "Couldn't start a session. Check the server configuration and try again." };
+  }
   await setSessionCookie(token);
   redirect("/");
 }
