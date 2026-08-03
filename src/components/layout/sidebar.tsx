@@ -112,10 +112,13 @@ export function SidebarContent({
   collapsed,
   onNavigate,
   showCollapseButton = true,
+  logoUrl,
 }: {
   collapsed: boolean;
   onNavigate?: () => void;
   showCollapseButton?: boolean;
+  /** The company mark, once one has been uploaded. */
+  logoUrl?: string | null;
 }) {
   const { toggle } = useSidebar();
   const [feedbackOpen, setFeedbackOpen] = React.useState(false);
@@ -186,15 +189,25 @@ export function SidebarContent({
                 aria-label={`${organization.name} — account menu`}
                 className="focus-ring mx-auto grid size-8 place-items-center rounded-lg bg-foreground/[0.06] text-[11px] font-semibold text-foreground ring-1 ring-inset ring-foreground/[0.06]"
               >
-                {initials(organization.name)}
+                {logoUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={logoUrl} alt="" className="size-full rounded-lg object-contain p-0.5" />
+                ) : (
+                  initials(organization.name)
+                )}
               </button>
             ) : (
               <button
                 type="button"
                 className="focus-ring flex w-full items-center gap-2.5 rounded-lg p-2 text-left transition-colors hover:bg-foreground/[0.05]"
               >
-                <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-foreground/[0.06] text-[11px] font-semibold ring-1 ring-inset ring-foreground/[0.06]">
-                  {initials(organization.name)}
+                <span className="grid size-8 shrink-0 place-items-center overflow-hidden rounded-lg bg-foreground/[0.06] text-[11px] font-semibold ring-1 ring-inset ring-foreground/[0.06]">
+                  {logoUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={logoUrl} alt="" className="size-full object-contain p-0.5" />
+                  ) : (
+                    initials(organization.name)
+                  )}
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[12.5px] font-medium text-foreground">
@@ -252,7 +265,7 @@ export function SidebarContent({
 }
 
 /** Desktop rail. Hidden below lg — mobile uses the Sheet in the topbar. */
-export function DesktopSidebar() {
+export function DesktopSidebar({ logoUrl }: { logoUrl?: string | null }) {
   const { collapsed, toggle } = useSidebar();
 
   return (
@@ -264,7 +277,7 @@ export function DesktopSidebar() {
         transition: "width 260ms cubic-bezier(0.16, 1, 0.3, 1)",
       }}
     >
-      <SidebarContent collapsed={collapsed} />
+      <SidebarContent collapsed={collapsed} logoUrl={logoUrl} />
 
       {/* Expand affordance, only visible while collapsed */}
       {collapsed ? (

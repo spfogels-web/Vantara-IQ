@@ -5,6 +5,7 @@ import { GeistMono } from "geist/font/mono";
 import "./globals.css";
 import { AppShell } from "@/components/layout/app-shell";
 import { getCurrentUser } from "@/lib/auth";
+import { getOrganizationLogo } from "@/data/queries";
 
 export const metadata: Metadata = {
   title: {
@@ -28,7 +29,7 @@ export default async function RootLayout({
 }>) {
   // Read once here so the shell can show who is signed in without every page
   // re-querying it.
-  const user = await getCurrentUser();
+  const [user, logoUrl] = await Promise.all([getCurrentUser(), getOrganizationLogo()]);
 
   return (
     <html
@@ -45,7 +46,7 @@ export default async function RootLayout({
         />
       </head>
       <body className="min-h-svh bg-background font-sans antialiased">
-        <AppShell user={user}>{children}</AppShell>
+        <AppShell user={user} logoUrl={logoUrl}>{children}</AppShell>
       </body>
     </html>
   );

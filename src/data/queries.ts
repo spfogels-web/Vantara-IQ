@@ -1,7 +1,14 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
-import { codeGroupLabel, compareByPriority, isAerialCode, isPriorityCode } from "@/lib/unit-codes";
+import {
+  codeGroupLabel,
+  compareByPriority,
+  isAerialCode,
+  isPriorityCode,
+  productionMethod,
+  type ProductionMethod,
+} from "@/lib/unit-codes";
 import {
   brief,
   crews,
@@ -782,4 +789,115 @@ export async function getSheetIndexByDaily(): Promise<
     if (r.dailyId && r.projectId) out[r.dailyId] = { sheetId: r.id, projectId: r.projectId };
   }
   return out;
+}
+
+/* ------------------------------------------------------------------ *
+ * Production split — plow vs bore.
+ * ------------------------------------------------------------------ */
+
+export interface MethodTotal {
+  method: ProductionMethod;
+  label: string;
+  feet: number;
+  /** Which codes made it up, biggest first — so a total can be checked. */
+  codes: { code: string; feet: number }[];
+}
+
+export interface ProductionSplit {
+  from: string;
+  to: string;
+  plow: MethodTotal;
+  bore: MethodTotal;
+  other: MethodTotal;
+  total: number;
+  /** Per-day totals across the window, oldest first. */
+  byDay: { day: string; plow: number; bore: number }[];
+}
+
+const METHOD_LABEL: Record<ProductionMethod, string> = {
+  plow: "Plow",
+  bore: "Bore & missile",
+  other: "Other units",
+};
+
+/**
+ * Footage by method over the last N days, from approved and submitted dailies.
+ *
+ * Counts the quantity on each line item rather than the daily's total, because
+ * the total says nothing about how the work was done.
+ */
+export async function getProductionSplit(days = 7): Promise<ProductionSplit> {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (days - 1));
+
+  const dailies = await prisma.daily.findMany({
+    where: { status: { not: "Denied" } },
+    select: { workDate: true, submittedAt: true, lineItems: true },
+  });
+
+  const totals: Record<ProductionMethod, Map<string, number>> = {
+    plow: new Map(),
+    bore: new Map(),
+    other: new Map(),
+  };
+  const perDay = new Map<string, { plow: number; bore: number }>();
+  for (let i = 0; i < days; i++) {
+    const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+    perDay.set(d.toISOString().slice(0, 10), { plow: 0, bore: 0 });
+  }
+
+  for (const d of dailies) {
+    const t = Date.parse(d.workDate) || Date.parse(d.submittedAt);
+    if (!t || Number.isNaN(t)) continue;
+    const when = new Date(t);
+    if (when < start) continue;
+    const key = new Date(when.getFullYear(), when.getMonth(), when.getDate())
+      .toISOString()
+      .slice(0, 10);
+
+    const items = Array.isArray(d.lineItems) ? (d.lineItems as unknown[]) : [];
+    for (const raw of items) {
+      const li = raw as { code?: unknown; quantity?: unknown };
+      if (typeof li?.code !== "string") continue;
+      const qty = typeof li.quantity === "number" ? li.quantity : 0;
+      if (!qty) continue;
+      const method = productionMethod(li.code);
+      const bucket = totals[method];
+      bucket.set(li.code, (bucket.get(li.code) ?? 0) + qty);
+      const day = perDay.get(key);
+      if (day && method !== "other") day[method] += qty;
+    }
+  }
+
+  const build = (method: ProductionMethod): MethodTotal => {
+    const codes = [...totals[method].entries()]
+      .map(([code, feet]) => ({ code, feet }))
+      .sort((a, b) => b.feet - a.feet);
+    return {
+      method,
+      label: METHOD_LABEL[method],
+      feet: codes.reduce((s, c) => s + c.feet, 0),
+      codes,
+    };
+  };
+
+  const plow = build("plow");
+  const bore = build("bore");
+  const other = build("other");
+
+  return {
+    from: start.toISOString().slice(0, 10),
+    to: now.toISOString().slice(0, 10),
+    plow,
+    bore,
+    other,
+    total: plow.feet + bore.feet + other.feet,
+    byDay: [...perDay.entries()].map(([day, v]) => ({ day, ...v })),
+  };
+}
+
+/** The organization's stored logo URL, if one has been uploaded. */
+export async function getOrganizationLogo(): Promise<string | null> {
+  const org = await prisma.organization.findFirst({ select: { logoUrl: true } });
+  return org?.logoUrl ?? null;
 }

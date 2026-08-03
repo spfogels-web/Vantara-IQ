@@ -161,6 +161,24 @@ export function groupMaterialTotals(materials: GroupableMaterial[]): MaterialGro
   return [...byGroup.values()];
 }
 
+/**
+ * How the footage got in the ground.
+ *
+ * Plow and bore are different work at different rates and different day-rates
+ * of production, so a single "footage today" number hides the thing a
+ * superintendent actually wants to know. The BFO family is placement — cable
+ * and duct plowed in along the route, microduct included. BM60 and BM61 are
+ * the crossings: missile and bore under driveways and pipe.
+ */
+export type ProductionMethod = "plow" | "bore" | "other";
+
+export function productionMethod(code: string): ProductionMethod {
+  const c = normalizeCode(code);
+  if (/^BM6[01]/.test(c)) return "bore";
+  if (/^BFO/.test(c)) return "plow";
+  return "other";
+}
+
 export type CodeClass = "underground" | "aerial" | "other";
 
 export function codeClass(code: string): CodeClass {

@@ -9,6 +9,7 @@ import {
   getMissingDocuments,
   getNotifications,
   getProductionSummary,
+  getProductionSplit,
   getProjectsRequiringAttention,
   getRevenueSummary,
 } from "@/data/queries";
@@ -20,6 +21,7 @@ import { ProjectHealth } from "@/components/dashboard/project-health";
 import { AiBrief } from "@/components/dashboard/ai-brief";
 import { ProjectsTable } from "@/components/dashboard/projects-table";
 import { ProductionChart } from "@/components/dashboard/production-chart";
+import { ProductionSplitPanel } from "@/components/dashboard/production-split";
 import { RevenueCards } from "@/components/dashboard/revenue-cards";
 import { CrewAvailability } from "@/components/dashboard/crew-availability";
 import { UpcomingDeadlines } from "@/components/dashboard/upcoming-deadlines";
@@ -56,6 +58,11 @@ async function ProjectsSection() {
 async function BriefSection() {
   const brief = await getBrief();
   return <AiBrief items={brief} />;
+}
+
+async function ProductionSplitSection() {
+  const split = await getProductionSplit(7);
+  return <ProductionSplitPanel split={split} />;
 }
 
 async function ProductionSection() {
@@ -122,6 +129,11 @@ export default async function OperationsCenterPage() {
 
         <div className="xl:col-span-8">
           <Suspense fallback={<ProductionChartSkeleton />}>
+            <ProductionSplitSection />
+          </Suspense>
+        </div>
+        <div className="xl:col-span-4">
+          <Suspense fallback={<ListPanelSkeleton />}>
             <ProductionSection />
           </Suspense>
         </div>

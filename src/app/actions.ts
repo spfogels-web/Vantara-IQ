@@ -176,6 +176,20 @@ export async function deleteSubcontractor(id: string) {
   return { ok: true as const };
 }
 
+/**
+ * Save the company logo. Stored as a Blob URL on the organization so it
+ * survives a refresh — the picker previewed it in local state before this,
+ * which looked like it worked right up until you reloaded.
+ */
+export async function saveOrganizationLogo(url: string) {
+  if (!url) return { ok: false as const, error: "No image to save." };
+  const org = await prisma.organization.findFirst();
+  if (!org) return { ok: false as const, error: "No organization on this account." };
+  await prisma.organization.update({ where: { id: org.id }, data: { logoUrl: url } });
+  revalidatePath("/", "layout");
+  return { ok: true as const };
+}
+
 /** Assign / unassign a project by name — the list drives what a sub can see. */
 export async function setSubcontractorProjects(id: string, projects: string[]) {
   await prisma.subcontractor.update({

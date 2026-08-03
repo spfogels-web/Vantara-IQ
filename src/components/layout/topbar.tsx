@@ -307,7 +307,7 @@ function UserMenu({ user: current }: { user: CurrentUser | null }) {
   );
 }
 
-function MobileNav() {
+function MobileNav({ logoUrl }: { logoUrl?: string | null }) {
   const { mobileOpen, setMobileOpen } = useSidebar();
 
   return (
@@ -324,6 +324,7 @@ function MobileNav() {
       <SheetContent side="left" className="w-[272px] border-sidebar-border p-0">
         <SheetTitle className="sr-only">Navigation</SheetTitle>
         <SidebarContent
+          logoUrl={logoUrl}
           collapsed={false}
           showCollapseButton={false}
           onNavigate={() => setMobileOpen(false)}
@@ -333,12 +334,12 @@ function MobileNav() {
   );
 }
 
-export function Topbar({ user }: { user: CurrentUser | null }) {
+export function Topbar({ user, logoUrl }: { user: CurrentUser | null; logoUrl?: string | null }) {
   const { setOpen: setCommandOpen } = useCommandMenu();
 
   return (
     <header className="glass sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-border px-3 sm:gap-3 sm:px-5">
-      <MobileNav />
+      <MobileNav logoUrl={logoUrl} />
 
       {/* shrink-0 so the search field absorbs the squeeze at tablet widths
           instead of the page title collapsing to an ellipsis. */}

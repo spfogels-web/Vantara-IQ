@@ -20,7 +20,15 @@ import { useIsDesktop } from "@/hooks/use-media-query";
  * flex row, so the sidebar can stay `fixed` and the page scrolls independently
  * of it — no nested scroll containers, no sticky-header jitter.
  */
-function ShellFrame({ children, user }: { children: React.ReactNode; user: CurrentUser | null }) {
+function ShellFrame({
+  children,
+  user,
+  logoUrl,
+}: {
+  children: React.ReactNode;
+  user: CurrentUser | null;
+  logoUrl?: string | null;
+}) {
   const { collapsed } = useSidebar();
   const isDesktop = useIsDesktop();
 
@@ -28,7 +36,7 @@ function ShellFrame({ children, user }: { children: React.ReactNode; user: Curre
 
   return (
     <div className="aurora relative min-h-svh">
-      <DesktopSidebar />
+      <DesktopSidebar logoUrl={logoUrl} />
 
       <div
         className="relative z-10 flex min-h-svh flex-col"
@@ -37,14 +45,22 @@ function ShellFrame({ children, user }: { children: React.ReactNode; user: Curre
           transition: "margin-inline-start 260ms cubic-bezier(0.16, 1, 0.3, 1)",
         }}
       >
-        <Topbar user={user} />
+        <Topbar user={user} logoUrl={logoUrl} />
         <main className="flex-1">{children}</main>
       </div>
     </div>
   );
 }
 
-export function AppShell({ children, user }: { children: React.ReactNode; user: CurrentUser | null }) {
+export function AppShell({
+  children,
+  user,
+  logoUrl,
+}: {
+  children: React.ReactNode;
+  user: CurrentUser | null;
+  logoUrl?: string | null;
+}) {
   const pathname = usePathname();
 
   // Public, external-facing routes (e.g. subcontractor onboarding) render
@@ -61,7 +77,7 @@ export function AppShell({ children, user }: { children: React.ReactNode; user: 
     <TooltipProvider delayDuration={300} skipDelayDuration={200}>
       <SidebarProvider>
         <CommandMenuProvider>
-          <ShellFrame user={user}>{children}</ShellFrame>
+          <ShellFrame user={user} logoUrl={logoUrl}>{children}</ShellFrame>
         </CommandMenuProvider>
       </SidebarProvider>
     </TooltipProvider>

@@ -1,13 +1,12 @@
 ﻿import { Check, Plug } from "lucide-react";
 
-import { getOrganization } from "@/data/queries";
+import { getOrganization, getOrganizationLogo } from "@/data/queries";
 import { cn } from "@/lib/utils";
-import { initials } from "@/lib/format";
 import { PageShell } from "@/components/common/page-shell";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { StatusPill } from "@/components/common/status-pill";
-import { LogoUpload } from "@/components/common/logo-upload";
 import { ProfileCard } from "@/components/settings/profile-card";
+import { OrgLogo } from "@/components/settings/org-logo";
 import { getCurrentUser } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 
@@ -42,7 +41,11 @@ const integrations = [
 ];
 
 export default async function SettingsPage() {
-  const [org, me] = await Promise.all([getOrganization(), getCurrentUser()]);
+  const [org, me, orgLogoUrl] = await Promise.all([
+    getOrganization(),
+    getCurrentUser(),
+    getOrganizationLogo(),
+  ]);
 
   return (
     <PageShell eyebrow="Workspace" title="Settings" description="Organization, team and the integrations that keep billing and pay in sync.">
@@ -61,12 +64,8 @@ export default async function SettingsPage() {
         <Panel>
           <PanelHeader title="Organization" />
           <PanelBody className="flex flex-col gap-2.5">
-            <div className="flex items-center gap-3 border-b border-border/40 pb-3">
-              <LogoUpload fallback={initials(org.name)} size={52} />
-              <div>
-                <p className="text-[14px] font-semibold text-foreground">{org.name}</p>
-                <p className="text-[11.5px] text-muted-foreground">Click the logo to upload your company mark</p>
-              </div>
+            <div className="border-b border-border/40 pb-3">
+              <OrgLogo name={org.name} initialUrl={orgLogoUrl} />
             </div>
             <Row label="Company" value={org.name} />
             <Row label="Plan" value={org.plan} />
