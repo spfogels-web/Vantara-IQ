@@ -13,7 +13,7 @@ function greeting(hour: number) {
   return "Good evening";
 }
 
-export function PageHeader() {
+export function PageHeader({ name }: { name?: string }) {
   // Rendered after mount so the server and client markup can't disagree about
   // the clock.
   const [now, setNow] = React.useState<Date | null>(null);
@@ -25,7 +25,8 @@ export function PageHeader() {
     return () => clearInterval(timer);
   }, []);
 
-  const firstName = organization.user.name.split(" ")[0];
+  // Falls back to the fixture only when rendered without a signed-in user.
+  const firstName = (name ?? organization.user.name).split(" ")[0];
 
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">

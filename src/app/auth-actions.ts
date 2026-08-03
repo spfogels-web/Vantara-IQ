@@ -1,10 +1,13 @@
 "use server";
 
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 
 import { prisma } from "@/lib/prisma";
 import {
   clearSessionCookie,
+  getSession,
+  hashPassword,
   setSessionCookie,
   signSession,
   verifyPassword,
@@ -53,4 +56,49 @@ export async function login(_prev: unknown, formData: FormData) {
 export async function logout() {
   await clearSessionCookie();
   redirect("/login");
+}
+
+/** Rename yourself. The greeting and the account menu both read this. */
+export async function updateProfile(input: { name: string; email: string }) {
+  const session = await getSession();
+  if (!session) return { ok: false as const, error: "Not signed in." };
+
+  const name = input.name.trim();
+  const email = input.email.trim().toLowerCase();
+  if (!name) return { ok: false as const, error: "Name can't be empty." };
+  if (!email.includes("@")) return { ok: false as const, error: "That doesn't look like an email." };
+
+  const clash = await prisma.user.findFirst({
+    where: { email, NOT: { id: session.userId } },
+    select: { id: true },
+  });
+  if (clash) return { ok: false as const, error: "Another account already uses that email." };
+
+  await prisma.user.update({ where: { id: session.userId }, data: { name, email } });
+  revalidatePath("/", "layout");
+  return { ok: true as const };
+}
+
+/**
+ * Change your own password. Requires the current one — a hijacked session
+ * shouldn't be able to lock the real owner out.
+ */
+export async function changePassword(input: { current: string; next: string }) {
+  const session = await getSession();
+  if (!session) return { ok: false as const, error: "Not signed in." };
+  if (input.next.length < 10) {
+    return { ok: false as const, error: "Use at least 10 characters." };
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: session.userId } });
+  if (!user?.passwordHash) return { ok: false as const, error: "No password set on this account." };
+
+  const ok = await verifyPassword(input.current, user.passwordHash);
+  if (!ok) return { ok: false as const, error: "Current password is wrong." };
+
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { passwordHash: await hashPassword(input.next) },
+  });
+  return { ok: true as const };
 }

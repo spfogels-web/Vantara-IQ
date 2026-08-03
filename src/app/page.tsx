@@ -14,6 +14,7 @@ import {
 } from "@/data/queries";
 
 import { PageHeader } from "@/components/dashboard/page-header";
+import { getCurrentUser } from "@/lib/auth";
 import { KpiRow } from "@/components/dashboard/kpi-row";
 import { ProjectHealth } from "@/components/dashboard/project-health";
 import { AiBrief } from "@/components/dashboard/ai-brief";
@@ -92,10 +93,12 @@ async function ActivitySection() {
   return <NotificationsPanel notifications={notifications} />;
 }
 
-export default function OperationsCenterPage() {
+export default async function OperationsCenterPage() {
+  const currentUser = await getCurrentUser();
+
   return (
     <div className="mx-auto w-full max-w-[1600px] px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
-      <PageHeader />
+      <PageHeader name={currentUser?.name} />
 
       {/* 12-column rhythm: an 8/4 split for the primary rows, 4/4/4 to close.
           Everything collapses to a single column below xl. */}

@@ -7,6 +7,8 @@ import { PageShell } from "@/components/common/page-shell";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { StatusPill } from "@/components/common/status-pill";
 import { LogoUpload } from "@/components/common/logo-upload";
+import { ProfileCard } from "@/components/settings/profile-card";
+import { getCurrentUser } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
@@ -40,10 +42,21 @@ const integrations = [
 ];
 
 export default async function SettingsPage() {
-  const org = await getOrganization();
+  const [org, me] = await Promise.all([getOrganization(), getCurrentUser()]);
 
   return (
     <PageShell eyebrow="Workspace" title="Settings" description="Organization, team and the integrations that keep billing and pay in sync.">
+      {me ? (
+        <div className="mb-3">
+          <ProfileCard
+            name={me.name}
+            email={me.email}
+            role={me.role}
+            organizationName={me.organizationName}
+          />
+        </div>
+      ) : null}
+
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Panel>
           <PanelHeader title="Organization" />
