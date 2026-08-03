@@ -6,6 +6,7 @@ import * as XLSX from "xlsx";
 
 import { prisma } from "@/lib/prisma";
 import { extractDocument, isConfigured, type RateDocType } from "@/lib/extract";
+import { parseDelimitedMaterialList, pdfTextLayer } from "@/lib/parse-material-list";
 
 /** Pilot feedback -> Feedback table. */
 export async function submitFeedback(input: {
@@ -643,7 +644,7 @@ async function readDocument(file: File) {
     text = buf.toString("utf8"); // csv / txt
   }
 
-  return { name, mediaType, base64, text };
+  return { name, mediaType, base64, text, buffer: buf };
 }
 
 /**
@@ -736,15 +737,29 @@ export async function extractProjectMaterialsFromUrl(input: {
 }
 
 async function runMaterialExtraction(projectId: string, file: File) {
-  if (!isConfigured()) {
-    return { ok: false as const, error: "Claude AI isn't connected yet — add an API key in Integrations." };
-  }
   if (!projectId) return { ok: false as const, error: "Missing project." };
 
   const project = await prisma.project.findUnique({ where: { id: projectId } });
   if (!project) return { ok: false as const, error: "Project not found." };
 
-  const { name, mediaType, base64, text } = await readDocument(file);
+  const { name, mediaType, base64, text, buffer } = await readDocument(file);
+
+  // Try to read the document outright before paying a model to interpret it.
+  // Spreadsheets and text-layer PDFs are already structured; only scans and
+  // photos genuinely need Claude.
+  let parsed = text ? parseDelimitedMaterialList(text) : null;
+  if (!parsed && mediaType === "application/pdf") {
+    const pdfText = await pdfTextLayer(buffer);
+    if (pdfText) parsed = parseDelimitedMaterialList(pdfText, "pdf-text");
+  }
+
+  if (!parsed && !isConfigured()) {
+    return {
+      ok: false as const,
+      error:
+        "Couldn't read that file directly, and Claude isn't connected for scans — add an API key in Integrations.",
+    };
+  }
 
   const imp = await prisma.rateImport.create({
     data: {
@@ -758,7 +773,15 @@ async function runMaterialExtraction(projectId: string, file: File) {
   });
 
   try {
-    const result = await extractDocument({ docType: "MATERIAL_LIST", base64, mediaType, text });
+    const result = parsed
+      ? {
+          summary:
+            `Read directly from the ${parsed.method === "pdf-text" ? "PDF text" : "spreadsheet"} — ` +
+            `${parsed.rows.length} lines via ${parsed.matched.join(", ")}` +
+            (parsed.skipped ? ` (${parsed.skipped} non-item rows skipped)` : ""),
+          rows: parsed.rows,
+        }
+      : await extractDocument({ docType: "MATERIAL_LIST", base64, mediaType, text });
     await prisma.$transaction([
       ...result.rows.map((r) =>
         prisma.extractedRow.create({
