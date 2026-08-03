@@ -1,7 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
-import { compareByPriority, isAerialCode, isPriorityCode } from "@/lib/unit-codes";
+import { codeGroupLabel, compareByPriority, isAerialCode, isPriorityCode } from "@/lib/unit-codes";
 import {
   brief,
   crews,
@@ -418,7 +418,11 @@ export interface TrackedMaterial {
   reelNumber: string;
   furnished: string;
   tone: Tone;
+  /** "Microduct" / "Microfiber" — units a crew treats as one, for roll-up. */
+  group: string | null;
 }
+
+export type { MaterialGroupTotal } from "@/lib/unit-codes";
 
 function materialTone(planned: number, completed: number): Tone {
   if (planned <= 0) return "neutral";
@@ -483,6 +487,7 @@ export async function getProjectMaterials(projectId: string): Promise<TrackedMat
       reelNumber: r.reelNumber,
       furnished: r.furnished,
       tone: materialTone(r.planned, completed),
+      group: codeGroupLabel(r.code),
     };
   });
 }

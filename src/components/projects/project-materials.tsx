@@ -29,6 +29,7 @@ import {
   pushMaterialsToProject,
   updateProjectMaterial,
 } from "@/app/actions";
+import { groupMaterialTotals } from "@/lib/unit-codes";
 import type { ProjectMaterialImport, TrackedMaterial } from "@/data/queries";
 
 /**
@@ -178,6 +179,7 @@ export function ProjectMaterials({
     router.refresh();
   }
 
+  const groups = React.useMemo(() => groupMaterialTotals(tracked), [tracked]);
   const totalRows = imports.reduce((n, i) => n + i.rows.length, 0);
 
   return (
@@ -204,6 +206,27 @@ export function ProjectMaterials({
           e.target.value = "";
         }}
       />
+
+      {/* Roll-ups for units a crew treats as one thing. The codes underneath
+          stay distinct — this is the number, not a merge. */}
+      {groups.length > 0 ? (
+        <div className="flex flex-wrap gap-2 border-b border-border/70 px-4 py-2.5">
+          {groups.map((g) => (
+            <div key={g.label} className="min-w-[128px] flex-1 rounded-lg bg-foreground/[0.04] px-2.5 py-1.5">
+              <p className="text-[10.5px] font-medium uppercase tracking-wide text-muted-foreground">
+                {g.label}
+              </p>
+              <p className="num text-[14px] font-semibold text-foreground">
+                {formatNumber(g.remaining)} {g.unit}{" "}
+                <span className="text-[11px] font-normal text-muted-foreground">left</span>
+              </p>
+              <p className="num text-[10.5px] text-muted-foreground">
+                {formatNumber(g.completed)} of {formatNumber(g.planned)} · {g.codes} codes
+              </p>
+            </div>
+          ))}
+        </div>
+      ) : null}
 
       {/* What we're actually tracking — approved rows that crossed the line. */}
       {tracked.length > 0 ? (

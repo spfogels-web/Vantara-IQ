@@ -87,6 +87,80 @@ export function isPriorityCode(code: string): boolean {
   return priorityFamily(code) !== null || isBuriedMiscCode(code) || isRibbonInDuctCode(code);
 }
 
+/**
+ * Microduct sizes. 8.5 and 12.7 are the same product to a crew — both are
+ * microduct, and both take microfiber (the RI codes) pulled through them.
+ *
+ * They live on the sheet as BFOV(8.5)(1W)12IN DEPTH and BFOV(12.7)(2W)12IN
+ * DEPTH, which is why this keys on the size parameter rather than the BFOV
+ * prefix: BFOV(1)(1.25) is ordinary 1.25" vacant duct, not microduct.
+ */
+const MICRODUCT_SIZES = ["8.5", "12.7"];
+
+export function isMicroductCode(code: string): boolean {
+  const c = normalizeCode(code);
+  if (!c.startsWith("BFOV")) return false;
+  return MICRODUCT_SIZES.some((size) => c.includes(`(${size})`));
+}
+
+/**
+ * A label for units a crew thinks of as one thing, or null.
+ *
+ * This groups for *reporting* only — the underlying codes stay distinct, and
+ * draw-down still matches each one exactly. 1W and 2W duct may not bill the
+ * same, so rolling them into a single billable line would be a costly
+ * assumption to make on someone's behalf. Showing one total while keeping the
+ * codes intact gives the number without taking the risk.
+ */
+export function codeGroupLabel(code: string): string | null {
+  if (isMicroductCode(code)) return "Microduct";
+  if (isRibbonInDuctCode(code)) return "Microfiber";
+  return null;
+}
+
+/** A roll-up of codes a crew thinks of as one thing. */
+export interface MaterialGroupTotal {
+  label: string;
+  codes: number;
+  unit: string;
+  planned: number;
+  completed: number;
+  remaining: number;
+}
+
+/**
+ * Structural shape only — this lives here rather than in the query layer so
+ * client components can total groups without importing a server-only module.
+ */
+interface GroupableMaterial {
+  group: string | null;
+  unit: string;
+  planned: number;
+  completed: number;
+  remaining: number;
+}
+
+export function groupMaterialTotals(materials: GroupableMaterial[]): MaterialGroupTotal[] {
+  const byGroup = new Map<string, MaterialGroupTotal>();
+  for (const m of materials) {
+    if (!m.group) continue;
+    const g = byGroup.get(m.group) ?? {
+      label: m.group,
+      codes: 0,
+      unit: m.unit,
+      planned: 0,
+      completed: 0,
+      remaining: 0,
+    };
+    g.codes += 1;
+    g.planned += m.planned;
+    g.completed += m.completed;
+    g.remaining += m.remaining;
+    byGroup.set(m.group, g);
+  }
+  return [...byGroup.values()];
+}
+
 export type CodeClass = "underground" | "aerial" | "other";
 
 export function codeClass(code: string): CodeClass {
