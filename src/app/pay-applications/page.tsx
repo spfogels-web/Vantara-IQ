@@ -1,4 +1,4 @@
-import { Check, Receipt, Zap } from "lucide-react";
+﻿import { Check, Receipt, Zap } from "lucide-react";
 
 import { getPayApplications } from "@/data/queries";
 import { cn } from "@/lib/utils";
@@ -61,7 +61,7 @@ export default async function PayApplicationsPage() {
               </thead>
               <tbody>
                 {payApps.map((p) => (
-                  <tr key={p.id} className="border-b border-border/40 last:border-0 hover:bg-white/[0.02]">
+                  <tr key={p.id} className="border-b border-border/40 last:border-0 hover:bg-foreground/[0.02]">
                     <td className="px-4 py-3 sm:px-5">
                       <span className="num flex items-center gap-1.5 text-[12.5px] font-medium text-foreground">
                         {p.number}

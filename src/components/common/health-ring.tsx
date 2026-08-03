@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import * as React from "react";
 
@@ -56,7 +56,7 @@ export function HealthRing({
           fill="none"
           stroke="currentColor"
           strokeWidth={stroke}
-          className="text-white/[0.07]"
+          className="text-foreground/[0.07]"
         />
         <circle
           cx={size / 2}

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import * as React from "react";
 import { HardHat } from "lucide-react";
@@ -22,7 +22,7 @@ function CrewRow({ crew }: { crew: Crew }) {
   const tone = toneStyles[meta.tone];
 
   return (
-    <li className="group flex items-center gap-3 border-t border-border/50 px-4 py-2.5 transition-colors first:border-t-0 hover:bg-white/[0.025] sm:px-5">
+    <li className="group flex items-center gap-3 border-t border-border/50 px-4 py-2.5 transition-colors first:border-t-0 hover:bg-foreground/[0.025] sm:px-5">
       <span
         className={cn(
           "grid size-8 shrink-0 place-items-center rounded-lg border text-[10.5px] font-semibold",

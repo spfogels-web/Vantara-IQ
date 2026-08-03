@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import * as React from "react";
 import { Bell } from "lucide-react";
@@ -37,7 +37,7 @@ export function NotificationsPanel({
         description={`${unread} unread`}
         icon={<Bell className="size-3.5 text-brand-bright" />}
       >
-        <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-white/[0.07] bg-white/[0.03] p-0.5">
+        <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-foreground/[0.07] bg-foreground/[0.03] p-0.5">
           {FILTERS.map((option) => (
             <button
               key={option.id}
@@ -46,7 +46,7 @@ export function NotificationsPanel({
               className={cn(
                 "focus-ring rounded-md px-2 py-1 text-[11px] font-medium transition-colors",
                 filter === option.id
-                  ? "bg-white/[0.09] text-foreground"
+                  ? "bg-foreground/[0.09] text-foreground"
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
@@ -58,7 +58,7 @@ export function NotificationsPanel({
 
       {visible.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-2 px-5 py-10 text-center">
-          <span className="grid size-9 place-items-center rounded-full bg-white/[0.05] text-muted-foreground">
+          <span className="grid size-9 place-items-center rounded-full bg-foreground/[0.05] text-muted-foreground">
             <Bell className="size-4" />
           </span>
           <p className="text-[12.5px] font-medium text-foreground">You&apos;re all caught up</p>
@@ -77,7 +77,7 @@ export function NotificationsPanel({
                 {!isLast ? (
                   <span
                     aria-hidden
-                    className="absolute left-[27px] top-9 h-[calc(100%-1.25rem)] w-px bg-white/[0.07] sm:left-[31px]"
+                    className="absolute left-[27px] top-9 h-[calc(100%-1.25rem)] w-px bg-foreground/[0.07] sm:left-[31px]"
                   />
                 ) : null}
 

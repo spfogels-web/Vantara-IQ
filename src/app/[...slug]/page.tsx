@@ -24,7 +24,7 @@ export default async function ModulePlaceholder({
   return (
     <div className="mx-auto w-full max-w-[1600px] px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
       <Panel className="items-center px-6 py-16 text-center sm:py-24">
-        <span className="grid size-12 place-items-center rounded-2xl border border-white/[0.08] bg-white/[0.04] text-brand-bright">
+        <span className="grid size-12 place-items-center rounded-2xl border border-foreground/[0.08] bg-foreground/[0.04] text-brand-bright">
           <Icon className="size-5" strokeWidth={1.8} />
         </span>
 

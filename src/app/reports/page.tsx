@@ -1,4 +1,4 @@
-import { Download } from "lucide-react";
+﻿import { Download } from "lucide-react";
 
 import { getReportDefinitions } from "@/data/queries";
 import { getIcon } from "@/lib/icons";
@@ -36,10 +36,10 @@ export default async function ReportsPage() {
                 {group.map((r) => {
                   const Icon = getIcon(r.icon);
                   return (
-                    <Panel key={r.id} className="group cursor-pointer transition-colors hover:bg-white/[0.04]">
+                    <Panel key={r.id} className="group cursor-pointer transition-colors hover:bg-foreground/[0.04]">
                       <PanelBody className="flex flex-col gap-3">
                         <div className="flex items-start gap-3">
-                          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-white/[0.05] text-brand-bright ring-1 ring-inset ring-white/[0.06]">
+                          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-foreground/[0.05] text-brand-bright ring-1 ring-inset ring-foreground/[0.06]">
                             <Icon className="size-4" strokeWidth={1.8} />
                           </span>
                           <div className="min-w-0 flex-1">

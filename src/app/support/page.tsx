@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import { Book, LifeBuoy, Mail, MessageCircle } from "lucide-react";
 
 import { PageShell } from "@/components/common/page-shell";
@@ -53,7 +53,7 @@ export default function SupportPage() {
           {channels.map((c) => (
             <Panel key={c.title}>
               <PanelBody className="flex flex-col gap-3">
-                <span className="grid size-9 place-items-center rounded-lg bg-white/[0.05] text-brand-bright ring-1 ring-inset ring-white/[0.06]">
+                <span className="grid size-9 place-items-center rounded-lg bg-foreground/[0.05] text-brand-bright ring-1 ring-inset ring-foreground/[0.06]">
                   <c.icon className="size-4" strokeWidth={1.8} />
                 </span>
                 <div>

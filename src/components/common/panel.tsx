@@ -1,4 +1,4 @@
-import * as React from "react";
+﻿import * as React from "react";
 import Link from "next/link";
 import { ArrowUpRight } from "lucide-react";
 
@@ -57,7 +57,7 @@ export function PanelHeader({
       )}
     >
       {icon ? (
-        <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-white/[0.05] text-muted-foreground ring-1 ring-inset ring-white/[0.06]">
+        <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-foreground/[0.05] text-muted-foreground ring-1 ring-inset ring-foreground/[0.06]">
           {icon}
         </span>
       ) : null}
@@ -70,7 +70,7 @@ export function PanelHeader({
             {title}
           </h2>
           {typeof count === "number" ? (
-            <span className="num shrink-0 rounded-full bg-white/[0.07] px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground ring-1 ring-inset ring-white/[0.06]">
+            <span className="num shrink-0 rounded-full bg-foreground/[0.07] px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground ring-1 ring-inset ring-foreground/[0.06]">
               {count}
             </span>
           ) : null}

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import * as React from "react";
 import { CalendarDays, Download, RefreshCw, SlidersHorizontal } from "lucide-react";
@@ -52,7 +52,7 @@ export function PageHeader() {
         <Button
           variant="outline"
           size="sm"
-          className="h-9 gap-2 rounded-lg border-white/[0.08] bg-white/[0.03] text-[12.5px] font-medium text-muted-foreground hover:bg-white/[0.06] hover:text-foreground"
+          className="h-9 gap-2 rounded-lg border-foreground/[0.08] bg-foreground/[0.03] text-[12.5px] font-medium text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground"
         >
           <CalendarDays className="size-3.5" />
           Last 7 days
@@ -60,7 +60,7 @@ export function PageHeader() {
         <Button
           variant="outline"
           size="sm"
-          className="h-9 gap-2 rounded-lg border-white/[0.08] bg-white/[0.03] text-[12.5px] font-medium text-muted-foreground hover:bg-white/[0.06] hover:text-foreground"
+          className="h-9 gap-2 rounded-lg border-foreground/[0.08] bg-foreground/[0.03] text-[12.5px] font-medium text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground"
         >
           <SlidersHorizontal className="size-3.5" />
           <span className="hidden sm:inline">Filters</span>
@@ -68,7 +68,7 @@ export function PageHeader() {
         <Button
           variant="outline"
           size="sm"
-          className="h-9 gap-2 rounded-lg border-white/[0.08] bg-white/[0.03] text-[12.5px] font-medium text-muted-foreground hover:bg-white/[0.06] hover:text-foreground"
+          className="h-9 gap-2 rounded-lg border-foreground/[0.08] bg-foreground/[0.03] text-[12.5px] font-medium text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground"
         >
           <Download className="size-3.5" />
           <span className="hidden sm:inline">Export</span>
@@ -81,7 +81,7 @@ export function PageHeader() {
             setTimeout(() => setRefreshing(false), 900);
           }}
           aria-label="Refresh data"
-          className="size-9 rounded-lg border-white/[0.08] bg-white/[0.03] p-0 text-muted-foreground hover:bg-white/[0.06] hover:text-foreground"
+          className="size-9 rounded-lg border-foreground/[0.08] bg-foreground/[0.03] p-0 text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground"
         >
           <RefreshCw className={cn("size-3.5", refreshing && "animate-spin")} />
         </Button>

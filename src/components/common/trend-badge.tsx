@@ -1,4 +1,4 @@
-import * as React from "react";
+﻿import * as React from "react";
 import { ArrowDownRight, ArrowUpRight, Minus } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -33,7 +33,7 @@ export function TrendBadge({
       className={cn(
         "inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[11px] font-semibold",
         isFlat
-          ? "bg-white/[0.06] text-muted-foreground"
+          ? "bg-foreground/[0.06] text-muted-foreground"
           : isGood
             ? "bg-success/10 text-success"
             : "bg-critical/10 text-critical",

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import * as React from "react";
 import {
@@ -73,7 +73,7 @@ export function CustomersView({ customers }: { customers: Customer[] }) {
           </PanelHeader>
 
           <div className="border-b border-border/70 p-2.5">
-            <label className="flex items-center gap-2 rounded-lg bg-white/[0.04] px-2.5 py-1.5 ring-1 ring-inset ring-white/[0.06] focus-within:ring-brand/40">
+            <label className="flex items-center gap-2 rounded-lg bg-foreground/[0.04] px-2.5 py-1.5 ring-1 ring-inset ring-foreground/[0.06] focus-within:ring-brand/40">
               <Search className="size-3.5 text-muted-foreground" />
               <input
                 value={query}
@@ -94,7 +94,7 @@ export function CustomersView({ customers }: { customers: Customer[] }) {
                     onClick={() => setSelectedId(c.id)}
                     className={cn(
                       "focus-ring flex w-full items-center gap-3 rounded-lg px-2.5 py-2.5 text-left transition-colors",
-                      active ? "bg-white/[0.055]" : "hover:bg-white/[0.03]",
+                      active ? "bg-foreground/[0.055]" : "hover:bg-foreground/[0.03]",
                     )}
                   >
                     <span
@@ -185,7 +185,7 @@ function CustomerDetail({ customer: c }: { customer: Customer }) {
             <Button
               variant="outline"
               size="sm"
-              className="h-9 gap-2 rounded-lg border-white/[0.08] bg-white/[0.03] text-[12.5px] text-muted-foreground hover:text-foreground"
+              className="h-9 gap-2 rounded-lg border-foreground/[0.08] bg-foreground/[0.03] text-[12.5px] text-muted-foreground hover:text-foreground"
             >
               Edit
             </Button>
@@ -213,9 +213,9 @@ function CustomerDetail({ customer: c }: { customer: Customer }) {
               c.contacts.map((contact) => (
                 <li
                   key={contact.email}
-                  className="flex items-start gap-3 rounded-lg px-2.5 py-2.5 hover:bg-white/[0.03]"
+                  className="flex items-start gap-3 rounded-lg px-2.5 py-2.5 hover:bg-foreground/[0.03]"
                 >
-                  <span className="grid size-8 shrink-0 place-items-center rounded-full bg-white/[0.06] text-[11px] font-semibold text-muted-foreground ring-1 ring-inset ring-white/[0.06]">
+                  <span className="grid size-8 shrink-0 place-items-center rounded-full bg-foreground/[0.06] text-[11px] font-semibold text-muted-foreground ring-1 ring-inset ring-foreground/[0.06]">
                     {initials(contact.name)}
                   </span>
                   <div className="min-w-0 flex-1">
@@ -253,7 +253,7 @@ function CustomerDetail({ customer: c }: { customer: Customer }) {
             <RuleRow label="Invoice minimum" value={c.invoiceMinimum > 0 ? formatCurrency(c.invoiceMinimum) : "—"} />
             <RuleRow label="Active projects" value={String(c.activeProjects)} />
             {c.notes ? (
-              <div className="mt-1 rounded-lg border border-border/60 bg-white/[0.02] p-3">
+              <div className="mt-1 rounded-lg border border-border/60 bg-foreground/[0.02] p-3">
                 <p className="eyebrow mb-1">Notes</p>
                 <p className="text-[12px] leading-relaxed text-muted-foreground">{c.notes}</p>
               </div>
@@ -288,9 +288,9 @@ function CustomerDetail({ customer: c }: { customer: Customer }) {
               </thead>
               <tbody>
                 {c.rateSheet.map((r) => (
-                  <tr key={r.code} className="border-b border-border/40 last:border-0 hover:bg-white/[0.02]">
+                  <tr key={r.code} className="border-b border-border/40 last:border-0 hover:bg-foreground/[0.02]">
                     <td className="px-4 py-2.5 sm:px-5">
-                      <span className="num rounded bg-white/[0.06] px-1.5 py-0.5 text-[11.5px] font-semibold text-foreground ring-1 ring-inset ring-white/[0.06]">
+                      <span className="num rounded bg-foreground/[0.06] px-1.5 py-0.5 text-[11.5px] font-semibold text-foreground ring-1 ring-inset ring-foreground/[0.06]">
                         {r.code}
                       </span>
                     </td>
@@ -312,7 +312,7 @@ function CustomerDetail({ customer: c }: { customer: Customer }) {
 
 function MiniStat({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: string }) {
   return (
-    <div className="rounded-lg border border-border/60 bg-white/[0.02] px-3 py-2.5">
+    <div className="rounded-lg border border-border/60 bg-foreground/[0.02] px-3 py-2.5">
       <p className="eyebrow">{label}</p>
       <p className={cn("num mt-0.5 text-[16px] font-semibold tracking-[-0.02em] text-foreground", tone)}>{value}</p>
       {hint ? <p className="text-[11px] text-muted-foreground">{hint} complete</p> : null}
@@ -482,7 +482,7 @@ function AddCustomerForm({
         </PanelBody>
 
         <div className="mt-auto flex items-center justify-end gap-2 border-t border-border/70 px-4 py-3 sm:px-5">
-          <Button type="button" variant="outline" size="sm" onClick={onCancel} className="h-9 rounded-lg border-white/[0.08] bg-white/[0.03] text-[12.5px] text-muted-foreground hover:text-foreground">
+          <Button type="button" variant="outline" size="sm" onClick={onCancel} className="h-9 rounded-lg border-foreground/[0.08] bg-foreground/[0.03] text-[12.5px] text-muted-foreground hover:text-foreground">
             Cancel
           </Button>
           <Button type="submit" size="sm" disabled={!canSave} className="h-9 gap-1.5 rounded-lg bg-brand px-3.5 text-[12.5px] font-semibold text-white hover:bg-brand-bright disabled:opacity-40">
@@ -516,7 +516,7 @@ function Field({ label, required, children }: { label: string; required?: boolea
 }
 
 const inputClass =
-  "w-full rounded-lg border border-white/[0.08] bg-white/[0.03] px-3 py-2 text-[12.5px] text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-brand/40";
+  "w-full rounded-lg border border-foreground/[0.08] bg-foreground/[0.03] px-3 py-2 text-[12.5px] text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-brand/40";
 
 function Input(props: React.ComponentProps<"input">) {
   return <input {...props} className={inputClass} />;

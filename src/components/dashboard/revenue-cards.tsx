@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import * as React from "react";
 import Link from "next/link";
@@ -34,7 +34,7 @@ export function RevenueCards({ summary }: { summary: RevenueSummary }) {
               href={`/billing?bucket=${bucket.id}`}
               className={cn(
                 "group relative flex flex-col overflow-hidden rounded-xl border p-3.5 transition-all duration-200",
-                "border-white/[0.06] bg-white/[0.02] hover:-translate-y-px hover:border-white/[0.12] hover:bg-white/[0.04]",
+                "border-foreground/[0.06] bg-foreground/[0.02] hover:-translate-y-px hover:border-foreground/[0.12] hover:bg-foreground/[0.04]",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60",
               )}
               style={{
@@ -61,7 +61,7 @@ export function RevenueCards({ summary }: { summary: RevenueSummary }) {
                 >
                   <Icon className="size-3.5" strokeWidth={2} />
                 </span>
-                <span className="num rounded-md bg-white/[0.06] px-1.5 py-0.5 text-[10.5px] font-semibold text-muted-foreground">
+                <span className="num rounded-md bg-foreground/[0.06] px-1.5 py-0.5 text-[10.5px] font-semibold text-muted-foreground">
                   {bucket.count} {bucket.count === 1 ? "item" : "items"}
                 </span>
               </div>

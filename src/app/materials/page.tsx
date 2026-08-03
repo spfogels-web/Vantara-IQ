@@ -1,4 +1,4 @@
-import { AlertTriangle, Package } from "lucide-react";
+﻿import { AlertTriangle, Package } from "lucide-react";
 
 import { getMaterials } from "@/data/queries";
 import { cn } from "@/lib/utils";
@@ -64,7 +64,7 @@ export default async function MaterialsPage() {
                   const used = m.issued > 0 ? m.installed / m.issued : 0;
                   const over = m.installed > m.issued;
                   return (
-                    <tr key={m.id} className="border-b border-border/40 last:border-0 hover:bg-white/[0.02]">
+                    <tr key={m.id} className="border-b border-border/40 last:border-0 hover:bg-foreground/[0.02]">
                       <td className="px-4 py-3 sm:px-5">
                         <span className="flex items-center gap-1.5 text-[12.5px] font-medium text-foreground">
                           {m.item}

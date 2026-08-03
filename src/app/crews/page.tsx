@@ -1,4 +1,4 @@
-import { HardHat } from "lucide-react";
+﻿import { HardHat } from "lucide-react";
 
 import { getCrews } from "@/data/queries";
 import { cn } from "@/lib/utils";
@@ -58,13 +58,13 @@ export default async function CrewsPage() {
               <Panel key={c.id}>
                 <PanelBody className="flex flex-col gap-3">
                   <div className="flex items-center gap-3">
-                    <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-white/[0.06] ring-1 ring-inset ring-white/[0.06]">
+                    <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-foreground/[0.06] ring-1 ring-inset ring-foreground/[0.06]">
                       <HardHat className="size-4 text-muted-foreground" />
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="text-[14px] font-semibold text-foreground">{c.name}</p>
                       <p className="flex items-center gap-1.5 text-[11.5px] text-muted-foreground">
-                        <span className="grid size-4 place-items-center rounded-full bg-white/[0.06] text-[8px] font-semibold text-muted-foreground">
+                        <span className="grid size-4 place-items-center rounded-full bg-foreground/[0.06] text-[8px] font-semibold text-muted-foreground">
                           {initials(c.lead)}
                         </span>
                         {c.lead}
@@ -73,7 +73,7 @@ export default async function CrewsPage() {
                     <StatusPill label={stateLabel[c.state]} tone={tone} />
                   </div>
 
-                  <div className="rounded-lg bg-white/[0.02] px-3 py-2 text-[12px] text-muted-foreground">
+                  <div className="rounded-lg bg-foreground/[0.02] px-3 py-2 text-[12px] text-muted-foreground">
                     {c.assignment}
                   </div>
 

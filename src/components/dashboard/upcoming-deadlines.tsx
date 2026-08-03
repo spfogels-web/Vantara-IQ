@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import * as React from "react";
 import Link from "next/link";
@@ -31,7 +31,7 @@ export function UpcomingDeadlines({ deadlines }: { deadlines: Deadline[] }) {
             <li key={deadline.id}>
               <Link
                 href={`/projects?milestone=${deadline.id}`}
-                className="focus-ring group flex items-center gap-3 rounded-lg px-2.5 py-2.5 transition-colors hover:bg-white/[0.035]"
+                className="focus-ring group flex items-center gap-3 rounded-lg px-2.5 py-2.5 transition-colors hover:bg-foreground/[0.035]"
               >
                 {/* Countdown chip carries the urgency; the rail reinforces it */}
                 <span
@@ -60,7 +60,7 @@ export function UpcomingDeadlines({ deadlines }: { deadlines: Deadline[] }) {
 
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className="grid size-6 shrink-0 place-items-center rounded-full bg-white/[0.06] text-[9.5px] font-semibold text-muted-foreground ring-1 ring-inset ring-white/[0.06]">
+                    <span className="grid size-6 shrink-0 place-items-center rounded-full bg-foreground/[0.06] text-[9.5px] font-semibold text-muted-foreground ring-1 ring-inset ring-foreground/[0.06]">
                       {initials(deadline.owner)}
                     </span>
                   </TooltipTrigger>

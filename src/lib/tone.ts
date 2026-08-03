@@ -1,4 +1,4 @@
-import type { Tone } from "@/lib/types";
+﻿import type { Tone } from "@/lib/types";
 
 /**
  * One source of truth for status colour. Components never hardcode a hex —
@@ -59,9 +59,9 @@ export const toneStyles: Record<
   },
   neutral: {
     text: "text-muted-foreground",
-    bg: "bg-white/[0.06]",
-    border: "border-white/10",
-    ring: "ring-white/15",
+    bg: "bg-foreground/[0.06]",
+    border: "border-foreground/10",
+    ring: "ring-foreground/15",
     dot: "bg-neutral",
     glow: "",
     hex: "#8b97a8",

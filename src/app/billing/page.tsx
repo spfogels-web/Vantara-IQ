@@ -1,4 +1,4 @@
-import { Check, FileStack, Wallet } from "lucide-react";
+﻿import { Check, FileStack, Wallet } from "lucide-react";
 
 import { getInvoices } from "@/data/queries";
 import { cn } from "@/lib/utils";
@@ -53,7 +53,7 @@ export default async function BillingPage() {
           </PanelHeader>
           <ul className="p-2">
             {ready.map((inv) => (
-              <li key={inv.id} className="flex flex-wrap items-center gap-3 rounded-lg px-2.5 py-2.5 hover:bg-white/[0.02]">
+              <li key={inv.id} className="flex flex-wrap items-center gap-3 rounded-lg px-2.5 py-2.5 hover:bg-foreground/[0.02]">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="num text-[12px] font-semibold text-foreground">{inv.number}</span>
@@ -76,7 +76,7 @@ export default async function BillingPage() {
                   size="sm"
                   variant="outline"
                   disabled={!inv.backupReady}
-                  className="h-8 rounded-lg border-white/[0.08] bg-white/[0.03] text-[12px] text-muted-foreground hover:text-foreground disabled:opacity-40"
+                  className="h-8 rounded-lg border-foreground/[0.08] bg-foreground/[0.03] text-[12px] text-muted-foreground hover:text-foreground disabled:opacity-40"
                 >
                   Generate
                 </Button>
@@ -102,7 +102,7 @@ export default async function BillingPage() {
               </thead>
               <tbody>
                 {pipeline.map((inv) => (
-                  <tr key={inv.id} className="border-b border-border/40 last:border-0 hover:bg-white/[0.02]">
+                  <tr key={inv.id} className="border-b border-border/40 last:border-0 hover:bg-foreground/[0.02]">
                     <td className="num px-4 py-3 text-[12.5px] font-medium text-foreground sm:px-5">{inv.number}</td>
                     <td className="px-3 py-3 text-[12.5px] text-muted-foreground">{inv.customer}</td>
                     <td className="px-3 py-3 text-[12px] text-muted-foreground">{inv.issued}</td>

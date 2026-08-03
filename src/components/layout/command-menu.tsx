@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
@@ -83,7 +83,7 @@ export function CommandMenuProvider({ children }: { children: React.ReactNode })
         onOpenChange={setOpen}
         title="Search Vantara IQ"
         description="Jump to a page, project or action"
-        className="max-w-xl border-white/[0.08] shadow-elev-3"
+        className="max-w-xl border-foreground/[0.08] shadow-elev-3"
       >
         <CommandInput placeholder="Search projects, dailies, crews, documents…" />
         <CommandList className="max-h-[420px]">
@@ -120,7 +120,7 @@ export function CommandMenuProvider({ children }: { children: React.ReactNode })
                   onSelect={() => run(item.href)}
                   className="gap-3"
                 >
-                  <span className="grid size-6 place-items-center rounded-md bg-white/[0.05] text-muted-foreground ring-1 ring-inset ring-white/[0.06]">
+                  <span className="grid size-6 place-items-center rounded-md bg-foreground/[0.05] text-muted-foreground ring-1 ring-inset ring-foreground/[0.06]">
                     <Icon className="size-3.5" />
                   </span>
                   {item.label}

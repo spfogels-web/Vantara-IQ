@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import * as React from "react";
 import Link from "next/link";
@@ -39,6 +39,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { SidebarContent } from "@/components/layout/sidebar";
 import { useSidebar } from "@/components/layout/sidebar-context";
 import { useCommandMenu } from "@/components/layout/command-menu";
+import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { LiveDot } from "@/components/common/status-pill";
 
 /** Renders ⌘ on Mac, Ctrl elsewhere — resolved after mount to avoid a mismatch. */
@@ -60,7 +61,7 @@ function SearchTrigger({ className }: { className?: string }) {
       type="button"
       onClick={() => setOpen(true)}
       className={cn(
-        "focus-ring group flex h-9 items-center gap-2.5 rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 text-left transition-colors hover:border-white/[0.12] hover:bg-white/[0.05]",
+        "focus-ring group flex h-9 items-center gap-2.5 rounded-lg border border-foreground/[0.07] bg-foreground/[0.03] px-3 text-left transition-colors hover:border-foreground/[0.12] hover:bg-foreground/[0.05]",
         className,
       )}
     >
@@ -68,7 +69,7 @@ function SearchTrigger({ className }: { className?: string }) {
       <span className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground">
         Search projects, dailies, crews…
       </span>
-      <kbd className="hidden shrink-0 items-center gap-0.5 rounded border border-white/[0.08] bg-white/[0.04] px-1.5 py-0.5 font-mono text-[10px] font-medium text-muted-foreground sm:inline-flex">
+      <kbd className="hidden shrink-0 items-center gap-0.5 rounded border border-foreground/[0.08] bg-foreground/[0.04] px-1.5 py-0.5 font-mono text-[10px] font-medium text-muted-foreground sm:inline-flex">
         {meta}K
       </kbd>
     </button>
@@ -84,7 +85,7 @@ function NotificationsPopover() {
         <button
           type="button"
           aria-label={`Notifications, ${unread} unread`}
-          className="focus-ring relative grid size-9 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-white/[0.06] hover:text-foreground"
+          className="focus-ring relative grid size-9 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
         >
           <Bell className="size-[18px]" strokeWidth={1.9} />
           {unread > 0 ? (
@@ -97,7 +98,7 @@ function NotificationsPopover() {
       <PopoverContent
         align="end"
         sideOffset={10}
-        className="w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-xl border-white/[0.08] p-0 shadow-elev-3"
+        className="w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-xl border-foreground/[0.08] p-0 shadow-elev-3"
       >
         <div className="flex items-center justify-between border-b border-border/70 px-4 py-3">
           <div className="flex items-center gap-2">
@@ -118,7 +119,7 @@ function NotificationsPopover() {
             return (
               <button
                 key={item.id}
-                className="flex w-full gap-3 border-b border-border/50 px-4 py-3 text-left transition-colors last:border-0 hover:bg-white/[0.03]"
+                className="flex w-full gap-3 border-b border-border/50 px-4 py-3 text-left transition-colors last:border-0 hover:bg-foreground/[0.03]"
               >
                 <span
                   className={cn(
@@ -154,7 +155,7 @@ function NotificationsPopover() {
         <div className="border-t border-border/70 p-2">
           <Link
             href="/notifications"
-            className="focus-ring block rounded-lg px-3 py-2 text-center text-[12px] font-medium text-muted-foreground transition-colors hover:bg-white/[0.04] hover:text-foreground"
+            className="focus-ring block rounded-lg px-3 py-2 text-center text-[12px] font-medium text-muted-foreground transition-colors hover:bg-foreground/[0.04] hover:text-foreground"
           >
             View all notifications
           </Link>
@@ -185,7 +186,7 @@ function QuickActions() {
           <ChevronDown className="hidden size-3 opacity-70 sm:inline" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" sideOffset={10} className="w-60 rounded-xl border-white/[0.08] shadow-elev-3">
+      <DropdownMenuContent align="end" sideOffset={10} className="w-60 rounded-xl border-foreground/[0.08] shadow-elev-3">
         <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-[0.09em] text-muted-foreground">
           Quick actions
         </DropdownMenuLabel>
@@ -212,9 +213,9 @@ function UserMenu() {
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="focus-ring flex items-center gap-2 rounded-lg py-1 pl-1 pr-1.5 transition-colors hover:bg-white/[0.06]"
+          className="focus-ring flex items-center gap-2 rounded-lg py-1 pl-1 pr-1.5 transition-colors hover:bg-foreground/[0.06]"
         >
-          <span className="grid size-8 shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand-bright to-brand text-[11px] font-semibold text-white ring-1 ring-inset ring-white/20">
+          <span className="grid size-8 shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand-bright to-brand text-[11px] font-semibold text-white ring-1 ring-inset ring-foreground/20">
             {initials(user.name)}
           </span>
           <span className="hidden min-w-0 text-left xl:block">
@@ -228,7 +229,7 @@ function UserMenu() {
           <ChevronDown className="hidden size-3.5 shrink-0 text-muted-foreground xl:block" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" sideOffset={10} className="w-64 rounded-xl border-white/[0.08] shadow-elev-3">
+      <DropdownMenuContent align="end" sideOffset={10} className="w-64 rounded-xl border-foreground/[0.08] shadow-elev-3">
         <div className="flex items-center gap-3 px-2 py-2.5">
           <span className="grid size-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-brand-bright to-brand text-[12px] font-semibold text-white">
             {initials(user.name)}
@@ -273,7 +274,7 @@ function MobileNav() {
         <button
           type="button"
           aria-label="Open navigation"
-          className="focus-ring grid size-9 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-white/[0.06] hover:text-foreground lg:hidden"
+          className="focus-ring grid size-9 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground lg:hidden"
         >
           <Menu className="size-[18px]" />
         </button>
@@ -320,12 +321,13 @@ export function Topbar() {
         <button
           type="button"
           aria-label="Search"
-          className="focus-ring grid size-9 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-white/[0.06] hover:text-foreground md:hidden"
+          className="focus-ring grid size-9 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground md:hidden"
           onClick={() => setCommandOpen(true)}
         >
           <Search className="size-[18px]" />
         </button>
         <QuickActions />
+        <ThemeToggle />
         <NotificationsPopover />
         <span className="mx-1 hidden h-5 w-px bg-border sm:block" />
         <UserMenu />

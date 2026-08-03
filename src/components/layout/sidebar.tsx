@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import * as React from "react";
 import Link from "next/link";
@@ -41,8 +41,8 @@ function NavRow({
         "focus-visible:ring-2 focus-visible:ring-ring/60",
         collapsed ? "justify-center px-0" : "px-2.5",
         active
-          ? "bg-white/[0.07] text-foreground"
-          : "text-sidebar-foreground hover:bg-white/[0.04] hover:text-foreground",
+          ? "bg-foreground/[0.07] text-foreground"
+          : "text-sidebar-foreground hover:bg-foreground/[0.04] hover:text-foreground",
       )}
     >
       {/* Active rail — anchored outside the padding so it hugs the panel edge */}
@@ -68,7 +68,7 @@ function NavRow({
                 "num shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none",
                 active
                   ? "bg-brand text-white"
-                  : "bg-white/[0.07] text-muted-foreground ring-1 ring-inset ring-white/[0.06]",
+                  : "bg-foreground/[0.07] text-muted-foreground ring-1 ring-inset ring-foreground/[0.06]",
               )}
             >
               {item.badge}
@@ -90,7 +90,7 @@ function NavRow({
       <TooltipContent side="right" sideOffset={10} className="flex items-center gap-2">
         {item.label}
         {item.badge ? (
-          <span className="num rounded-full bg-white/15 px-1.5 text-[10px] font-semibold">
+          <span className="num rounded-full bg-foreground/15 px-1.5 text-[10px] font-semibold">
             {item.badge}
           </span>
         ) : null}
@@ -133,7 +133,7 @@ export function SidebarContent({
             type="button"
             onClick={toggle}
             aria-label="Collapse sidebar"
-            className="focus-ring ml-auto grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-white/[0.06] hover:text-foreground"
+            className="focus-ring ml-auto grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
           >
             <ChevronsLeft className="size-4" />
           </button>
@@ -149,7 +149,7 @@ export function SidebarContent({
                 {section.title}
               </p>
             ) : (
-              <div className="mx-auto mb-2 h-px w-6 bg-white/[0.07]" />
+              <div className="mx-auto mb-2 h-px w-6 bg-foreground/[0.07]" />
             )}
             {section.items.map((item) => (
               <NavRow key={item.href} item={item} collapsed={collapsed} onNavigate={onNavigate} />
@@ -172,7 +172,7 @@ export function SidebarContent({
             <TooltipTrigger asChild>
               <button
                 type="button"
-                className="focus-ring mx-auto grid size-8 place-items-center rounded-lg bg-white/[0.06] text-[11px] font-semibold text-foreground ring-1 ring-inset ring-white/[0.06]"
+                className="focus-ring mx-auto grid size-8 place-items-center rounded-lg bg-foreground/[0.06] text-[11px] font-semibold text-foreground ring-1 ring-inset ring-foreground/[0.06]"
               >
                 {initials(organization.name)}
               </button>
@@ -184,9 +184,9 @@ export function SidebarContent({
         ) : (
           <button
             type="button"
-            className="focus-ring flex w-full items-center gap-2.5 rounded-lg p-2 text-left transition-colors hover:bg-white/[0.05]"
+            className="focus-ring flex w-full items-center gap-2.5 rounded-lg p-2 text-left transition-colors hover:bg-foreground/[0.05]"
           >
-            <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-white/[0.06] text-[11px] font-semibold ring-1 ring-inset ring-white/[0.06]">
+            <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-foreground/[0.06] text-[11px] font-semibold ring-1 ring-inset ring-foreground/[0.06]">
               {initials(organization.name)}
             </span>
             <span className="min-w-0 flex-1">

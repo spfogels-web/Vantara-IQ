@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import * as React from "react";
 import {
@@ -64,7 +64,7 @@ export function DailiesView({
                   "focus-ring rounded-full px-2.5 py-1 text-[11.5px] font-medium transition-colors",
                   filter === f
                     ? "bg-brand text-white"
-                    : "bg-white/[0.04] text-muted-foreground hover:text-foreground",
+                    : "bg-foreground/[0.04] text-muted-foreground hover:text-foreground",
                 )}
               >
                 {f}
@@ -81,7 +81,7 @@ export function DailiesView({
                     onClick={() => setSelectedId(d.id)}
                     className={cn(
                       "focus-ring w-full rounded-lg px-2.5 py-2.5 text-left transition-colors",
-                      active ? "bg-white/[0.055]" : "hover:bg-white/[0.03]",
+                      active ? "bg-foreground/[0.055]" : "hover:bg-foreground/[0.03]",
                     )}
                   >
                     <div className="flex items-center gap-2">
@@ -211,10 +211,10 @@ function DailyDetail({
             </thead>
             <tbody>
               {d.lineItems.map((li, i) => (
-                <tr key={i} className="border-b border-border/40 last:border-0 hover:bg-white/[0.02]">
+                <tr key={i} className="border-b border-border/40 last:border-0 hover:bg-foreground/[0.02]">
                   <td className="px-4 py-2.5 text-[12.5px] text-foreground sm:px-5">{li.location}</td>
                   <td className="px-4 py-2.5">
-                    <span className="num rounded bg-white/[0.06] px-1.5 py-0.5 text-[11.5px] font-semibold text-foreground ring-1 ring-inset ring-white/[0.06]">
+                    <span className="num rounded bg-foreground/[0.06] px-1.5 py-0.5 text-[11.5px] font-semibold text-foreground ring-1 ring-inset ring-foreground/[0.06]">
                       {li.code}
                     </span>
                   </td>

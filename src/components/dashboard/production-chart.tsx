@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import * as React from "react";
 import {
@@ -39,7 +39,7 @@ function ChartTooltip({
   const delta = point.actual - point.target;
 
   return (
-    <div className="glass rounded-lg border border-white/[0.1] px-3 py-2 shadow-elev-3">
+    <div className="glass rounded-lg border border-foreground/[0.1] px-3 py-2 shadow-elev-3">
       <p className="text-[11px] font-medium text-foreground">
         {point.day} · {point.date}
       </p>
@@ -52,14 +52,14 @@ function ChartTooltip({
           </span>
         </p>
         <p className="flex items-center gap-2 text-[11.5px]">
-          <span className="size-1.5 rounded-full bg-white/25" />
+          <span className="size-1.5 rounded-full bg-foreground/25" />
           <span className="text-muted-foreground">Target</span>
           <span className="num ml-auto text-muted-foreground">{formatFeet(point.target)}</span>
         </p>
       </div>
       <p
         className={cn(
-          "num mt-1.5 border-t border-white/[0.08] pt-1.5 text-[11px] font-semibold",
+          "num mt-1.5 border-t border-foreground/[0.08] pt-1.5 text-[11px] font-semibold",
           delta >= 0 ? "text-success" : "text-critical",
         )}
       >
@@ -82,7 +82,7 @@ export function ProductionChart({ summary }: { summary: ProductionSummary }) {
         description="Installed linear feet vs. plan"
         icon={<Activity className="size-3.5 text-brand-bright" />}
       >
-        <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-white/[0.07] bg-white/[0.03] p-0.5">
+        <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-foreground/[0.07] bg-foreground/[0.03] p-0.5">
           {RANGES.map((value) => (
             <button
               key={value}
@@ -91,7 +91,7 @@ export function ProductionChart({ summary }: { summary: ProductionSummary }) {
               className={cn(
                 "focus-ring rounded-md px-2 py-1 text-[11px] font-medium transition-colors",
                 range === value
-                  ? "bg-white/[0.09] text-foreground"
+                  ? "bg-foreground/[0.09] text-foreground"
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
@@ -130,7 +130,7 @@ export function ProductionChart({ summary }: { summary: ProductionSummary }) {
               <span className="h-0.5 w-3 rounded-full bg-brand" /> Actual
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="h-0.5 w-3 rounded-full border-t border-dashed border-white/40" />{" "}
+              <span className="h-0.5 w-3 rounded-full border-t border-dashed border-foreground/40" />{" "}
               Target
             </span>
           </div>
@@ -209,7 +209,7 @@ export function ProductionChart({ summary }: { summary: ProductionSummary }) {
                 <span className="w-14 shrink-0 text-[11.5px] text-muted-foreground">
                   {row.crew}
                 </span>
-                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.06]">
+                <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-foreground/[0.06]">
                   <div
                     className={cn("h-full rounded-full", toneStyles[row.tone].dot)}
                     style={{

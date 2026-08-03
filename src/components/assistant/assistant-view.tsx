@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import * as React from "react";
 import { ArrowUp, Sparkles } from "lucide-react";
@@ -74,7 +74,7 @@ export function AssistantView() {
       <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
         {empty ? (
           <div className="mx-auto flex max-w-2xl flex-col items-center py-10 text-center">
-            <span className="grid size-12 place-items-center rounded-2xl border border-white/[0.08] bg-brand/10 text-brand-bright">
+            <span className="grid size-12 place-items-center rounded-2xl border border-foreground/[0.08] bg-brand/10 text-brand-bright">
               <Sparkles className="size-5" />
             </span>
             <h2 className="mt-4 text-[18px] font-semibold tracking-[-0.02em] text-foreground">
@@ -89,7 +89,7 @@ export function AssistantView() {
                 <button
                   key={s}
                   onClick={() => ask(s)}
-                  className="focus-ring rounded-xl border border-border/70 bg-white/[0.02] px-3.5 py-2.5 text-left text-[12.5px] text-muted-foreground transition-colors hover:border-brand/30 hover:bg-white/[0.04] hover:text-foreground"
+                  className="focus-ring rounded-xl border border-border/70 bg-foreground/[0.02] px-3.5 py-2.5 text-left text-[12.5px] text-muted-foreground transition-colors hover:border-brand/30 hover:bg-foreground/[0.04] hover:text-foreground"
                 >
                   {s}
                 </button>
@@ -110,7 +110,7 @@ export function AssistantView() {
                     "max-w-[85%] rounded-2xl px-3.5 py-2.5 text-[13px] leading-relaxed",
                     m.role === "user"
                       ? "bg-brand text-white"
-                      : "border border-border/70 bg-white/[0.02] text-foreground",
+                      : "border border-border/70 bg-foreground/[0.02] text-foreground",
                   )}
                 >
                   {m.content}
@@ -122,7 +122,7 @@ export function AssistantView() {
                 <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-brand/12 text-brand-bright">
                   <Sparkles className="size-3.5 animate-pulse" />
                 </span>
-                <div className="rounded-2xl border border-border/70 bg-white/[0.02] px-3.5 py-3">
+                <div className="rounded-2xl border border-border/70 bg-foreground/[0.02] px-3.5 py-3">
                   <span className="flex gap-1">
                     <Dot /> <Dot delay="150ms" /> <Dot delay="300ms" />
                   </span>
@@ -141,7 +141,7 @@ export function AssistantView() {
         }}
         className="mt-auto border-t border-border/70 p-3 sm:p-4"
       >
-        <div className="mx-auto flex max-w-2xl items-end gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] px-3 py-2 focus-within:ring-2 focus-within:ring-brand/40">
+        <div className="mx-auto flex max-w-2xl items-end gap-2 rounded-xl border border-foreground/[0.08] bg-foreground/[0.03] px-3 py-2 focus-within:ring-2 focus-within:ring-brand/40">
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import * as React from "react";
 import {
@@ -62,7 +62,7 @@ export function SubcontractorsView({ subs }: { subs: Subcontractor[] }) {
             </Button>
           </PanelHeader>
           <div className="border-b border-border/70 p-2.5">
-            <label className="flex items-center gap-2 rounded-lg bg-white/[0.04] px-2.5 py-1.5 ring-1 ring-inset ring-white/[0.06] focus-within:ring-brand/40">
+            <label className="flex items-center gap-2 rounded-lg bg-foreground/[0.04] px-2.5 py-1.5 ring-1 ring-inset ring-foreground/[0.06] focus-within:ring-brand/40">
               <Search className="size-3.5 text-muted-foreground" />
               <input
                 value={query}
@@ -81,10 +81,10 @@ export function SubcontractorsView({ subs }: { subs: Subcontractor[] }) {
                     onClick={() => setSelectedId(s.id)}
                     className={cn(
                       "focus-ring flex w-full items-center gap-3 rounded-lg px-2.5 py-2.5 text-left transition-colors",
-                      active ? "bg-white/[0.055]" : "hover:bg-white/[0.03]",
+                      active ? "bg-foreground/[0.055]" : "hover:bg-foreground/[0.03]",
                     )}
                   >
-                    <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-white/[0.06] text-[11px] font-semibold text-muted-foreground ring-1 ring-inset ring-white/[0.06]">
+                    <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-foreground/[0.06] text-[11px] font-semibold text-muted-foreground ring-1 ring-inset ring-foreground/[0.06]">
                       {initials(s.company)}
                     </span>
                     <span className="min-w-0 flex-1">
@@ -119,7 +119,7 @@ function SubDetail({ sub: s }: { sub: Subcontractor }) {
     <div className="flex flex-col gap-3">
       <Panel>
         <PanelBody className="flex flex-wrap items-start gap-4">
-          <span className="grid size-12 shrink-0 place-items-center rounded-xl bg-white/[0.06] text-[14px] font-semibold text-foreground ring-1 ring-inset ring-white/[0.06]">
+          <span className="grid size-12 shrink-0 place-items-center rounded-xl bg-foreground/[0.06] text-[14px] font-semibold text-foreground ring-1 ring-inset ring-foreground/[0.06]">
             {initials(s.company)}
           </span>
           <div className="min-w-0 flex-1">
@@ -139,7 +139,7 @@ function SubDetail({ sub: s }: { sub: Subcontractor }) {
             </p>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {s.trades.map((t) => (
-                <span key={t} className="rounded-full bg-white/[0.05] px-2 py-0.5 text-[11px] text-muted-foreground ring-1 ring-inset ring-white/[0.06]">
+                <span key={t} className="rounded-full bg-foreground/[0.05] px-2 py-0.5 text-[11px] text-muted-foreground ring-1 ring-inset ring-foreground/[0.06]">
                   {t}
                 </span>
               ))}
@@ -164,7 +164,7 @@ function SubDetail({ sub: s }: { sub: Subcontractor }) {
             {s.compliance.map((doc) => {
               const tone = complianceTone[doc.status];
               return (
-                <li key={doc.label} className="flex items-center gap-3 rounded-lg px-2.5 py-2.5 hover:bg-white/[0.02]">
+                <li key={doc.label} className="flex items-center gap-3 rounded-lg px-2.5 py-2.5 hover:bg-foreground/[0.02]">
                   <span className={cn("size-2 shrink-0 rounded-full", toneStyles[tone].dot)} />
                   <span className="min-w-0 flex-1 truncate text-[12.5px] text-foreground">{doc.label}</span>
                   <span className="shrink-0 text-[11.5px] text-muted-foreground">{doc.expires}</span>
@@ -191,14 +191,14 @@ function SubDetail({ sub: s }: { sub: Subcontractor }) {
             ) : (
               <ul className="flex flex-col gap-1.5">
                 {s.assignedProjects.map((p) => (
-                  <li key={p} className="flex items-center gap-2 rounded-lg bg-white/[0.03] px-3 py-2 text-[12.5px] text-foreground">
+                  <li key={p} className="flex items-center gap-2 rounded-lg bg-foreground/[0.03] px-3 py-2 text-[12.5px] text-foreground">
                     <FolderKanban className="size-3.5 text-muted-foreground" />
                     {p}
                   </li>
                 ))}
               </ul>
             )}
-            <Button variant="outline" size="sm" className="mt-3 h-8 w-full rounded-lg border-white/[0.08] bg-white/[0.03] text-[12px] text-muted-foreground hover:text-foreground">
+            <Button variant="outline" size="sm" className="mt-3 h-8 w-full rounded-lg border-foreground/[0.08] bg-foreground/[0.03] text-[12px] text-muted-foreground hover:text-foreground">
               Assign to project
             </Button>
           </PanelBody>
@@ -239,7 +239,7 @@ function SubDetail({ sub: s }: { sub: Subcontractor }) {
 
 function Score({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
-    <div className="rounded-lg border border-border/60 bg-white/[0.02] px-3.5 py-3">
+    <div className="rounded-lg border border-border/60 bg-foreground/[0.02] px-3.5 py-3">
       <p className="eyebrow">{label}</p>
       <p className={cn("num mt-1 text-[17px] font-semibold tracking-[-0.02em] text-foreground", tone)}>{value}</p>
     </div>

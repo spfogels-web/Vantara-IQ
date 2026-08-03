@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import { AlertTriangle, ChevronRight } from "lucide-react";
 
 import { getProjects } from "@/data/queries";
@@ -51,7 +51,7 @@ export default async function ProjectsPage() {
             const paceTone = pace >= 1 ? "success" : pace >= 0.85 ? "warning" : "critical";
             return (
               <Link key={p.id} href={`/projects/${p.id}`} className="focus-ring group block rounded-2xl">
-                <Panel className="p-4 transition-colors group-hover:bg-white/[0.04]">
+                <Panel className="p-4 transition-colors group-hover:bg-foreground/[0.04]">
                   <div className="flex items-start gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">

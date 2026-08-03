@@ -1,4 +1,4 @@
-import * as React from "react";
+﻿import * as React from "react";
 
 import { cn } from "@/lib/utils";
 
@@ -176,7 +176,7 @@ export function RevenueCardsSkeleton() {
         {Array.from({ length: 4 }).map((_, index) => (
           <div
             key={index}
-            className="flex flex-col rounded-xl border border-white/[0.06] bg-white/[0.02] p-3.5"
+            className="flex flex-col rounded-xl border border-foreground/[0.06] bg-foreground/[0.02] p-3.5"
           >
             <div className="flex items-start justify-between">
               <div className="skeleton size-7 rounded-lg" />

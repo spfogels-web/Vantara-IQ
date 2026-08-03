@@ -1,4 +1,4 @@
-import { Check, Plug } from "lucide-react";
+﻿import { Check, Plug } from "lucide-react";
 
 import { getOrganization } from "@/data/queries";
 import { cn } from "@/lib/utils";
@@ -61,7 +61,7 @@ export default async function SettingsPage() {
             <Row label="Office / Billing" value="Billing, dailies, reports" />
             <Row label="Project Manager" value="Assigned projects" />
             <Row label="Subcontractor" value="Assigned projects only" />
-            <Button variant="outline" size="sm" className="mt-1 h-8 rounded-lg border-white/[0.08] bg-white/[0.03] text-[12px] text-muted-foreground hover:text-foreground">
+            <Button variant="outline" size="sm" className="mt-1 h-8 rounded-lg border-foreground/[0.08] bg-foreground/[0.03] text-[12px] text-muted-foreground hover:text-foreground">
               Manage team
             </Button>
           </PanelBody>
@@ -71,7 +71,7 @@ export default async function SettingsPage() {
           <PanelHeader title="Integrations" icon={<Plug className="size-3.5" />} />
           <ul className="p-2">
             {integrations.map((it) => (
-              <li key={it.name} className="flex flex-wrap items-center gap-3 rounded-lg px-2.5 py-3 hover:bg-white/[0.02]">
+              <li key={it.name} className="flex flex-wrap items-center gap-3 rounded-lg px-2.5 py-3 hover:bg-foreground/[0.02]">
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-medium text-foreground">{it.name}</p>
                   <p className="text-[11.5px] text-muted-foreground">{it.detail}</p>
@@ -81,7 +81,7 @@ export default async function SettingsPage() {
                   size="sm"
                   variant="outline"
                   className={cn(
-                    "h-8 rounded-lg border-white/[0.08] bg-white/[0.03] text-[12px] hover:text-foreground",
+                    "h-8 rounded-lg border-foreground/[0.08] bg-foreground/[0.03] text-[12px] hover:text-foreground",
                     it.tone === "success" ? "text-muted-foreground" : "text-brand-bright",
                   )}
                 >

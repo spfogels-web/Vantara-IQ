@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import * as React from "react";
 import Link from "next/link";
@@ -28,7 +28,7 @@ export function MissingDocuments({ documents }: { documents: MissingDocument[] }
           <li key={doc.id}>
             <Link
               href={`/documents?project=${doc.id}`}
-              className="focus-ring group block rounded-lg px-2.5 py-2.5 transition-colors hover:bg-white/[0.035]"
+              className="focus-ring group block rounded-lg px-2.5 py-2.5 transition-colors hover:bg-foreground/[0.035]"
             >
               <div className="flex items-center gap-2">
                 <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-foreground">
@@ -44,7 +44,7 @@ export function MissingDocuments({ documents }: { documents: MissingDocument[] }
                     "num shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
                     doc.blocking
                       ? "bg-critical/15 text-critical"
-                      : "bg-white/[0.07] text-muted-foreground",
+                      : "bg-foreground/[0.07] text-muted-foreground",
                   )}
                 >
                   {doc.documents.length}

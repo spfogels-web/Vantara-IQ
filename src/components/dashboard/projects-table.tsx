@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import * as React from "react";
 import Link from "next/link";
@@ -36,7 +36,7 @@ function PaceCell({ project }: { project: Project }) {
               /{formatNumber(project.requiredFtPerDay)}
             </span>
           </div>
-          <div className="h-1 w-full overflow-hidden rounded-full bg-white/[0.07]">
+          <div className="h-1 w-full overflow-hidden rounded-full bg-foreground/[0.07]">
             <div
               className={cn("h-full rounded-full", styles.dot)}
               style={{ width: `${Math.min(pace, 1) * 100}%` }}
@@ -53,7 +53,7 @@ function PaceCell({ project }: { project: Project }) {
 
 function ProjectRow({ project }: { project: Project }) {
   return (
-    <tr className="group border-t border-border/60 transition-colors hover:bg-white/[0.025]">
+    <tr className="group border-t border-border/60 transition-colors hover:bg-foreground/[0.025]">
       {/* Progress lives inside the name cell rather than in its own column —
           it belongs to the project, and reclaiming that column is what lets the
           table fit an 8-of-12 panel without horizontal scroll. */}
@@ -120,7 +120,7 @@ function ProjectCard({ project }: { project: Project }) {
   return (
     <Link
       href={`/projects/${project.id}`}
-      className="focus-ring block border-t border-border/60 p-4 transition-colors first:border-t-0 active:bg-white/[0.03]"
+      className="focus-ring block border-t border-border/60 p-4 transition-colors first:border-t-0 active:bg-foreground/[0.03]"
     >
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">

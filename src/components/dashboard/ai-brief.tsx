@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import * as React from "react";
 import Link from "next/link";
@@ -41,7 +41,7 @@ function BriefRow({
         type="button"
         onClick={onToggle}
         aria-expanded={expanded}
-        className="focus-ring flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-white/[0.035]"
+        className="focus-ring flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-foreground/[0.035]"
       >
         <span
           className={cn(
@@ -77,7 +77,7 @@ function BriefRow({
             >
               {item.impact}
             </span>
-            <span className="rounded bg-white/[0.05] px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+            <span className="rounded bg-foreground/[0.05] px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
               {severityLabel[item.severity]}
             </span>
             <span className="num text-[10px] text-muted-foreground/70">
@@ -94,7 +94,7 @@ function BriefRow({
               <span className="block pt-2 text-[11.5px] leading-relaxed text-muted-foreground">
                 {item.detail}
               </span>
-              <span className="mt-2.5 inline-flex items-center gap-1.5 rounded-md bg-white/[0.06] px-2 py-1 text-[11.5px] font-medium text-foreground transition-colors hover:bg-white/[0.1]">
+              <span className="mt-2.5 inline-flex items-center gap-1.5 rounded-md bg-foreground/[0.06] px-2 py-1 text-[11.5px] font-medium text-foreground transition-colors hover:bg-foreground/[0.1]">
                 {item.action}
                 <ArrowRight className="size-3" />
               </span>
@@ -134,7 +134,7 @@ export function AiBrief({ items }: { items: BriefItem[] }) {
         <button
           type="button"
           aria-label="Regenerate brief"
-          className="focus-ring grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-white/[0.06] hover:text-foreground"
+          className="focus-ring grid size-7 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
         >
           <RefreshCw className="size-3.5" />
         </button>

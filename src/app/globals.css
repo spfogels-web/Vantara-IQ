@@ -76,10 +76,95 @@
   --elev-1: inset 0 1px 0 0 oklch(1 0 0 / 5%), 0 1px 2px 0 rgb(0 0 0 / 40%);
   --elev-2: inset 0 1px 0 0 oklch(1 0 0 / 6%), 0 8px 24px -12px rgb(0 0 0 / 80%);
   --elev-3: inset 0 1px 0 0 oklch(1 0 0 / 8%), 0 24px 48px -20px rgb(0 0 0 / 90%);
+
+  /* Theme-flippable washes. The surface system mixes this colour into the base;
+     inline `foreground/α` utilities inherit the same flip automatically. */
+  --surface-1: color-mix(in oklab, #ffffff 2.2%, var(--background));
+  --surface-2: color-mix(in oklab, #ffffff 3.4%, var(--background));
+  --surface-hover-border: oklch(1 0 0 / 12%);
+  --scroll-thumb: oklch(1 0 0 / 10%);
+  --scroll-thumb-hover: oklch(1 0 0 / 18%);
+  --skeleton-base: oklch(1 0 0 / 4%);
+  --skeleton-hi-1: oklch(1 0 0 / 6%);
+  --skeleton-hi-2: oklch(1 0 0 / 9%);
+  --gradient-from: #ffffff;
+  --gradient-to: #a9b6c8;
+  --selection-fg: #ffffff;
+  --aurora-blue: 13%;
+  --aurora-violet: 8%;
 }
 
 .dark {
   color-scheme: dark;
+}
+
+/* ---------------------------------------------------------------------------
+   Light theme — same tokens, inverted. Everything that reads a variable or a
+   `foreground/α` wash flips with it; nothing hardcodes a hex in a component.
+--------------------------------------------------------------------------- */
+.light {
+  color-scheme: light;
+
+  /* Accent links/icons need to darken so they read on white surfaces. */
+  --vq-blue-bright: #1c64d8;
+
+  --background: #f5f7fa;
+  --foreground: #0d151f;
+  --card: #ffffff;
+  --card-foreground: #0d151f;
+  --popover: #ffffff;
+  --popover-foreground: #0d151f;
+  --primary: #2f80ff;
+  --primary-foreground: #ffffff;
+  --secondary: #eaeef4;
+  --secondary-foreground: #0d151f;
+  --muted: #eaeef4;
+  --muted-foreground: #5a6675;
+  --accent: #e6ecf4;
+  --accent-foreground: #0d151f;
+  --destructive: #e5484d;
+  --destructive-foreground: #ffffff;
+  --border: oklch(0 0 0 / 10%);
+  --input: oklch(0 0 0 / 14%);
+  --ring: #2f80ff;
+
+  --success: #1a9d5a;
+  --success-muted: #d6f0e1;
+  --warning: #c9760a;
+  --warning-muted: #fbeacb;
+  --critical: #e5484d;
+  --critical-muted: #fbdedf;
+  --info: #2f80ff;
+  --info-muted: #dce9ff;
+  --neutral: #64707e;
+  --neutral-muted: #e5e9ef;
+
+  --sidebar: #ffffff;
+  --sidebar-foreground: #46515f;
+  --sidebar-primary: #2f80ff;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: oklch(0 0 0 / 5%);
+  --sidebar-accent-foreground: #0d151f;
+  --sidebar-border: oklch(0 0 0 / 8%);
+  --sidebar-ring: #2f80ff;
+
+  --elev-1: inset 0 1px 0 0 oklch(1 0 0 / 60%), 0 1px 2px 0 rgb(15 23 42 / 6%);
+  --elev-2: 0 1px 2px 0 rgb(15 23 42 / 5%), 0 10px 26px -14px rgb(15 23 42 / 20%);
+  --elev-3: 0 16px 40px -16px rgb(15 23 42 / 26%);
+
+  --surface-1: #ffffff;
+  --surface-2: #f9fbfd;
+  --surface-hover-border: oklch(0 0 0 / 14%);
+  --scroll-thumb: oklch(0 0 0 / 20%);
+  --scroll-thumb-hover: oklch(0 0 0 / 32%);
+  --skeleton-base: oklch(0 0 0 / 5%);
+  --skeleton-hi-1: oklch(0 0 0 / 6%);
+  --skeleton-hi-2: oklch(0 0 0 / 9%);
+  --gradient-from: #0d151f;
+  --gradient-to: #4b586a;
+  --selection-fg: #04070c;
+  --aurora-blue: 7%;
+  --aurora-violet: 5%;
 }
 
 @theme inline {
@@ -228,13 +313,13 @@
 
   ::selection {
     background: color-mix(in oklab, var(--vq-blue) 35%, transparent);
-    color: #fff;
+    color: var(--selection-fg);
   }
 
   /* Scrollbars: present but recessive */
   * {
     scrollbar-width: thin;
-    scrollbar-color: oklch(1 0 0 / 12%) transparent;
+    scrollbar-color: var(--scroll-thumb) transparent;
   }
   ::-webkit-scrollbar {
     width: 10px;
@@ -244,13 +329,13 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background-color: oklch(1 0 0 / 10%);
+    background-color: var(--scroll-thumb);
     border-radius: 999px;
     border: 3px solid transparent;
     background-clip: content-box;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background-color: oklch(1 0 0 / 18%);
+    background-color: var(--scroll-thumb-hover);
     background-clip: content-box;
   }
 
@@ -270,7 +355,7 @@
   /* Standard raised panel. Faint white wash reads as "lifted" without a
      lighter fill colour that would clash against the near-black base. */
   .surface {
-    background-color: color-mix(in oklab, #ffffff 2.2%, var(--background));
+    background-color: var(--surface-1);
     border: 1px solid var(--border);
     box-shadow: var(--elev-2);
     border-radius: var(--radius-xl);
@@ -283,8 +368,8 @@
       transform 200ms ease;
   }
   .surface-interactive:hover {
-    border-color: oklch(1 0 0 / 12%);
-    background-color: color-mix(in oklab, #ffffff 3.4%, var(--background));
+    border-color: var(--surface-hover-border);
+    background-color: var(--surface-2);
   }
 
   /* Frosted layer for sticky chrome (topbar, popovers, command palette) */
@@ -299,7 +384,7 @@
   }
 
   .text-gradient {
-    background: linear-gradient(180deg, #ffffff 0%, #a9b6c8 100%);
+    background: linear-gradient(180deg, var(--gradient-from) 0%, var(--gradient-to) 100%);
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
@@ -325,12 +410,12 @@
     background:
       radial-gradient(
         60rem 34rem at 12% -8%,
-        color-mix(in oklab, var(--vq-blue) 13%, transparent),
+        color-mix(in oklab, var(--vq-blue) var(--aurora-blue), transparent),
         transparent 62%
       ),
       radial-gradient(
         46rem 30rem at 92% -12%,
-        color-mix(in oklab, var(--vq-violet) 8%, transparent),
+        color-mix(in oklab, var(--vq-violet) var(--aurora-violet), transparent),
         transparent 60%
       );
   }
@@ -339,7 +424,7 @@
   .skeleton {
     position: relative;
     overflow: hidden;
-    background-color: oklch(1 0 0 / 4%);
+    background-color: var(--skeleton-base);
     border-radius: var(--radius-md);
   }
   .skeleton::after {
@@ -350,9 +435,9 @@
     background: linear-gradient(
       90deg,
       transparent,
-      oklch(1 0 0 / 6%) 45%,
-      oklch(1 0 0 / 9%) 50%,
-      oklch(1 0 0 / 6%) 55%,
+      var(--skeleton-hi-1) 45%,
+      var(--skeleton-hi-2) 50%,
+      var(--skeleton-hi-1) 55%,
       transparent
     );
     animation: sweep 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import * as React from "react";
 
@@ -80,7 +80,7 @@ export function Meter({
   return (
     <div
       className={cn(
-        "h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]",
+        "h-1.5 w-full overflow-hidden rounded-full bg-foreground/[0.06]",
         className,
       )}
     >

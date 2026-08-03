@@ -148,7 +148,7 @@ export default async function ProjectDetailPage({
                   <li key={d.id}>
                     <Link
                       href={`/dailies?sheet=${d.id}`}
-                      className="focus-ring flex items-center gap-3 rounded-lg px-2.5 py-2.5 hover:bg-white/[0.03]"
+                      className="focus-ring flex items-center gap-3 rounded-lg px-2.5 py-2.5 hover:bg-foreground/[0.03]"
                     >
                       <span className="num shrink-0 text-[11px] text-muted-foreground">{d.workDate}</span>
                       <span className="min-w-0 flex-1 truncate text-[12.5px] text-foreground">
@@ -207,7 +207,7 @@ export default async function ProjectDetailPage({
                 {projectMaterials.map((m) => {
                   const used = m.issued > 0 ? m.installed / m.issued : 0;
                   return (
-                    <li key={m.id} className="rounded-lg px-2.5 py-2.5 hover:bg-white/[0.03]">
+                    <li key={m.id} className="rounded-lg px-2.5 py-2.5 hover:bg-foreground/[0.03]">
                       <div className="flex items-center gap-2">
                         <span className="min-w-0 flex-1 truncate text-[12.5px] text-foreground">{m.item}</span>
                         <span className={cn("num shrink-0 text-[11.5px] font-medium", toneStyles[m.tone].text)}>
@@ -238,7 +238,7 @@ function KeyStat({ label, value }: { label: string; value: string }) {
 
 function Economic({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: string }) {
   return (
-    <div className="rounded-lg border border-border/60 bg-white/[0.02] px-3.5 py-3">
+    <div className="rounded-lg border border-border/60 bg-foreground/[0.02] px-3.5 py-3">
       <p className="eyebrow">{label}</p>
       <p className={cn("num mt-1 text-[18px] font-semibold tracking-[-0.02em] text-foreground", tone)}>{value}</p>
       {hint ? <p className="mt-0.5 text-[11px] text-muted-foreground">{hint}</p> : null}
