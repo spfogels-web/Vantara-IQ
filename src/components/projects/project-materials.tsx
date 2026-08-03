@@ -8,6 +8,7 @@ import {
   AlertTriangle,
   ArrowDownToLine,
   Camera,
+  CheckCheck,
   FileUp,
   Loader2,
   Sparkles,
@@ -20,6 +21,7 @@ import { formatNumber } from "@/lib/format";
 import { toneStyles } from "@/lib/tone";
 import { Meter } from "@/components/common/metric";
 import {
+  approveAndTrackImport,
   deleteProjectMaterial,
   deleteProjectMaterialImport,
   extractProjectMaterials,
@@ -118,6 +120,24 @@ export function ProjectMaterials({
     await deleteProjectMaterialImport(importId, projectId);
     setBusy(false);
     router.refresh();
+  }
+
+  async function approveAll(importId: string) {
+    if (busy) return;
+    setError(null);
+    setNote(null);
+    setBusy(true);
+    const res = await approveAndTrackImport(importId, projectId);
+    setBusy(false);
+    if (res.ok) {
+      setNote(
+        `Tracking ${res.count} ${res.count === 1 ? "code" : "codes"}` +
+          (res.skipped ? ` — ${res.skipped} left pending for review.` : ". They're now pickable on dailies."),
+      );
+      router.refresh();
+    } else {
+      setError(res.error);
+    }
   }
 
   async function track(importId: string) {
@@ -300,6 +320,16 @@ export function ProjectMaterials({
                     className="focus-ring inline-flex h-6 shrink-0 items-center gap-1 rounded-md border border-border px-1.5 text-[10.5px] font-medium text-foreground hover:bg-foreground/[0.05] disabled:opacity-40"
                   >
                     <ArrowDownToLine className="size-3" /> Track
+                  </button>
+                ) : imp.rows.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => void approveAll(imp.id)}
+                    disabled={busy}
+                    title="Approve every row above 70% confidence and start tracking them"
+                    className="focus-ring inline-flex h-6 shrink-0 items-center gap-1 rounded-md bg-brand px-1.5 text-[10.5px] font-semibold text-white hover:bg-brand-bright disabled:opacity-40"
+                  >
+                    <CheckCheck className="size-3" /> Approve all
                   </button>
                 ) : null}
                 <button

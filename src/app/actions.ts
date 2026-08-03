@@ -880,6 +880,38 @@ export async function pushMaterialsToProject(importId: string, projectId: string
   return { ok: true as const, count: rows.length };
 }
 
+/**
+ * Approve every row that clears the confidence bar and track them in one go.
+ * Reviewing 59 lines one at a time is how a good pipeline stops getting used;
+ * rows below the bar stay PENDING for a human to look at individually.
+ */
+export async function approveAndTrackImport(
+  importId: string,
+  projectId: string,
+  minConfidence = 0.7,
+) {
+  const total = await prisma.extractedRow.count({ where: { importId } });
+  await prisma.extractedRow.updateMany({
+    where: { importId, status: "PENDING", confidence: { gte: minConfidence } },
+    data: { status: "APPROVED" },
+  });
+  const approved = await prisma.extractedRow.count({ where: { importId, status: "APPROVED" } });
+  if (approved === 0) {
+    return {
+      ok: false as const,
+      error: `No rows cleared the ${Math.round(minConfidence * 100)}% confidence bar — review them individually.`,
+    };
+  }
+
+  const pushed = await pushMaterialsToProject(importId, projectId);
+  if (!pushed.ok) return pushed;
+
+  await prisma.rateImport.update({ where: { id: importId }, data: { status: "APPROVED" } });
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/dailies/new");
+  return { ok: true as const, count: approved, skipped: total - approved };
+}
+
 /** Field updates to tracked material — issued/installed move as work happens. */
 export async function updateProjectMaterial(
   id: string,

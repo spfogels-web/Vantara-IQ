@@ -10,12 +10,16 @@ import { createDaily, type DailyLineInput } from "@/app/actions";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { Button } from "@/components/ui/button";
 
+import type { MaterialCodeOption } from "@/data/queries";
+
 export type ProjectOption = {
   id: string;
   number: string;
   name: string;
   client: string;
   location: string;
+  /** Approved material codes for this project, with what the plan has left. */
+  codes: MaterialCodeOption[];
 };
 
 const inputClass =
@@ -39,8 +43,29 @@ export function NewDailyForm({ projects }: { projects: ProjectOption[] }) {
   const project = projects.find((p) => p.id === projectId);
   const totalFt = lines.filter((l) => l.unit === "ft").reduce((s, l) => s + (Number(l.quantity) || 0), 0);
 
+  const codes = React.useMemo(() => project?.codes ?? [], [project]);
+  const codeListId = React.useId();
+
+  /** Codes are matched case- and space-insensitively — BFO48 vs bfo48 vs "BFO48 ". */
+  const codeFor = React.useCallback(
+    (raw: string) => {
+      const key = raw.trim().toUpperCase().replace(/\s+/g, "");
+      return codes.find((c) => c.code.trim().toUpperCase().replace(/\s+/g, "") === key);
+    },
+    [codes],
+  );
+
   function setLine(i: number, patch: Partial<DailyLineInput>) {
     setLines((ls) => ls.map((l, idx) => (idx === i ? { ...l, ...patch } : l)));
+  }
+
+  /** Picking a known code carries its unit across, so the two can't disagree. */
+  function pickCode(i: number, raw: string) {
+    const match = codeFor(raw);
+    setLine(i, {
+      code: raw,
+      ...(match && (match.unit === "ft" || match.unit === "ea") ? { unit: match.unit } : {}),
+    });
   }
 
   const valid = projectId && workDate && crew.trim() && lines.some((l) => l.code.trim() && l.quantity > 0);
@@ -114,9 +139,28 @@ export function NewDailyForm({ projects }: { projects: ProjectOption[] }) {
         </PanelBody>
       </Panel>
 
+      {/* The project's approved codes back every code input below. Remaining
+          quantity is shown in the option label, so the picker itself tells you
+          how much of that unit the plan still has. */}
+      <datalist id={codeListId}>
+        {codes.map((c) => (
+          <option key={c.code} value={c.code}>
+            {c.remaining.toLocaleString()} {c.unit} left · {c.description}
+          </option>
+        ))}
+      </datalist>
+
       {/* Line items */}
       <Panel>
-        <PanelHeader title="Production line items" description="Location, unit code and quantity — like the paper daily." count={lines.length}>
+        <PanelHeader
+          title="Production line items"
+          description={
+            codes.length
+              ? `${codes.length} codes on this job's material list — pick one and its unit and remaining quantity come with it.`
+              : "Location, unit code and quantity — like the paper daily."
+          }
+          count={lines.length}
+        >
           <Button
             type="button"
             size="sm"
@@ -144,7 +188,39 @@ export function NewDailyForm({ projects }: { projects: ProjectOption[] }) {
                     <input value={l.location} onChange={(e) => setLine(i, { location: e.target.value })} placeholder="PED 1 / STA 12+00" className={inputClass} />
                   </td>
                   <td className="px-3 py-2">
-                    <input value={l.code} onChange={(e) => setLine(i, { code: e.target.value })} placeholder="BDD" className={cn(inputClass, "num")} />
+                    {/* A list-backed input, not a select: crews can still type a
+                        code that isn't on the material list, but the ones that
+                        are come with their unit and remaining quantity. */}
+                    <input
+                      list={codeListId}
+                      value={l.code}
+                      onChange={(e) => pickCode(i, e.target.value)}
+                      placeholder={codes.length ? "Pick or type" : "BDD"}
+                      className={cn(inputClass, "num uppercase")}
+                    />
+                    {(() => {
+                      const match = codeFor(l.code);
+                      if (!match) {
+                        return l.code.trim() && codes.length ? (
+                          <span className="mt-1 block text-[10.5px] text-warning">
+                            Not on the material list
+                          </span>
+                        ) : null;
+                      }
+                      const left = match.remaining - (Number(l.quantity) || 0);
+                      return (
+                        <span
+                          className={cn(
+                            "num mt-1 block text-[10.5px]",
+                            left < 0 ? "text-critical" : "text-muted-foreground",
+                          )}
+                        >
+                          {left < 0
+                            ? `${Math.abs(left).toLocaleString()} ${match.unit} over plan`
+                            : `${left.toLocaleString()} ${match.unit} left`}
+                        </span>
+                      );
+                    })()}
                   </td>
                   <td className="px-3 py-2">
                     <input type="number" min={0} value={l.quantity || ""} onChange={(e) => setLine(i, { quantity: Number(e.target.value) })} placeholder="0" className={cn(inputClass, "num w-24")} />

@@ -482,3 +482,32 @@ export async function getProjectMaterials(projectId: string): Promise<TrackedMat
     };
   });
 }
+
+/** A code a crew can bill on this project, with what the plan has left. */
+export interface MaterialCodeOption {
+  code: string;
+  description: string;
+  unit: string;
+  planned: number;
+  billed: number;
+  remaining: number;
+}
+
+/**
+ * The project's approved material codes, for pickers on daily entry. Typing a
+ * code from memory is how quantities drift from the plan; picking one that
+ * already knows its unit and remaining quantity is how they stay honest.
+ */
+export async function getProjectMaterialCodes(projectId: string): Promise<MaterialCodeOption[]> {
+  const materials = await getProjectMaterials(projectId);
+  return materials
+    .filter((m) => m.code)
+    .map((m) => ({
+      code: m.code,
+      description: m.item,
+      unit: m.unit,
+      planned: m.planned,
+      billed: m.completed,
+      remaining: m.remaining,
+    }));
+}
