@@ -23,6 +23,7 @@ export const navSections: NavSection[] = [
     items: [
       { label: "Billing", href: "/billing", icon: "billing", badge: 4 },
       { label: "Pay applications", href: "/pay-applications", icon: "payapps" },
+      { label: "Rate import", href: "/rate-import", icon: "scan" },
     ],
   },
   {
@@ -30,6 +31,7 @@ export const navSections: NavSection[] = [
     items: [
       { label: "AI assistant", href: "/assistant", icon: "sparkles", shortcut: "A" },
       { label: "Reports", href: "/reports", icon: "reports" },
+      { label: "Integrations", href: "/integrations", icon: "plug" },
     ],
   },
 ];

@@ -166,3 +166,62 @@ model Feedback {
   page      String?
   createdAt DateTime @default(now())
 }
+
+enum RateDocType {
+  GC_RATE_SHEET
+  UNIT_DESCRIPTION
+  MATERIAL_LIST
+  SUB_RATE_CARD
+}
+
+enum ImportStatus {
+  PROCESSING
+  EXTRACTED
+  APPROVED
+  REJECTED
+  FAILED
+}
+
+enum RowStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+/// One uploaded rate/unit/material/rate-card document + its extraction job.
+model RateImport {
+  id          String        @id @default(cuid())
+  docType     RateDocType
+  fileName    String
+  mediaType   String        @default("")
+  status      ImportStatus  @default(PROCESSING)
+  // Optional scoping the user provides at upload.
+  customer    String        @default("")
+  market      String        @default("")
+  project     String        @default("")
+  summary     String        @default("")
+  error       String        @default("")
+  rows        ExtractedRow[]
+  createdAt   DateTime      @default(now())
+}
+
+/// One extracted line item, kept as a reviewable draft until approved. The full
+/// per-doc-type field set lives in `data`; the columns below drive the review UI.
+model ExtractedRow {
+  id           String     @id @default(cuid())
+  import       RateImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+  importId     String
+  code         String     @default("")
+  description  String     @default("")
+  unit         String     @default("")
+  rate         Float?
+  minimum      Float?
+  rules        String     @default("")
+  sourcePage   String     @default("")
+  confidence   Float      @default(0)
+  matchStatus  String     @default("new")
+  warning      String     @default("")
+  status       RowStatus  @default(PENDING)
+  data         Json       @default("{}")
+  createdAt    DateTime   @default(now())
+}
