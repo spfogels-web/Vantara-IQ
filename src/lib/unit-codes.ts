@@ -48,8 +48,13 @@ export function priorityFamily(code: string): string | null {
 }
 
 /**
- * RI = micro ribbon fiber — "PLACE MICRO RIBBON FIBER IN DUCT" (BFO12RI,
- * BFO24RI). Underground work that belongs with the rest.
+ * RI = microfiber (BFO12RI, BFO24RI). Underground work that belongs with the
+ * rest.
+ *
+ * Note the descriptions printed against these on the Uniti sheets say "PLACE
+ * MICRO RIBBON FIBER IN DUCT", which is wrong for the unit — a reminder that
+ * the *code* is authoritative and the description is just a label. Never
+ * classify off description text.
  *
  * Matched as a *suffix*, not a substring: FRIBBONIZE ("RIBBONIZE LOOSE FIBERS")
  * contains RI and is not an RI code. The lookahead allows a trailing variant

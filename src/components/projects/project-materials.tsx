@@ -155,6 +155,13 @@ export function ProjectMaterials({
     }
   }
 
+  async function setLabel(id: string, next: string, current: string) {
+    const trimmed = next.trim();
+    if (!trimmed || trimmed === current) return;
+    await updateProjectMaterial(id, { item: trimmed });
+    router.refresh();
+  }
+
   /** The plan can be corrected or revised; billed quantities come from dailies. */
   async function setPlanned(id: string, raw: string, current: number) {
     const next = Number(raw);
@@ -209,7 +216,16 @@ export function ProjectMaterials({
                     {m.code}
                   </span>
                 ) : null}
-                <span className="min-w-0 flex-1 truncate text-[12.5px] text-foreground">{m.item}</span>
+                {/* Editable: customers print descriptions that are wrong for
+                    the unit (the RI codes say "micro ribbon fiber" when
+                    they're microfiber). The code bills; the label should read
+                    however the crew knows it. */}
+                <input
+                  defaultValue={m.item}
+                  onBlur={(e) => void setLabel(m.id, e.target.value, m.item)}
+                  title="Rename this material"
+                  className="min-w-0 flex-1 truncate rounded border border-transparent bg-transparent px-1 text-[12.5px] text-foreground outline-none hover:border-border focus:border-brand/50 focus:bg-foreground/[0.03]"
+                />
                 <span className={cn("num shrink-0 text-[11.5px] font-medium", toneStyles[m.tone].text)}>
                   {formatNumber(m.remaining)} {m.unit} left
                 </span>

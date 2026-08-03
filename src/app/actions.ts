@@ -912,10 +912,21 @@ export async function approveAndTrackImport(
   return { ok: true as const, count: approved, skipped: total - approved };
 }
 
-/** Field updates to tracked material — issued/installed move as work happens. */
+/**
+ * Field updates to tracked material. Descriptions are editable because the
+ * ones printed on a customer's sheet are sometimes wrong for the unit — the RI
+ * codes carry "PLACE MICRO RIBBON FIBER IN DUCT" when they're microfiber. The
+ * code is what bills; the label should be whatever the crew recognises.
+ */
 export async function updateProjectMaterial(
   id: string,
-  patch: { issued?: number; installed?: number; planned?: number },
+  patch: {
+    issued?: number;
+    installed?: number;
+    planned?: number;
+    item?: string;
+    unit?: string;
+  },
 ) {
   const row = await prisma.projectMaterial.update({
     where: { id },
@@ -923,6 +934,8 @@ export async function updateProjectMaterial(
       ...(patch.planned != null ? { planned: patch.planned } : {}),
       ...(patch.issued != null ? { issued: patch.issued } : {}),
       ...(patch.installed != null ? { installed: patch.installed } : {}),
+      ...(patch.item != null ? { item: patch.item.trim() } : {}),
+      ...(patch.unit != null ? { unit: patch.unit.trim() } : {}),
     },
   });
   revalidatePath(`/projects/${row.projectId}`);
