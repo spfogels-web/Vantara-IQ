@@ -4,7 +4,6 @@ import * as React from "react";
 import {
   Building2,
   Check,
-  DollarSign,
   Mail,
   MapPin,
   Phone,
@@ -26,6 +25,7 @@ import {
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { StatusPill } from "@/components/common/status-pill";
 import { Button } from "@/components/ui/button";
+import { CustomerBilling } from "@/components/customers/customer-billing";
 
 export function CustomersView({ customers }: { customers: Customer[] }) {
   const [list, setList] = React.useState(customers);
@@ -262,50 +262,8 @@ function CustomerDetail({ customer: c }: { customer: Customer }) {
         </Panel>
       </div>
 
-      {/* Rate sheet */}
-      <Panel>
-        <PanelHeader
-          title="Rate sheet"
-          description="Unit codes drive the billing engine — dailies matched to these rates auto-price the invoice."
-          count={c.rateSheet.length}
-          icon={<DollarSign className="size-3.5" />}
-          action="Edit rates"
-        />
-        {c.rateSheet.length === 0 ? (
-          <PanelBody className="py-8 text-center text-[12.5px] text-muted-foreground">
-            No rate sheet yet — add unit codes to enable automatic invoicing.
-          </PanelBody>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="border-b border-border/70 text-[10.5px] uppercase tracking-wider text-muted-foreground">
-                  <th className="px-4 py-2 font-medium sm:px-5">Code</th>
-                  <th className="px-4 py-2 font-medium">Description</th>
-                  <th className="px-4 py-2 text-center font-medium">Unit</th>
-                  <th className="px-4 py-2 text-right font-medium sm:px-5">Rate</th>
-                </tr>
-              </thead>
-              <tbody>
-                {c.rateSheet.map((r) => (
-                  <tr key={r.code} className="border-b border-border/40 last:border-0 hover:bg-foreground/[0.02]">
-                    <td className="px-4 py-2.5 sm:px-5">
-                      <span className="num rounded bg-foreground/[0.06] px-1.5 py-0.5 text-[11.5px] font-semibold text-foreground ring-1 ring-inset ring-foreground/[0.06]">
-                        {r.code}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2.5 text-[12.5px] text-muted-foreground">{r.description}</td>
-                    <td className="px-4 py-2.5 text-center text-[12px] text-muted-foreground">/ {r.unit}</td>
-                    <td className="num px-4 py-2.5 text-right text-[12.5px] font-medium text-foreground sm:px-5">
-                      {formatCurrency(r.rate)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Panel>
+      {/* Contract, documents & live editable rate card */}
+      <CustomerBilling customerId={c.id} />
     </div>
   );
 }

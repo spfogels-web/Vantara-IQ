@@ -75,6 +75,39 @@ model Customer {
   notes          String   @default("")
   since          String   @default("")
   projects       Project[]
+  documents      CustomerDocument[]
+  rates          CustomerRate[]
+  createdAt      DateTime @default(now())
+}
+
+/// A signed contract / agreement / tax doc on file for a customer.
+model CustomerDocument {
+  id         String   @id @default(cuid())
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customerId String
+  section    String
+  fileName   String
+  mediaType  String   @default("")
+  sizeBytes  Int      @default(0)
+  dataUrl    String
+  uploadedBy String   @default("office")
+  createdAt  DateTime @default(now())
+}
+
+/// One line of a customer's rate card — the basis for automated customer billing.
+model CustomerRate {
+  id             String   @id @default(cuid())
+  customer       Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customerId     String
+  code           String
+  description    String   @default("")
+  unit           String   @default("")
+  rate           Float    @default(0)
+  minimum        Float?
+  rules          String   @default("")
+  effectiveDate  String   @default("")
+  expirationDate String   @default("")
+  source         String   @default("manual")
   createdAt      DateTime @default(now())
 }
 

@@ -206,6 +206,149 @@ export async function listSubDocuments(subcontractorId: string) {
   }));
 }
 
+/* ---- Customer contract documents + rate card ------------------------------ */
+
+export async function listCustomerDocuments(customerId: string) {
+  const rows = await prisma.customerDocument.findMany({
+    where: { customerId },
+    orderBy: { createdAt: "asc" },
+  });
+  return rows.map((d) => ({
+    id: d.id,
+    section: d.section,
+    fileName: d.fileName,
+    mediaType: d.mediaType,
+    sizeBytes: d.sizeBytes,
+    dataUrl: d.dataUrl,
+    uploadedBy: d.uploadedBy,
+    createdAt: d.createdAt.toISOString(),
+  }));
+}
+
+export async function uploadCustomerDocument(formData: FormData) {
+  const file = formData.get("file") as File | null;
+  const customerId = String(formData.get("customerId") || "");
+  const section = String(formData.get("section") || "");
+  if (!file || !customerId || !section) return { ok: false as const, error: "Missing file or section." };
+  if (file.size > 10 * 1024 * 1024) return { ok: false as const, error: "File is over 10 MB." };
+  const buf = Buffer.from(await file.arrayBuffer());
+  const mediaType = file.type || "application/octet-stream";
+  const doc = await prisma.customerDocument.create({
+    data: {
+      customerId,
+      section,
+      fileName: file.name,
+      mediaType,
+      sizeBytes: file.size,
+      dataUrl: `data:${mediaType};base64,${buf.toString("base64")}`,
+      uploadedBy: "office",
+    },
+  });
+  revalidatePath("/customers");
+  return {
+    ok: true as const,
+    doc: {
+      id: doc.id, section: doc.section, fileName: doc.fileName, mediaType: doc.mediaType,
+      sizeBytes: doc.sizeBytes, dataUrl: doc.dataUrl, uploadedBy: doc.uploadedBy,
+      createdAt: doc.createdAt.toISOString(),
+    },
+  };
+}
+
+export async function deleteCustomerDocument(id: string) {
+  await prisma.customerDocument.delete({ where: { id } });
+  revalidatePath("/customers");
+  return { ok: true as const };
+}
+
+export type CustomerRateInput = {
+  code: string;
+  description: string;
+  unit: string;
+  rate: number;
+  minimum?: number | null;
+  rules?: string;
+  effectiveDate?: string;
+  expirationDate?: string;
+};
+
+export async function listCustomerRates(customerId: string) {
+  const rows = await prisma.customerRate.findMany({
+    where: { customerId },
+    orderBy: { code: "asc" },
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    code: r.code,
+    description: r.description,
+    unit: r.unit,
+    rate: r.rate,
+    minimum: r.minimum,
+    rules: r.rules,
+    effectiveDate: r.effectiveDate,
+    expirationDate: r.expirationDate,
+    source: r.source,
+  }));
+}
+
+export async function addCustomerRate(customerId: string, input: CustomerRateInput) {
+  if (!input.code.trim()) return { ok: false as const, error: "Unit code is required." };
+  await prisma.customerRate.create({
+    data: {
+      customerId,
+      code: input.code.trim(),
+      description: input.description ?? "",
+      unit: input.unit ?? "",
+      rate: Number(input.rate) || 0,
+      minimum: input.minimum ?? null,
+      rules: input.rules ?? "",
+      effectiveDate: input.effectiveDate ?? "",
+      expirationDate: input.expirationDate ?? "",
+      source: "manual",
+    },
+  });
+  revalidatePath("/customers");
+  return { ok: true as const };
+}
+
+export async function deleteCustomerRate(id: string) {
+  await prisma.customerRate.delete({ where: { id } });
+  revalidatePath("/customers");
+  return { ok: true as const };
+}
+
+/** Recent rate imports (for the push-to-customer picker). */
+export async function listRateImports() {
+  const imps = await prisma.rateImport.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 20,
+    include: { _count: { select: { rows: true } } },
+  });
+  return imps.map((i) => ({ id: i.id, fileName: i.fileName, rowCount: i._count.rows }));
+}
+
+/** Push approved rows from a Rate Import onto a customer's rate card. */
+export async function pushImportToCustomer(importId: string, customerId: string) {
+  const rows = await prisma.extractedRow.findMany({
+    where: { importId, status: "APPROVED" },
+  });
+  if (rows.length === 0) return { ok: false as const, error: "No approved rows in that import." };
+  await prisma.customerRate.createMany({
+    data: rows.map((r) => ({
+      customerId,
+      code: r.code || "—",
+      description: r.description,
+      unit: r.unit,
+      rate: r.rate ?? 0,
+      minimum: r.minimum,
+      rules: r.rules,
+      source: "import",
+    })),
+  });
+  revalidatePath("/customers");
+  return { ok: true as const, count: rows.length };
+}
+
 /* ---- Projects (create / edit / delete / map) ------------------------------ */
 
 const STATUS_TONE: Record<string, string> = {
