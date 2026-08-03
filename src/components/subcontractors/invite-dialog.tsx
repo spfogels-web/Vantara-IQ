@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Check, Copy, Link2, Mail, MessageSquare, Send } from "lucide-react";
+import { Check, Copy, Link2, Mail, MessageSquare, Send, ShieldCheck, TriangleAlert } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import type { Project } from "@/lib/types";
@@ -32,6 +32,24 @@ const STATE_NAMES: Record<string, string> = {
 const inputClass =
   "w-full rounded-lg border border-foreground/[0.08] bg-foreground/[0.03] px-3 py-2 text-[12.5px] text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-brand/40";
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function isValidEmail(v: string) {
+  return EMAIL_RE.test(v.trim());
+}
+
+/** Live-format US numbers as (XXX) XXX-XXXX while typing. */
+function formatPhone(v: string) {
+  const d = v.replace(/\D/g, "").slice(0, 10);
+  if (d.length <= 3) return d;
+  if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`;
+  return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
+}
+
+function phoneDigits(v: string) {
+  return v.replace(/\D/g, "");
+}
+
 export function InviteDialog({
   open,
   onOpenChange,
@@ -46,8 +64,10 @@ export function InviteDialog({
   company?: string;
 }) {
   const [projectId, setProjectId] = React.useState(defaultProjectId ?? projects[0]?.id ?? "");
+  const [recipientName, setRecipientName] = React.useState("");
   const [email, setEmail] = React.useState("");
   const [phone, setPhone] = React.useState("");
+  const [consent, setConsent] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
   const [origin, setOrigin] = React.useState("");
   // A stable token per dialog session so the same link is shared everywhere.
@@ -62,6 +82,7 @@ export function InviteDialog({
     if (open) {
       setNonce(Math.random().toString(36).slice(2, 8));
       setCopied(false);
+      setConsent(false);
     }
   }, [open, projectId]);
 
@@ -87,9 +108,15 @@ export function InviteDialog({
   const token = `${projectId}-${nonce}`;
   const link = origin && projectId ? `${origin}/invite/${token}?project=${projectId}` : "";
 
+  const greeting = recipientName.trim() ? `Hi ${recipientName.trim().split(" ")[0]}, ` : "";
   const message = project
-    ? `You're invited to join ${project.name} (${project.client} · ${project.location}) on Vantara IQ. Register your crew and start submitting dailies here: ${link}`
+    ? `${greeting}you're invited to join ${project.name} (${project.client} · ${project.location}) on Vantara IQ. Register your crew and start submitting dailies here: ${link}`
     : "";
+
+  const emailValid = isValidEmail(email);
+  const phoneValid = phoneDigits(phone).length === 10;
+  const canEmail = Boolean(link) && emailValid && consent;
+  const canText = Boolean(link) && phoneValid && consent;
 
   function copy() {
     if (!link) return;
@@ -109,22 +136,22 @@ export function InviteDialog({
   }
 
   function sendText() {
-    const url = `sms:${encodeURIComponent(phone)}?&body=${encodeURIComponent(message)}`;
+    const url = `sms:${phoneDigits(phone)}?&body=${encodeURIComponent(message)}`;
     window.location.href = url;
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Invite subcontractor</DialogTitle>
           <DialogDescription>
-            Send a project-specific onboarding link. The crew registers, uploads compliance, and is
-            tied to the project you pick — their dailies flow straight to it.
+            Send a project-specific onboarding link. They&apos;ll verify their email and phone when
+            they accept, then it&apos;s tied to the project you pick.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3">
           {/* Project assignment */}
           <label className="flex flex-col gap-1.5">
             <span className="text-[11.5px] font-medium text-muted-foreground">
@@ -179,9 +206,19 @@ export function InviteDialog({
             </span>
           </div>
 
-          {/* Forward via email + text */}
+          {/* Recipient + contact */}
+          <label className="flex flex-col gap-1.5">
+            <span className="text-[11.5px] font-medium text-muted-foreground">Recipient name (optional)</span>
+            <input
+              value={recipientName}
+              onChange={(e) => setRecipientName(e.target.value)}
+              placeholder="Reggie Vance"
+              className={inputClass}
+            />
+          </label>
+
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="flex flex-col gap-1.5 rounded-xl border border-border/70 bg-foreground/[0.02] p-3">
+            <div className="flex flex-col gap-1">
               <span className="flex items-center gap-1.5 text-[11.5px] font-medium text-foreground">
                 <Mail className="size-3.5 text-muted-foreground" /> Email
               </span>
@@ -190,41 +227,76 @@ export function InviteDialog({
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="name@company.com"
-                className={inputClass}
+                className={cn(inputClass, email && !emailValid && "border-critical/50 focus:ring-critical/30")}
               />
-              <Button
-                type="button"
-                size="sm"
-                onClick={sendEmail}
-                disabled={!email.trim() || !link}
-                className="h-8 gap-1.5 rounded-lg bg-brand text-[12px] font-semibold text-white hover:bg-brand-bright disabled:opacity-40"
-              >
-                <Send className="size-3.5" /> Send email
-              </Button>
+              {email && !emailValid ? (
+                <span className="flex items-center gap-1 text-[10.5px] text-critical">
+                  <TriangleAlert className="size-3" /> Enter a valid email
+                </span>
+              ) : null}
             </div>
 
-            <div className="flex flex-col gap-1.5 rounded-xl border border-border/70 bg-foreground/[0.02] p-3">
+            <div className="flex flex-col gap-1">
               <span className="flex items-center gap-1.5 text-[11.5px] font-medium text-foreground">
-                <MessageSquare className="size-3.5 text-muted-foreground" /> Text message
+                <MessageSquare className="size-3.5 text-muted-foreground" /> Mobile number
               </span>
               <input
                 type="tel"
+                inputMode="tel"
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
+                onChange={(e) => setPhone(formatPhone(e.target.value))}
                 placeholder="(864) 555-0142"
-                className={inputClass}
+                className={cn(inputClass, phone && !phoneValid && "border-critical/50 focus:ring-critical/30")}
               />
-              <Button
-                type="button"
-                size="sm"
-                onClick={sendText}
-                disabled={!phone.trim() || !link}
-                className="h-8 gap-1.5 rounded-lg bg-brand text-[12px] font-semibold text-white hover:bg-brand-bright disabled:opacity-40"
-              >
-                <Send className="size-3.5" /> Send text
-              </Button>
+              {phone && !phoneValid ? (
+                <span className="flex items-center gap-1 text-[10.5px] text-critical">
+                  <TriangleAlert className="size-3" /> Enter a 10-digit number
+                </span>
+              ) : null}
             </div>
           </div>
+
+          {/* Authorization / consent — required before sending */}
+          <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-border/70 bg-foreground/[0.02] p-3">
+            <input
+              type="checkbox"
+              checked={consent}
+              onChange={(e) => setConsent(e.target.checked)}
+              className="mt-0.5 size-4 shrink-0 accent-[var(--vq-blue)]"
+            />
+            <span className="text-[11.5px] leading-snug text-muted-foreground">
+              <span className="font-medium text-foreground">Authorization confirmed.</span> This
+              subcontractor has agreed to receive onboarding messages from Fortitude by email and
+              text. <span className="text-muted-foreground/70">(Required — TCPA / CAN-SPAM.)</span>
+            </span>
+          </label>
+
+          {/* Send */}
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+            <Button
+              type="button"
+              size="sm"
+              onClick={sendEmail}
+              disabled={!canEmail}
+              className="h-9 gap-1.5 rounded-lg bg-brand text-[12px] font-semibold text-white hover:bg-brand-bright disabled:opacity-40"
+            >
+              <Send className="size-3.5" /> Send email
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={sendText}
+              disabled={!canText}
+              className="h-9 gap-1.5 rounded-lg bg-brand text-[12px] font-semibold text-white hover:bg-brand-bright disabled:opacity-40"
+            >
+              <Send className="size-3.5" /> Send text
+            </Button>
+          </div>
+
+          <p className="flex items-center gap-1.5 text-[10.5px] text-muted-foreground/80">
+            <ShieldCheck className="size-3 shrink-0" /> Ownership is verified with a one-time code
+            when they create their account.
+          </p>
         </div>
       </DialogContent>
     </Dialog>
