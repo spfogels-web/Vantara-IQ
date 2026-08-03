@@ -5,7 +5,12 @@ import { revalidatePath } from "next/cache";
 import * as XLSX from "xlsx";
 
 import { prisma } from "@/lib/prisma";
-import { extractDocument, isConfigured, type RateDocType } from "@/lib/extract";
+import {
+  extractDocument,
+  isConfigured,
+  type ExtractedRowData,
+  type RateDocType,
+} from "@/lib/extract";
 import { parseDelimitedMaterialList, pdfTextLayer } from "@/lib/parse-material-list";
 
 /** Pilot feedback -> Feedback table. */
@@ -617,6 +622,30 @@ export async function createDaily(input: {
 const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
 
 /**
+ * Extracted rows -> insertable data.
+ *
+ * These go in via a single `createMany`. Writing them as N individual creates
+ * inside one transaction meant a 59-row sheet held an interactive transaction
+ * open for 60 round trips, which is long enough for Neon's pooler to hang up
+ * mid-write ("server has closed the connection").
+ */
+function extractedRowData(importId: string, rows: ExtractedRowData[]) {
+  return rows.map((r) => ({
+    importId,
+    code: r.code ?? "",
+    description: r.description ?? "",
+    unit: r.unit ?? "",
+    rate: r.rate ?? null,
+    minimum: r.minimum ?? null,
+    rules: r.rules ?? "",
+    sourcePage: r.sourcePage ?? "",
+    confidence: typeof r.confidence === "number" ? r.confidence : 0,
+    warning: r.warning ?? "",
+    data: r as unknown as Prisma.InputJsonValue,
+  }));
+}
+
+/**
  * Turns an uploaded file into something Claude can read: PDFs and photos go up
  * as base64 (a phone snap of a paper material list is a first-class input),
  * spreadsheets are flattened to CSV per sheet, everything else is read as text.
@@ -671,29 +700,11 @@ export async function extractRateDocument(formData: FormData) {
 
   try {
     const result = await extractDocument({ docType, base64, mediaType, text });
-    await prisma.$transaction([
-      ...result.rows.map((r) =>
-        prisma.extractedRow.create({
-          data: {
-            importId: imp.id,
-            code: r.code ?? "",
-            description: r.description ?? "",
-            unit: r.unit ?? "",
-            rate: r.rate ?? null,
-            minimum: r.minimum ?? null,
-            rules: r.rules ?? "",
-            sourcePage: r.sourcePage ?? "",
-            confidence: typeof r.confidence === "number" ? r.confidence : 0,
-            warning: r.warning ?? "",
-            data: r as unknown as Prisma.InputJsonValue,
-          },
-        }),
-      ),
-      prisma.rateImport.update({
-        where: { id: imp.id },
-        data: { status: "EXTRACTED", summary: result.summary },
-      }),
-    ]);
+    await prisma.extractedRow.createMany({ data: extractedRowData(imp.id, result.rows) });
+    await prisma.rateImport.update({
+      where: { id: imp.id },
+      data: { status: "EXTRACTED", summary: result.summary },
+    });
   } catch (e) {
     await prisma.rateImport.update({
       where: { id: imp.id },
@@ -782,29 +793,11 @@ async function runMaterialExtraction(projectId: string, file: File) {
           rows: parsed.rows,
         }
       : await extractDocument({ docType: "MATERIAL_LIST", base64, mediaType, text });
-    await prisma.$transaction([
-      ...result.rows.map((r) =>
-        prisma.extractedRow.create({
-          data: {
-            importId: imp.id,
-            code: r.code ?? "",
-            description: r.description ?? "",
-            unit: r.unit ?? "",
-            rate: r.rate ?? null,
-            minimum: r.minimum ?? null,
-            rules: r.rules ?? "",
-            sourcePage: r.sourcePage ?? "",
-            confidence: typeof r.confidence === "number" ? r.confidence : 0,
-            warning: r.warning ?? "",
-            data: r as unknown as Prisma.InputJsonValue,
-          },
-        }),
-      ),
-      prisma.rateImport.update({
-        where: { id: imp.id },
-        data: { status: "EXTRACTED", summary: result.summary },
-      }),
-    ]);
+    await prisma.extractedRow.createMany({ data: extractedRowData(imp.id, result.rows) });
+    await prisma.rateImport.update({
+      where: { id: imp.id },
+      data: { status: "EXTRACTED", summary: result.summary },
+    });
     revalidatePath(`/projects/${projectId}`);
     revalidatePath("/rate-import");
     return { ok: true as const, id: imp.id, count: result.rows.length, summary: result.summary };
