@@ -565,3 +565,79 @@ export async function getProjectMaterialCodes(projectId: string): Promise<Materi
     // The underground codes crews reach for most come first.
     .sort((a, b) => compareByPriority(a.code, b.code));
 }
+
+/* ------------------------------------------------------------------ *
+ * Daily billing sheets — the Globe form as saved, so a reviewer sees
+ * what the crew actually filled in rather than a summary of it.
+ * ------------------------------------------------------------------ */
+
+export interface SavedDailySheet {
+  id: string;
+  projectId: string | null;
+  projectName: string;
+  workDate: string;
+  crewNumber: string;
+  status: string;
+  dailyId: string | null;
+  header: unknown;
+  laborCodes: unknown;
+  laborRows: unknown;
+  matCodes: unknown;
+  matRows: unknown;
+  redlines: unknown;
+  updatedAt: string;
+}
+
+function toSavedSheet(r: {
+  id: string;
+  projectId: string | null;
+  projectName: string;
+  workDate: string;
+  crewNumber: string;
+  status: string;
+  dailyId: string | null;
+  header: unknown;
+  laborCodes: unknown;
+  laborRows: unknown;
+  matCodes: unknown;
+  matRows: unknown;
+  redlines: unknown;
+  updatedAt: Date;
+}): SavedDailySheet {
+  return { ...r, updatedAt: r.updatedAt.toISOString() };
+}
+
+export async function getDailySheet(id: string): Promise<SavedDailySheet | null> {
+  const r = await prisma.dailySheet.findUnique({ where: { id } });
+  return r ? toSavedSheet(r) : null;
+}
+
+/** The sheet a submitted daily came from, if it came from one. */
+export async function getSheetForDaily(dailyId: string): Promise<SavedDailySheet | null> {
+  const r = await prisma.dailySheet.findFirst({ where: { dailyId } });
+  return r ? toSavedSheet(r) : null;
+}
+
+/** Drafts and submitted sheets for a project, newest first. */
+export async function getProjectSheets(projectId: string): Promise<SavedDailySheet[]> {
+  const rows = await prisma.dailySheet.findMany({
+    where: { projectId },
+    orderBy: { updatedAt: "desc" },
+  });
+  return rows.map(toSavedSheet);
+}
+
+/** dailyId -> the sheet it came from, for linking a review to the real form. */
+export async function getSheetIndexByDaily(): Promise<
+  Record<string, { sheetId: string; projectId: string }>
+> {
+  const rows = await prisma.dailySheet.findMany({
+    where: { dailyId: { not: null }, projectId: { not: null } },
+    select: { id: true, dailyId: true, projectId: true },
+  });
+  const out: Record<string, { sheetId: string; projectId: string }> = {};
+  for (const r of rows) {
+    if (r.dailyId && r.projectId) out[r.dailyId] = { sheetId: r.id, projectId: r.projectId };
+  }
+  return out;
+}

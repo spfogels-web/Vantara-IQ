@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import * as React from "react";
+import Link from "next/link";
 import {
   AlertTriangle,
   Camera,
@@ -26,9 +27,12 @@ const FILTERS: (DailyStatus | "All")[] = ["All", "In review", "Flagged", "Submit
 export function DailiesView({
   dailies,
   initialId,
+  sheetByDaily,
 }: {
   dailies: DailyReport[];
   initialId?: string;
+  /** dailyId -> { sheetId, projectId }, for dailies that came from a Globe sheet. */
+  sheetByDaily?: Record<string, { sheetId: string; projectId: string }>;
 }) {
   const [items, setItems] = React.useState(dailies);
   const [filter, setFilter] = React.useState<(typeof FILTERS)[number]>("All");
@@ -111,7 +115,11 @@ export function DailiesView({
 
       <div className="lg:col-span-7 xl:col-span-8">
         {selected ? (
-          <DailyDetail daily={selected} onSetStatus={setStatus} />
+          <DailyDetail
+            daily={selected}
+            onSetStatus={setStatus}
+            sheet={sheetByDaily?.[selected.id]}
+          />
         ) : (
           <Panel className="items-center justify-center py-24 text-center text-[13px] text-muted-foreground">
             No daily selected
@@ -125,9 +133,11 @@ export function DailiesView({
 function DailyDetail({
   daily: d,
   onSetStatus,
+  sheet,
 }: {
   daily: DailyReport;
   onSetStatus: (id: string, status: DailyStatus, tone: DailyReport["tone"]) => void;
+  sheet?: { sheetId: string; projectId: string };
 }) {
   return (
     <div className="flex flex-col gap-3">
@@ -196,6 +206,28 @@ function DailyDetail({
           </p>
         </PanelBody>
       </Panel>
+
+      {/* When a daily came from a Globe sheet, that sheet is the record worth
+          reviewing — the line items below are a summary of it, not the thing
+          the crew filled in. */}
+      {sheet ? (
+        <Panel>
+          <PanelBody className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[13px] font-medium text-foreground">Globe billing sheet</p>
+              <p className="mt-0.5 text-[12px] text-muted-foreground">
+                The filled-in form and the day&apos;s redlined map, as submitted.
+              </p>
+            </div>
+            <Link
+              href={`/dailies/sheet/${sheet.projectId}?sheet=${sheet.sheetId}`}
+              className="focus-ring inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-brand px-3.5 text-[12.5px] font-semibold text-white hover:bg-brand-bright"
+            >
+              <FileText className="size-4" /> Open billing sheet
+            </Link>
+          </PanelBody>
+        </Panel>
+      ) : null}
 
       {/* Line items — the digital daily */}
       <Panel>

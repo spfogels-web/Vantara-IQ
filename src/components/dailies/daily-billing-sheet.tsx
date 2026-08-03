@@ -178,25 +178,97 @@ function Field({
   );
 }
 
+/** A sheet as loaded back from the database. Shapes are the ones we saved. */
+export type SavedSheet = {
+  id: string;
+  header: unknown;
+  laborCodes: unknown;
+  laborRows: unknown;
+  matCodes: unknown;
+  matRows: unknown;
+  redlines: unknown;
+  status: string;
+};
+
+/** Saved JSON is untyped by the time it comes back — coerce, never trust. */
+function asStrings(v: unknown, length: number): string[] {
+  const arr = Array.isArray(v) ? v : [];
+  return Array.from({ length: Math.max(length, arr.length) }, (_, i) =>
+    typeof arr[i] === "string" ? (arr[i] as string) : "",
+  );
+}
+
+function asLaborRows(v: unknown, cols: number): LaborRow[] {
+  const arr = Array.isArray(v) ? v : [];
+  const rows = arr.map((raw) => {
+    const r = (raw ?? {}) as Partial<LaborRow>;
+    return {
+      print: typeof r.print === "string" ? r.print : "",
+      location: typeof r.location === "string" ? r.location : "",
+      cells: asStrings(r.cells, cols),
+      remarks: typeof r.remarks === "string" ? r.remarks : "",
+    };
+  });
+  // Always leave blank rows to keep writing on.
+  while (rows.length < LABOR_ROWS) rows.push(blankLaborRow());
+  return rows;
+}
+
+function asMatRows(v: unknown, cols: number): MatRow[] {
+  const arr = Array.isArray(v) ? v : [];
+  const rows = arr.map((raw) => {
+    const r = (raw ?? {}) as Partial<MatRow>;
+    return {
+      print: typeof r.print === "string" ? r.print : "",
+      start: typeof r.start === "string" ? r.start : "",
+      stop: typeof r.stop === "string" ? r.stop : "",
+      mat: Boolean(r.mat),
+      cells: asStrings(r.cells, cols),
+      reel: typeof r.reel === "string" ? r.reel : "",
+      cableStart: typeof r.cableStart === "string" ? r.cableStart : "",
+      cableStop: typeof r.cableStop === "string" ? r.cableStop : "",
+    };
+  });
+  while (rows.length < MAT_ROWS) rows.push(blankMatRow());
+  return rows;
+}
+
 export function DailyBillingSheet({
   project,
   initialSheetId,
+  saved,
 }: {
   project?: SheetProject;
   /** Set when reopening a saved draft, so saves update rather than duplicate. */
   initialSheetId?: string;
+  /** A previously saved sheet to reopen — header, both grids and the redline. */
+  saved?: SavedSheet | null;
 }) {
-  const [header, setHeader] = React.useState<SheetHeader>(() => blankHeader(project));
-  const [labor, setLabor] = React.useState<LaborRow[]>(() =>
-    Array.from({ length: LABOR_ROWS }, blankLaborRow),
+  const [header, setHeader] = React.useState<SheetHeader>(() =>
+    saved?.header
+      ? { ...blankHeader(project), ...(saved.header as Partial<SheetHeader>) }
+      : blankHeader(project),
   );
-  const [laborCodes, setLaborCodes] = React.useState<string[]>(() => Array(UNIT_COLS).fill(""));
-  const [mat, setMat] = React.useState<MatRow[]>(() => Array.from({ length: MAT_ROWS }, blankMatRow));
-  const [matCodes, setMatCodes] = React.useState<string[]>(() => Array(MAT_COLS).fill(""));
+  const [labor, setLabor] = React.useState<LaborRow[]>(() =>
+    saved ? asLaborRows(saved.laborRows, UNIT_COLS) : Array.from({ length: LABOR_ROWS }, blankLaborRow),
+  );
+  const [laborCodes, setLaborCodes] = React.useState<string[]>(() =>
+    saved ? asStrings(saved.laborCodes, UNIT_COLS) : Array(UNIT_COLS).fill(""),
+  );
+  const [mat, setMat] = React.useState<MatRow[]>(() =>
+    saved ? asMatRows(saved.matRows, MAT_COLS) : Array.from({ length: MAT_ROWS }, blankMatRow),
+  );
+  const [matCodes, setMatCodes] = React.useState<string[]>(() =>
+    saved ? asStrings(saved.matCodes, MAT_COLS) : Array(MAT_COLS).fill(""),
+  );
 
   /* The redline belongs to this daily, not to the project's master as-built —
      it starts from whatever is already drawn on the job and diverges from there. */
-  const [redlines, setRedlines] = React.useState<Shape[]>(() => parseShapes(project?.markups));
+  // A reopened sheet keeps the redline the crew drew that day; a new one starts
+  // from the project's as-built.
+  const [redlines, setRedlines] = React.useState<Shape[]>(() =>
+    saved ? parseShapes(saved.redlines) : parseShapes(project?.markups),
+  );
   const [redlining, setRedlining] = React.useState(false);
   const mapUrl = project?.mapUrl ?? null;
 

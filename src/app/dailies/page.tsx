@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { FileText, Plus } from "lucide-react";
 
-import { getDailies } from "@/data/queries";
+import { getDailies, getSheetIndexByDaily } from "@/data/queries";
 import { PageShell } from "@/components/common/page-shell";
 import { DailiesView } from "@/components/dailies/dailies-view";
 
@@ -13,7 +13,11 @@ export default async function DailiesPage({
 }: {
   searchParams: Promise<{ sheet?: string; status?: string }>;
 }) {
-  const [dailies, sp] = await Promise.all([getDailies(), searchParams]);
+  const [dailies, sheetByDaily, sp] = await Promise.all([
+    getDailies(),
+    getSheetIndexByDaily(),
+    searchParams,
+  ]);
 
   return (
     <PageShell
@@ -37,7 +41,7 @@ export default async function DailiesPage({
         </>
       }
     >
-      <DailiesView dailies={dailies} initialId={sp.sheet} />
+      <DailiesView dailies={dailies} initialId={sp.sheet} sheetByDaily={sheetByDaily} />
     </PageShell>
   );
 }
