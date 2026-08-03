@@ -529,3 +529,47 @@
     display: none;
   }
 }
+
+/* ── Printing the daily billing sheet ─────────────────────────────
+   The sheet has to come out of a field printer looking like the paper
+   form it replaces: letter landscape, black rules, no app chrome. */
+@media print {
+  @page {
+    size: letter landscape;
+    margin: 0.35in;
+  }
+
+  body * {
+    visibility: hidden !important;
+  }
+
+  .sheet-page,
+  .sheet-page * {
+    visibility: visible !important;
+  }
+
+  .sheet-page {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    background: #fff !important;
+  }
+
+  .sheet-page * {
+    color: #000 !important;
+    background: transparent !important;
+    border-color: #555 !important;
+    box-shadow: none !important;
+  }
+
+  .sheet-page th,
+  .sheet-page td {
+    border: 1px solid #555 !important;
+  }
+
+  .sheet-page input {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
