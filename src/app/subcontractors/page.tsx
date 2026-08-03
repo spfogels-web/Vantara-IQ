@@ -1,4 +1,4 @@
-import { getSubcontractors } from "@/data/queries";
+import { getProjects, getSubcontractors } from "@/data/queries";
 import { PageShell } from "@/components/common/page-shell";
 import { SubcontractorsView } from "@/components/subcontractors/subcontractors-view";
 
@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Subcontractors · Vantara IQ" };
 
 export default async function SubcontractorsPage() {
-  const subs = await getSubcontractors();
+  const [subs, projects] = await Promise.all([getSubcontractors(), getProjects()]);
 
   return (
     <PageShell
@@ -14,7 +14,7 @@ export default async function SubcontractorsPage() {
       title="Subcontractors"
       description="The contractor portal — compliance, assignments and a running scorecard for every crew you work with."
     >
-      <SubcontractorsView subs={subs} />
+      <SubcontractorsView subs={subs} projects={projects} />
     </PageShell>
   );
 }

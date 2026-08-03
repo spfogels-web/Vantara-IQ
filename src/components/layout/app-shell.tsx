@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { usePathname } from "next/navigation";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, useSidebar } from "@/components/layout/sidebar-context";
@@ -43,6 +44,18 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+
+  // Public, external-facing routes (e.g. subcontractor onboarding) render
+  // full-bleed — no internal sidebar, topbar or command palette.
+  if (pathname?.startsWith("/invite")) {
+    return (
+      <TooltipProvider delayDuration={300} skipDelayDuration={200}>
+        <div className="aurora relative min-h-svh">{children}</div>
+      </TooltipProvider>
+    );
+  }
+
   return (
     <TooltipProvider delayDuration={300} skipDelayDuration={200}>
       <SidebarProvider>

@@ -15,11 +15,12 @@ import {
 
 import { cn } from "@/lib/utils";
 import { toneStyles } from "@/lib/tone";
-import type { ComplianceStatus, Subcontractor } from "@/lib/types";
+import type { ComplianceStatus, Project, Subcontractor } from "@/lib/types";
 import { formatNumber, formatPercent, initials } from "@/lib/format";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { StatusPill } from "@/components/common/status-pill";
 import { Button } from "@/components/ui/button";
+import { InviteDialog } from "@/components/subcontractors/invite-dialog";
 
 const complianceTone: Record<ComplianceStatus, "success" | "warning" | "critical" | "neutral"> = {
   valid: "success",
@@ -35,9 +36,22 @@ const complianceLabel: Record<ComplianceStatus, string> = {
   missing: "Missing",
 };
 
-export function SubcontractorsView({ subs }: { subs: Subcontractor[] }) {
+export function SubcontractorsView({
+  subs,
+  projects,
+}: {
+  subs: Subcontractor[];
+  projects: Project[];
+}) {
   const [query, setQuery] = React.useState("");
   const [selectedId, setSelectedId] = React.useState(subs[0]?.id ?? null);
+  const [inviteOpen, setInviteOpen] = React.useState(false);
+  const [inviteCompany, setInviteCompany] = React.useState<string | undefined>();
+
+  function openInvite(company?: string) {
+    setInviteCompany(company);
+    setInviteOpen(true);
+  }
 
   const filtered = React.useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -57,7 +71,11 @@ export function SubcontractorsView({ subs }: { subs: Subcontractor[] }) {
       <div className="lg:col-span-5 xl:col-span-4">
         <Panel>
           <PanelHeader title="Subcontractors" count={filtered.length} icon={<ShieldCheck className="size-3.5" />}>
-            <Button size="sm" className="h-8 gap-1.5 rounded-lg bg-brand px-2.5 text-[12px] font-semibold text-white hover:bg-brand-bright">
+            <Button
+              size="sm"
+              onClick={() => openInvite()}
+              className="h-8 gap-1.5 rounded-lg bg-brand px-2.5 text-[12px] font-semibold text-white hover:bg-brand-bright"
+            >
               <UserPlus className="size-3.5" /> Invite
             </Button>
           </PanelHeader>
@@ -105,13 +123,20 @@ export function SubcontractorsView({ subs }: { subs: Subcontractor[] }) {
       </div>
 
       <div className="lg:col-span-7 xl:col-span-8">
-        {selected ? <SubDetail sub={selected} /> : null}
+        {selected ? <SubDetail sub={selected} onInvite={() => openInvite(selected.company)} /> : null}
       </div>
+
+      <InviteDialog
+        open={inviteOpen}
+        onOpenChange={setInviteOpen}
+        projects={projects}
+        company={inviteCompany}
+      />
     </div>
   );
 }
 
-function SubDetail({ sub: s }: { sub: Subcontractor }) {
+function SubDetail({ sub: s, onInvite }: { sub: Subcontractor; onInvite: () => void }) {
   const sc = s.scorecard;
   const active = s.state === "Active";
 
@@ -198,7 +223,12 @@ function SubDetail({ sub: s }: { sub: Subcontractor }) {
                 ))}
               </ul>
             )}
-            <Button variant="outline" size="sm" className="mt-3 h-8 w-full rounded-lg border-foreground/[0.08] bg-foreground/[0.03] text-[12px] text-muted-foreground hover:text-foreground">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onInvite}
+              className="mt-3 h-8 w-full rounded-lg border-foreground/[0.08] bg-foreground/[0.03] text-[12px] text-muted-foreground hover:text-foreground"
+            >
               Assign to project
             </Button>
           </PanelBody>
