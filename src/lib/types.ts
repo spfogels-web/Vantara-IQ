@@ -183,3 +183,205 @@ export interface Organization {
     role: string;
   };
 }
+
+/* ------------------------------------------------------------------ *
+ * Customers — every customer carries its own billing identity: rate
+ * sheet, unit codes, minimums, retainage and invoice format. The
+ * billing engine reads these rules rather than hardcoding anything.
+ * ------------------------------------------------------------------ */
+
+export interface CustomerContact {
+  name: string;
+  title: string;
+  email: string;
+  phone: string;
+  primary: boolean;
+}
+
+export interface RateSheetItem {
+  /** Unit code as it appears on the daily / invoice (e.g. "BDD", "BM6"). */
+  code: string;
+  description: string;
+  unit: "ft" | "ea" | "hr" | "ls";
+  rate: number;
+}
+
+export interface Customer {
+  id: string;
+  name: string;
+  /** Short code used on POs and invoices. */
+  shortCode: string;
+  industry: "Telecom" | "Power" | "Water" | "Gas";
+  tone: Tone;
+  status: "Active" | "Prospect" | "Inactive";
+  logoTint: Tone;
+  location: string;
+  contacts: CustomerContact[];
+  billingEmail: string;
+  paymentTerms: string;
+  retainagePct: number;
+  invoiceMinimum: number;
+  activeProjects: number;
+  contractValue: number;
+  billedToDate: number;
+  openAr: number;
+  avgDaysToPay: number;
+  rateSheet: RateSheetItem[];
+  notes: string;
+  since: string;
+}
+
+/* ------------------------------------------------------------------ *
+ * Subcontractors — the contractor portal side. Compliance docs,
+ * banking, equipment and a running performance scorecard.
+ * ------------------------------------------------------------------ */
+
+export type ComplianceStatus = "valid" | "expiring" | "expired" | "missing";
+
+export interface ComplianceDoc {
+  label: string;
+  status: ComplianceStatus;
+  /** Human date or "—" when not on file. */
+  expires: string;
+  daysOut: number | null;
+}
+
+export interface SubScorecard {
+  rating: number;
+  projectsCompleted: number;
+  avgApprovalDays: number;
+  avgDailyFt: number;
+  docAccuracy: number;
+  safetyIncidents: number;
+  disputes: number;
+  avgProductionPct: number;
+}
+
+export interface Subcontractor {
+  id: string;
+  company: string;
+  lead: string;
+  email: string;
+  phone: string;
+  location: string;
+  trades: string[];
+  state: "Active" | "Onboarding" | "Invited" | "Inactive";
+  tone: Tone;
+  assignedProjects: string[];
+  compliance: ComplianceDoc[];
+  complianceTone: Tone;
+  scorecard: SubScorecard;
+  crewSize: number;
+  since: string;
+}
+
+/* ------------------------------------------------------------------ *
+ * Dailies — the digital version of the paper daily billing sheet.
+ * ------------------------------------------------------------------ */
+
+export type DailyStatus = "Submitted" | "In review" | "Approved" | "Flagged" | "Draft";
+
+export interface DailyLineItem {
+  location: string;
+  code: string;
+  quantity: number;
+  unit: "ft" | "ea";
+}
+
+export interface DailyFlag {
+  tone: Tone;
+  message: string;
+}
+
+export interface DailyReport {
+  id: string;
+  sheetNumber: string;
+  project: string;
+  projectId: string;
+  customer: string;
+  subcontractor: string;
+  crew: string;
+  workDate: string;
+  submittedAt: string;
+  status: DailyStatus;
+  tone: Tone;
+  totalFt: number;
+  billableAmount: number;
+  lineItems: DailyLineItem[];
+  photos: number;
+  hasAsBuilt: boolean;
+  hasBoreLog: boolean;
+  flags: DailyFlag[];
+}
+
+/* ------------------------------------------------------------------ *
+ * Materials — every reel, vault, ped and marker tracked to a project.
+ * ------------------------------------------------------------------ */
+
+export interface Material {
+  id: string;
+  item: string;
+  category: "Fiber" | "Conduit" | "Structures" | "Hardware";
+  unit: "ft" | "ea";
+  issued: number;
+  installed: number;
+  onHand: number;
+  reelNumber: string;
+  project: string;
+  tone: Tone;
+}
+
+/* ------------------------------------------------------------------ *
+ * Billing + subcontractor pay.
+ * ------------------------------------------------------------------ */
+
+export type InvoiceStatus =
+  | "Ready to bill"
+  | "Submitted"
+  | "Approved"
+  | "Paid"
+  | "Past due";
+
+export interface Invoice {
+  id: string;
+  number: string;
+  customer: string;
+  project: string;
+  amount: number;
+  status: InvoiceStatus;
+  tone: Tone;
+  issued: string;
+  due: string;
+  daysOut: number;
+  backupReady: boolean;
+}
+
+export type PayAppStatus =
+  | "Pending review"
+  | "Approved"
+  | "Scheduled"
+  | "Paid"
+  | "Held";
+
+export interface PayApplication {
+  id: string;
+  number: string;
+  subcontractor: string;
+  project: string;
+  period: string;
+  amount: number;
+  retainage: number;
+  status: PayAppStatus;
+  tone: Tone;
+  submitted: string;
+  fastPayEligible: boolean;
+}
+
+export interface ReportDefinition {
+  id: string;
+  title: string;
+  description: string;
+  category: "Production" | "Financial" | "Compliance" | "Customer";
+  icon: IconKey;
+  cadence: string;
+}

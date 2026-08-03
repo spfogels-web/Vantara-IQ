@@ -3,28 +3,42 @@ import "server-only";
 import {
   brief,
   crews,
+  customers,
+  dailies,
   deadlines,
   healthSummary,
+  invoices,
   kpis,
+  materials,
   missingDocuments,
   notifications,
   organization,
+  payApplications,
   productionSummary,
   projects,
+  reportDefinitions,
   revenueSummary,
+  subcontractors,
 } from "@/data/mock";
 import type {
   AppNotification,
   BriefItem,
   Crew,
+  Customer,
+  DailyReport,
   Deadline,
   HealthSummary,
+  Invoice,
   Kpi,
+  Material,
   MissingDocument,
   Organization,
+  PayApplication,
   ProductionSummary,
   Project,
+  ReportDefinition,
   RevenueSummary,
+  Subcontractor,
 } from "@/lib/types";
 
 /**
@@ -111,4 +125,60 @@ export async function getMissingDocuments(): Promise<MissingDocument[]> {
 export async function getNotifications(): Promise<AppNotification[]> {
   await delay(LATENCY.notifications);
   return notifications;
+}
+
+/* ---- Directory + module accessors ---------------------------------- *
+ * Same seam, same shape: async in, plain data out. When the database
+ * lands, only these bodies change.
+ * -------------------------------------------------------------------- */
+
+export async function getCustomers(): Promise<Customer[]> {
+  await delay(LATENCY.projects);
+  return customers;
+}
+
+export async function getCustomer(id: string): Promise<Customer | undefined> {
+  await delay(LATENCY.projects);
+  return customers.find((c) => c.id === id);
+}
+
+/** Every project, worst-health first — the directory doubles as a triage queue. */
+export async function getProjects(): Promise<Project[]> {
+  await delay(LATENCY.projects);
+  return [...projects].sort((a, b) => a.health - b.health);
+}
+
+export async function getProject(id: string): Promise<Project | undefined> {
+  await delay(LATENCY.projects);
+  return projects.find((p) => p.id === id);
+}
+
+export async function getSubcontractors(): Promise<Subcontractor[]> {
+  await delay(LATENCY.crews);
+  return subcontractors;
+}
+
+export async function getDailies(): Promise<DailyReport[]> {
+  await delay(LATENCY.documents);
+  return dailies;
+}
+
+export async function getMaterials(): Promise<Material[]> {
+  await delay(LATENCY.production);
+  return materials;
+}
+
+export async function getInvoices(): Promise<Invoice[]> {
+  await delay(LATENCY.revenue);
+  return invoices;
+}
+
+export async function getPayApplications(): Promise<PayApplication[]> {
+  await delay(LATENCY.revenue);
+  return payApplications;
+}
+
+export async function getReportDefinitions(): Promise<ReportDefinition[]> {
+  await delay(LATENCY.brief);
+  return reportDefinitions;
 }
