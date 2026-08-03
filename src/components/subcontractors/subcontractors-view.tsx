@@ -3,8 +3,10 @@
 import * as React from "react";
 import {
   BadgeCheck,
+  Check,
   FolderKanban,
   HardHat,
+  Lock,
   Mail,
   MapPin,
   Phone,
@@ -13,6 +15,7 @@ import {
   Star,
   UserPlus,
   Wrench,
+  X,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -38,6 +41,26 @@ const complianceLabel: Record<ComplianceStatus, string> = {
   expired: "Expired",
   missing: "Missing",
 };
+
+/**
+ * Work-eligibility gate. A subcontractor cannot be assigned a project — and so
+ * cannot receive dailies or perform any work — until every required onboarding
+ * item is satisfied AND Fortitude has approved the account. This is the single
+ * source of truth the assignment action reads from.
+ */
+function workReadiness(s: Subcontractor) {
+  const items = [
+    // Each required compliance doc: present and not lapsed.
+    ...s.compliance.map((d) => ({
+      label: d.label,
+      ok: d.status === "valid" || d.status === "expiring",
+    })),
+    { label: "Capabilities statement (crews & equipment)", ok: s.equipment.length > 0 },
+    { label: "Fortitude review & approval", ok: s.state === "Active" },
+  ];
+  const outstanding = items.filter((i) => !i.ok);
+  return { items, outstanding, eligible: outstanding.length === 0 };
+}
 
 export function SubcontractorsView({
   subs,
@@ -142,6 +165,7 @@ export function SubcontractorsView({
 function SubDetail({ sub: s, onInvite }: { sub: Subcontractor; onInvite: () => void }) {
   const sc = s.scorecard;
   const active = s.state === "Active";
+  const gate = workReadiness(s);
 
   return (
     <div className="flex flex-col gap-3">
@@ -179,6 +203,60 @@ function SubDetail({ sub: s, onInvite }: { sub: Subcontractor; onInvite: () => v
               <Phone className="size-3.5" /> {s.phone}
             </a>
           </div>
+        </PanelBody>
+      </Panel>
+
+      {/* Work-eligibility gate — must pass before this crew can be given work */}
+      <Panel
+        className={cn(
+          gate.eligible ? "ring-1 ring-inset ring-success/25" : "ring-1 ring-inset ring-warning/25",
+        )}
+      >
+        <PanelBody className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            <span
+              className={cn(
+                "grid size-9 shrink-0 place-items-center rounded-xl",
+                gate.eligible ? "bg-success/12 text-success" : "bg-warning/12 text-warning",
+              )}
+            >
+              {gate.eligible ? <ShieldCheck className="size-5" /> : <Lock className="size-5" />}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[13.5px] font-semibold text-foreground">
+                {gate.eligible
+                  ? "Eligible to receive dailies"
+                  : `Not eligible — ${gate.outstanding.length} item${gate.outstanding.length > 1 ? "s" : ""} outstanding`}
+              </p>
+              <p className="text-[11.5px] text-muted-foreground">
+                {gate.eligible
+                  ? "Onboarding complete and approved. This crew can be assigned to projects and submit production."
+                  : "This crew cannot be assigned a project or submit dailies until every item below is complete and Fortitude-approved."}
+              </p>
+            </div>
+            <StatusPill
+              label={gate.eligible ? "Cleared for work" : "Blocked"}
+              tone={gate.eligible ? "success" : "warning"}
+            />
+          </div>
+
+          <ul className="grid grid-cols-1 gap-x-4 gap-y-1.5 sm:grid-cols-2">
+            {gate.items.map((it) => (
+              <li key={it.label} className="flex items-center gap-2 text-[12px]">
+                <span
+                  className={cn(
+                    "grid size-4 shrink-0 place-items-center rounded-full",
+                    it.ok ? "bg-success/15 text-success" : "bg-critical/15 text-critical",
+                  )}
+                >
+                  {it.ok ? <Check className="size-3" /> : <X className="size-3" />}
+                </span>
+                <span className={it.ok ? "text-muted-foreground" : "font-medium text-foreground"}>
+                  {it.label}
+                </span>
+              </li>
+            ))}
+          </ul>
         </PanelBody>
       </Panel>
 
@@ -228,10 +306,23 @@ function SubDetail({ sub: s, onInvite }: { sub: Subcontractor; onInvite: () => v
               variant="outline"
               size="sm"
               onClick={onInvite}
-              className="mt-3 h-8 w-full rounded-lg border-foreground/[0.08] bg-foreground/[0.03] text-[12px] text-muted-foreground hover:text-foreground"
+              disabled={!gate.eligible}
+              title={gate.eligible ? undefined : "Complete onboarding before assigning work"}
+              className="mt-3 h-8 w-full gap-1.5 rounded-lg border-foreground/[0.08] bg-foreground/[0.03] text-[12px] text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Assign to project
+              {gate.eligible ? (
+                "Assign to project"
+              ) : (
+                <>
+                  <Lock className="size-3.5" /> Assign to project
+                </>
+              )}
             </Button>
+            {!gate.eligible ? (
+              <p className="mt-1.5 text-center text-[10.5px] text-warning">
+                Blocked until onboarding is complete &amp; approved
+              </p>
+            ) : null}
           </PanelBody>
         </Panel>
       </div>
