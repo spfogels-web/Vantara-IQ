@@ -19,6 +19,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { saveDailySheet, submitDailySheet, type SheetPayload } from "@/app/actions";
+import { SheetPhotos, parsePhotos, type SheetPhoto } from "@/components/dailies/sheet-photos";
 import { isPdfUrl } from "@/components/projects/project-detail-client";
 import {
   MapMarkupEditor,
@@ -284,6 +285,7 @@ export function DailyBillingSheet({
   const [notes, setNotes] = React.useState<string>(
     typeof saved?.notes === "string" ? saved.notes : "",
   );
+  const [photos, setPhotos] = React.useState<SheetPhoto[]>(() => parsePhotos(saved?.photos));
 
   const payload = React.useCallback(
     (): SheetPayload => ({
@@ -299,8 +301,9 @@ export function DailyBillingSheet({
       matRows: mat,
       redlines,
       notes,
+      photos,
     }),
-    [sheetId, project, header, laborCodes, labor, matCodes, mat, redlines, notes],
+    [sheetId, project, header, laborCodes, labor, matCodes, mat, redlines, notes, photos],
   );
 
   async function save() {
@@ -896,6 +899,11 @@ export function DailyBillingSheet({
               className="w-full resize-y bg-transparent px-3 py-2.5 text-[12.5px] text-foreground placeholder:text-muted-foreground/60 focus:outline-none print:text-[10px] print:placeholder:text-transparent"
             />
           </div>
+
+          {/* ── Field photos ────────────────────────────────────── */}
+          {project ? (
+            <SheetPhotos projectId={project.id} photos={photos} onChange={setPhotos} />
+          ) : null}
 
           {/* ── Job map + as-built redline ───────────────────────── */}
           {project ? (
