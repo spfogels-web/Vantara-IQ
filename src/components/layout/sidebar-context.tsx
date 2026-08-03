@@ -53,7 +53,8 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
   // ⌘/Ctrl + B — the convention Linear, VS Code and Notion all share.
   React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key.toLowerCase() === "b" && (event.metaKey || event.ctrlKey)) {
+      // Autofill and IME composition fire keydown with no `key` — guard it.
+      if (event.key?.toLowerCase() === "b" && (event.metaKey || event.ctrlKey)) {
         event.preventDefault();
         toggle();
       }

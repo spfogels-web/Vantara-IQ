@@ -55,7 +55,8 @@ export function CommandMenuProvider({ children }: { children: React.ReactNode })
 
   React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey)) {
+      // Autofill and IME composition fire keydown with no `key` — guard it.
+      if (event.key?.toLowerCase() === "k" && (event.metaKey || event.ctrlKey)) {
         event.preventDefault();
         setOpen((prev) => !prev);
       }
