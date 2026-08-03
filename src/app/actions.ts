@@ -810,11 +810,11 @@ async function runMaterialExtraction(projectId: string, file: File) {
     return { ok: true as const, id: imp.id, count: result.rows.length, summary: result.summary };
   } catch (e) {
     const error = e instanceof Error ? e.message : "Extraction failed";
-    await prisma.rateImport.update({
-      where: { id: imp.id },
-      data: { status: "FAILED", error },
-    });
-    return { ok: false as const, error, id: imp.id };
+    // A failed extraction has no rows and nothing to review — leaving it behind
+    // just litters the project panel with dead entries. Drop it and surface the
+    // error to the caller instead.
+    await prisma.rateImport.delete({ where: { id: imp.id } }).catch(() => {});
+    return { ok: false as const, error };
   }
 }
 
@@ -934,6 +934,122 @@ export async function deleteProjectMaterial(id: string) {
   const row = await prisma.projectMaterial.delete({ where: { id } });
   revalidatePath(`/projects/${row.projectId}`);
   revalidatePath("/materials");
+  return { ok: true as const };
+}
+
+/* ------------------------------------------------------------------ *
+ * Daily billing sheets — the Globe-style paper form, saved.
+ * ------------------------------------------------------------------ */
+
+export type SheetPayload = {
+  id?: string;
+  projectId?: string | null;
+  projectName: string;
+  workDate: string;
+  crewNumber: string;
+  header: unknown;
+  laborCodes: unknown;
+  laborRows: unknown;
+  matCodes: unknown;
+  matRows: unknown;
+  redlines: unknown;
+};
+
+const asJson = (v: unknown) => (v ?? null) as Prisma.InputJsonValue;
+
+/** Save (or update) a sheet as a draft. Called on demand and by autosave. */
+export async function saveDailySheet(input: SheetPayload) {
+  const data = {
+    projectId: input.projectId || null,
+    projectName: input.projectName,
+    workDate: input.workDate,
+    crewNumber: input.crewNumber,
+    header: asJson(input.header),
+    laborCodes: asJson(input.laborCodes),
+    laborRows: asJson(input.laborRows),
+    matCodes: asJson(input.matCodes),
+    matRows: asJson(input.matRows),
+    redlines: asJson(input.redlines),
+  };
+
+  const sheet = input.id
+    ? await prisma.dailySheet.update({ where: { id: input.id }, data })
+    : await prisma.dailySheet.create({ data });
+
+  return { ok: true as const, id: sheet.id, savedAt: sheet.updatedAt.toISOString() };
+}
+
+/**
+ * Submit a sheet. Beyond flipping status, this is what turns a filled-in form
+ * into data the rest of the app can use: the production grid collapses into
+ * Daily line items keyed by unit code, which is exactly what material
+ * draw-down and billing read.
+ */
+export async function submitDailySheet(input: SheetPayload) {
+  const saved = await saveDailySheet(input);
+  const sheet = await prisma.dailySheet.findUnique({ where: { id: saved.id } });
+  if (!sheet) return { ok: false as const, error: "Sheet not found after save." };
+
+  // Grid -> line items. Each production row carries a quantity per unit-code
+  // column; a code with no quantity in a row simply isn't billed on that row.
+  const codes = (Array.isArray(sheet.laborCodes) ? sheet.laborCodes : []) as string[];
+  const rows = (Array.isArray(sheet.laborRows) ? sheet.laborRows : []) as {
+    location?: string;
+    cells?: string[];
+  }[];
+
+  const lineItems: { location: string; code: string; quantity: number; unit: string }[] = [];
+  for (const row of rows) {
+    codes.forEach((code, col) => {
+      const trimmed = (code ?? "").trim();
+      if (!trimmed) return;
+      const qty = Number.parseFloat(row.cells?.[col] ?? "");
+      if (!Number.isFinite(qty) || qty === 0) return;
+      lineItems.push({
+        location: (row.location ?? "").trim(),
+        code: trimmed,
+        quantity: qty,
+        unit: "ea",
+      });
+    });
+  }
+
+  if (lineItems.length === 0) {
+    return { ok: false as const, error: "Nothing to submit — enter a unit code and a quantity first." };
+  }
+
+  const header = (sheet.header ?? {}) as Record<string, unknown>;
+  const str = (k: string) => (typeof header[k] === "string" ? (header[k] as string) : "");
+
+  const daily = await prisma.daily.create({
+    data: {
+      sheetNumber: str("exchange") || str("projectNumber"),
+      projectId: sheet.projectId,
+      projectName: sheet.projectName,
+      customer: str("customer"),
+      crew: sheet.crewNumber,
+      workDate: sheet.workDate,
+      submittedAt: new Date().toISOString(),
+      status: "Submitted",
+      tone: "info",
+      totalFt: Math.round(lineItems.reduce((s, l) => s + l.quantity, 0)),
+      lineItems: lineItems as unknown as Prisma.InputJsonValue,
+    },
+  });
+
+  await prisma.dailySheet.update({
+    where: { id: sheet.id },
+    data: { status: "SUBMITTED", dailyId: daily.id },
+  });
+
+  revalidatePath("/dailies");
+  if (sheet.projectId) revalidatePath(`/projects/${sheet.projectId}`);
+  return { ok: true as const, id: sheet.id, dailyId: daily.id, lines: lineItems.length };
+}
+
+export async function deleteDailySheet(id: string) {
+  await prisma.dailySheet.delete({ where: { id } });
+  revalidatePath("/dailies");
   return { ok: true as const };
 }
 

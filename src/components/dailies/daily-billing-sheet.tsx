@@ -2,10 +2,23 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { ArrowLeft, Map as MapIcon, Pencil, Plus, Printer, RotateCcw, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import {
+  ArrowLeft,
+  Check,
+  Loader2,
+  Map as MapIcon,
+  Pencil,
+  Plus,
+  Printer,
+  RotateCcw,
+  Save,
+  Trash2,
+} from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { saveDailySheet, submitDailySheet, type SheetPayload } from "@/app/actions";
 import { isPdfUrl } from "@/components/projects/project-detail-client";
 import {
   MapMarkupEditor,
@@ -165,7 +178,14 @@ function Field({
   );
 }
 
-export function DailyBillingSheet({ project }: { project?: SheetProject }) {
+export function DailyBillingSheet({
+  project,
+  initialSheetId,
+}: {
+  project?: SheetProject;
+  /** Set when reopening a saved draft, so saves update rather than duplicate. */
+  initialSheetId?: string;
+}) {
   const [header, setHeader] = React.useState<SheetHeader>(() => blankHeader(project));
   const [labor, setLabor] = React.useState<LaborRow[]>(() =>
     Array.from({ length: LABOR_ROWS }, blankLaborRow),
@@ -179,6 +199,58 @@ export function DailyBillingSheet({ project }: { project?: SheetProject }) {
   const [redlines, setRedlines] = React.useState<Shape[]>(() => parseShapes(project?.markups));
   const [redlining, setRedlining] = React.useState(false);
   const mapUrl = project?.mapUrl ?? null;
+
+  const router = useRouter();
+  const [sheetId, setSheetId] = React.useState<string | undefined>(initialSheetId);
+  const [saving, setSaving] = React.useState(false);
+  const [submitting, setSubmitting] = React.useState(false);
+  const [savedAt, setSavedAt] = React.useState<string | null>(null);
+  const [saveError, setSaveError] = React.useState<string | null>(null);
+
+  const payload = React.useCallback(
+    (): SheetPayload => ({
+      id: sheetId,
+      projectId: project?.id ?? null,
+      projectName: project?.name ?? header.jobName,
+      workDate: header.dateWorked,
+      crewNumber: header.crewNumber,
+      header,
+      laborCodes,
+      laborRows: labor,
+      matCodes,
+      matRows: mat,
+      redlines,
+    }),
+    [sheetId, project, header, laborCodes, labor, matCodes, mat, redlines],
+  );
+
+  async function save() {
+    if (saving || submitting) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const res = await saveDailySheet(payload());
+      setSheetId(res.id);
+      setSavedAt(new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
+    } catch {
+      setSaveError("Couldn't save. Check your connection and try again.");
+    }
+    setSaving(false);
+  }
+
+  async function submit() {
+    if (saving || submitting) return;
+    setSubmitting(true);
+    setSaveError(null);
+    const res = await submitDailySheet(payload());
+    setSubmitting(false);
+    if (res.ok) {
+      setSheetId(res.id);
+      router.push("/dailies");
+    } else {
+      setSaveError(res.error);
+    }
+  }
 
   const set = <K extends keyof SheetHeader>(key: K, value: SheetHeader[K]) =>
     setHeader((h) => ({ ...h, [key]: value }));
@@ -238,12 +310,44 @@ export function DailyBillingSheet({ project }: { project?: SheetProject }) {
             type="button"
             size="sm"
             onClick={() => window.print()}
-            className="h-8 gap-1.5 rounded-lg bg-brand px-2.5 text-[12px] font-semibold text-white hover:bg-brand-bright"
+            className="h-8 gap-1.5 rounded-lg border border-border bg-transparent px-2.5 text-[12px] font-medium text-muted-foreground hover:text-foreground"
           >
             <Printer className="size-3.5" /> Print
           </Button>
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => void save()}
+            disabled={saving || submitting}
+            className="h-8 gap-1.5 rounded-lg border border-border bg-transparent px-2.5 text-[12px] font-medium text-foreground hover:bg-foreground/[0.05] disabled:opacity-50"
+          >
+            {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
+            {sheetId ? "Save draft" : "Save"}
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => void submit()}
+            disabled={saving || submitting}
+            className="h-8 gap-1.5 rounded-lg bg-brand px-2.5 text-[12px] font-semibold text-white hover:bg-brand-bright disabled:opacity-50"
+          >
+            {submitting ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
+            Submit
+          </Button>
         </div>
       </div>
+
+      {/* Save state — screen only */}
+      {saveError || savedAt ? (
+        <p
+          className={cn(
+            "text-[11.5px] print:hidden",
+            saveError ? "text-critical" : "text-muted-foreground",
+          )}
+        >
+          {saveError ?? `Draft saved ${savedAt}. Submitting turns the grid into billable line items.`}
+        </p>
+      ) : null}
 
       <div className="sheet-page overflow-x-auto rounded-xl border border-border bg-background print:overflow-visible print:rounded-none print:border-0">
         <div className="min-w-[1180px] print:min-w-0">

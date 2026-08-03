@@ -137,7 +137,39 @@ model Project {
   dailies          Daily[]
   materials        ProjectMaterial[]
   materialImports  RateImport[]
+  sheets           DailySheet[]
   createdAt        DateTime  @default(now())
+}
+
+/// A saved Globe-style subcontractor daily billing sheet. The grids are stored
+/// as JSON because the sheet is a document — its shape is the paper form's, not
+/// a schema we want to migrate every time a column moves. Submitting one also
+/// writes a Daily, which is what billing and material draw-down read.
+model DailySheet {
+  id            String   @id @default(cuid())
+  project       Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  projectId     String?
+  /// Denormalised so a sheet still reads correctly if the project is renamed.
+  projectName   String   @default("")
+  workDate      String   @default("")
+  crewNumber    String   @default("")
+  /// Header block: exchange/WO number, customer, job name, crew names, sign-offs.
+  header        Json     @default("{}")
+  /// Production grid: unit-code columns plus one entry per row.
+  laborCodes    Json     @default("[]")
+  laborRows     Json     @default("[]")
+  /// Material-only section.
+  matCodes      Json     @default("[]")
+  matRows       Json     @default("[]")
+  /// As-built redline drawn over the project map for this day's work.
+  redlines      Json     @default("[]")
+  status        String   @default("DRAFT") // DRAFT | SUBMITTED
+  /// The Daily this sheet produced on submit, if any.
+  dailyId       String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([projectId])
 }
 
 /// Material actually tracked against a project — the thing the ops team manages.
