@@ -15,12 +15,15 @@ export function Sparkline({
   className,
   height = 36,
   showLastDot = true,
+  glow = false,
 }: {
   data: number[];
   color: string;
   className?: string;
   height?: number;
   showLastDot?: boolean;
+  /** Soft coloured glow under the line — used on the KPI cards. */
+  glow?: boolean;
 }) {
   const gradientId = React.useId();
 
@@ -72,7 +75,7 @@ export function Sparkline({
     >
       <defs>
         <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.28" />
+          <stop offset="0%" stopColor={color} stopOpacity="0.34" />
           <stop offset="100%" stopColor={color} stopOpacity="0" />
         </linearGradient>
       </defs>
@@ -81,10 +84,11 @@ export function Sparkline({
         d={line}
         fill="none"
         stroke={color}
-        strokeWidth="1.75"
+        strokeWidth="1.85"
         strokeLinecap="round"
         strokeLinejoin="round"
         vectorEffect="non-scaling-stroke"
+        style={glow ? { filter: `drop-shadow(0 1px 4px ${color}80)` } : undefined}
       />
       {showLastDot ? (
         <circle

@@ -20,6 +20,12 @@
   --vq-red: #ff5a52;
   --vq-violet: #a78bfa;
   --vq-cyan: #22d3ee;
+  --vq-indigo: #6d5cf5;
+
+  /* Signature gradient — electric blue → indigo → violet. Used on brand,
+     active nav, primary CTA and hero accents (sparingly, for premium feel). */
+  --grad-brand: linear-gradient(135deg, #2f80ff 0%, #6d5cf5 52%, #a78bfa 100%);
+  --grad-brand-vivid: linear-gradient(135deg, #2f80ff 0%, #6d5cf5 60%, #b79bff 100%);
 
   /* Core shadcn contract */
   --background: #0b0f14;
@@ -72,16 +78,20 @@
   --sidebar-border: oklch(1 0 0 / 6%);
   --sidebar-ring: #2f80ff;
 
-  /* Elevation — one inset hairline on top, one diffuse drop below */
-  --elev-1: inset 0 1px 0 0 oklch(1 0 0 / 5%), 0 1px 2px 0 rgb(0 0 0 / 40%);
-  --elev-2: inset 0 1px 0 0 oklch(1 0 0 / 6%), 0 8px 24px -12px rgb(0 0 0 / 80%);
-  --elev-3: inset 0 1px 0 0 oklch(1 0 0 / 8%), 0 24px 48px -20px rgb(0 0 0 / 90%);
+  /* Elevation — inset hairline on top, layered diffuse drop below. Deeper and
+     softer than a single shadow so cards feel lifted, not stickered on. */
+  --elev-1: inset 0 1px 0 0 oklch(1 0 0 / 6%), 0 1px 2px -1px rgb(0 0 0 / 50%);
+  --elev-2: inset 0 1px 0 0 oklch(1 0 0 / 7%), 0 2px 6px -3px rgb(0 0 0 / 55%),
+    0 12px 32px -14px rgb(0 0 0 / 70%);
+  --elev-3: inset 0 1px 0 0 oklch(1 0 0 / 9%), 0 8px 20px -10px rgb(0 0 0 / 65%),
+    0 30px 64px -24px rgb(0 0 0 / 88%);
 
   /* Theme-flippable washes. The surface system mixes this colour into the base;
      inline `foreground/α` utilities inherit the same flip automatically. */
-  --surface-1: color-mix(in oklab, #ffffff 2.2%, var(--background));
-  --surface-2: color-mix(in oklab, #ffffff 3.4%, var(--background));
-  --surface-hover-border: oklch(1 0 0 / 12%);
+  --surface-1: color-mix(in oklab, #ffffff 2.6%, var(--background));
+  --surface-2: color-mix(in oklab, #ffffff 4.2%, var(--background));
+  --surface-sheen: oklch(1 0 0 / 5%);
+  --surface-hover-border: oklch(1 0 0 / 14%);
   --scroll-thumb: oklch(1 0 0 / 10%);
   --scroll-thumb-hover: oklch(1 0 0 / 18%);
   --skeleton-base: oklch(1 0 0 / 4%);
@@ -90,8 +100,9 @@
   --gradient-from: #ffffff;
   --gradient-to: #a9b6c8;
   --selection-fg: #ffffff;
-  --aurora-blue: 13%;
-  --aurora-violet: 8%;
+  --aurora-blue: 16%;
+  --aurora-violet: 12%;
+  --aurora-cyan: 7%;
 }
 
 .dark {
@@ -154,6 +165,7 @@
 
   --surface-1: #ffffff;
   --surface-2: #f9fbfd;
+  --surface-sheen: oklch(1 0 0 / 80%);
   --surface-hover-border: oklch(0 0 0 / 14%);
   --scroll-thumb: oklch(0 0 0 / 20%);
   --scroll-thumb-hover: oklch(0 0 0 / 32%);
@@ -163,8 +175,9 @@
   --gradient-from: #0d151f;
   --gradient-to: #4b586a;
   --selection-fg: #04070c;
-  --aurora-blue: 7%;
-  --aurora-violet: 5%;
+  --aurora-blue: 8%;
+  --aurora-violet: 6%;
+  --aurora-cyan: 4%;
 }
 
 @theme inline {
@@ -355,6 +368,9 @@
   /* Standard raised panel. Faint white wash reads as "lifted" without a
      lighter fill colour that would clash against the near-black base. */
   .surface {
+    /* A faint top-down sheen over the base gives cards a lit edge — the detail
+       that separates a premium surface from a flat fill. */
+    background-image: linear-gradient(180deg, var(--surface-sheen), transparent 38%);
     background-color: var(--surface-1);
     border: 1px solid var(--border);
     box-shadow: var(--elev-2);
@@ -374,9 +390,50 @@
 
   /* Frosted layer for sticky chrome (topbar, popovers, command palette) */
   .glass {
-    background-color: color-mix(in oklab, var(--background) 72%, transparent);
-    backdrop-filter: blur(20px) saturate(180%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    background-image: linear-gradient(
+      180deg,
+      color-mix(in oklab, var(--background) 82%, transparent),
+      color-mix(in oklab, var(--background) 66%, transparent)
+    );
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+  }
+
+  /* Signature gradient fill — brand, primary CTA, active nav. */
+  .brand-gradient {
+    background-image: var(--grad-brand);
+    background-color: var(--vq-blue);
+  }
+  .brand-gradient:hover {
+    background-image: var(--grad-brand-vivid);
+  }
+
+  /* Signature gradient clipped to text — hero accents. */
+  .text-brand-gradient {
+    background: var(--grad-brand);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* Soft ambient glow for accented elements. */
+  .glow-brand {
+    box-shadow: 0 8px 30px -10px color-mix(in oklab, var(--vq-indigo) 55%, transparent);
+  }
+
+  /* KPI card lifts and picks up a tone-coloured glow on hover. The accent
+     colour is passed in per-card via the --kpi-accent custom property. */
+  .kpi-card {
+    --kpi-accent: var(--vq-blue);
+    transition:
+      transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
+      box-shadow 280ms ease,
+      border-color 200ms ease;
+  }
+  .kpi-card:hover {
+    box-shadow:
+      var(--elev-2),
+      0 14px 40px -16px color-mix(in oklab, var(--kpi-accent) 50%, transparent);
   }
 
   .hairline-b {
@@ -400,7 +457,8 @@
     font-variant-numeric: tabular-nums;
   }
 
-  /* Ambient brand glow behind the app shell */
+  /* Ambient brand glow behind the app shell — three slow blooms (blue, violet,
+     cyan) that give the immersive theme depth and colour temperature. */
   .aurora::before {
     content: "";
     position: fixed;
@@ -409,15 +467,32 @@
     z-index: 0;
     background:
       radial-gradient(
-        60rem 34rem at 12% -8%,
+        68rem 40rem at 8% -10%,
         color-mix(in oklab, var(--vq-blue) var(--aurora-blue), transparent),
-        transparent 62%
+        transparent 60%
       ),
       radial-gradient(
-        46rem 30rem at 92% -12%,
+        54rem 36rem at 96% -14%,
         color-mix(in oklab, var(--vq-violet) var(--aurora-violet), transparent),
+        transparent 58%
+      ),
+      radial-gradient(
+        48rem 32rem at 60% 116%,
+        color-mix(in oklab, var(--vq-cyan) var(--aurora-cyan), transparent),
         transparent 60%
       );
+    animation: aurora-drift 24s ease-in-out infinite alternate;
+  }
+
+  @keyframes aurora-drift {
+    0% {
+      transform: translate3d(0, 0, 0) scale(1);
+      opacity: 0.9;
+    }
+    100% {
+      transform: translate3d(0, -1.5%, 0) scale(1.06);
+      opacity: 1;
+    }
   }
 
   /* Skeleton sweep — a moving highlight, not a flat opacity pulse */

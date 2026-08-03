@@ -179,7 +179,7 @@ function QuickActions() {
       <DropdownMenuTrigger asChild>
         <Button
           size="sm"
-          className="h-9 gap-1.5 rounded-lg bg-brand px-3 text-[12.5px] font-semibold text-white shadow-[0_4px_14px_-6px_var(--vq-blue)] hover:bg-brand-bright"
+          className="brand-gradient glow-brand h-9 gap-1.5 rounded-lg px-3 text-[12.5px] font-semibold text-white"
         >
           <Plus className="size-4" strokeWidth={2.4} />
           <span className="hidden sm:inline">Create</span>

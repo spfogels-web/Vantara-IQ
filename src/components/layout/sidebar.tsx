@@ -41,14 +41,14 @@ function NavRow({
         "focus-visible:ring-2 focus-visible:ring-ring/60",
         collapsed ? "justify-center px-0" : "px-2.5",
         active
-          ? "bg-foreground/[0.07] text-foreground"
+          ? "bg-brand/[0.1] text-foreground ring-1 ring-inset ring-brand/20"
           : "text-sidebar-foreground hover:bg-foreground/[0.04] hover:text-foreground",
       )}
     >
       {/* Active rail — anchored outside the padding so it hugs the panel edge */}
       <span
         className={cn(
-          "absolute -left-2 top-1/2 h-4 w-[2.5px] -translate-y-1/2 rounded-r-full bg-brand transition-all duration-200",
+          "brand-gradient absolute -left-2 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full transition-all duration-200",
           active ? "opacity-100" : "opacity-0",
         )}
       />
@@ -67,7 +67,7 @@ function NavRow({
               className={cn(
                 "num shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none",
                 active
-                  ? "bg-brand text-white"
+                  ? "brand-gradient text-white"
                   : "bg-foreground/[0.07] text-muted-foreground ring-1 ring-inset ring-foreground/[0.06]",
               )}
             >
