@@ -4,6 +4,7 @@ import * as React from "react";
 import {
   BadgeCheck,
   FolderKanban,
+  HardHat,
   Mail,
   MapPin,
   Phone,
@@ -11,6 +12,7 @@ import {
   ShieldCheck,
   Star,
   UserPlus,
+  Wrench,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -19,6 +21,7 @@ import type { ComplianceStatus, Project, Subcontractor } from "@/lib/types";
 import { formatNumber, formatPercent, initials } from "@/lib/format";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { StatusPill } from "@/components/common/status-pill";
+import { LogoUpload } from "@/components/common/logo-upload";
 import { Button } from "@/components/ui/button";
 import { InviteDialog } from "@/components/subcontractors/invite-dialog";
 
@@ -144,9 +147,7 @@ function SubDetail({ sub: s, onInvite }: { sub: Subcontractor; onInvite: () => v
     <div className="flex flex-col gap-3">
       <Panel>
         <PanelBody className="flex flex-wrap items-start gap-4">
-          <span className="grid size-12 shrink-0 place-items-center rounded-xl bg-foreground/[0.06] text-[14px] font-semibold text-foreground ring-1 ring-inset ring-foreground/[0.06]">
-            {initials(s.company)}
-          </span>
+          <LogoUpload key={s.id} fallback={initials(s.company)} size={52} />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-[17px] font-semibold tracking-[-0.02em] text-foreground">{s.company}</h2>
@@ -234,6 +235,58 @@ function SubDetail({ sub: s, onInvite }: { sub: Subcontractor; onInvite: () => v
           </PanelBody>
         </Panel>
       </div>
+
+      {/* Capabilities statement — required at onboarding */}
+      <Panel>
+        <PanelHeader
+          title="Capabilities & equipment"
+          description="From the required capabilities statement"
+          icon={<Wrench className="size-3.5" />}
+        >
+          <StatusPill
+            label={s.equipment.length > 0 ? "On file" : "Not submitted"}
+            tone={s.equipment.length > 0 ? "success" : "neutral"}
+            dot={s.equipment.length > 0}
+            className="text-[10px]"
+          />
+        </PanelHeader>
+        <PanelBody className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-4 text-[12px] text-muted-foreground">
+            <span className="inline-flex items-center gap-1.5">
+              <HardHat className="size-3.5" /> {s.crewSize} field staff
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <FolderKanban className="size-3.5" /> {s.trades.length} trades
+            </span>
+          </div>
+          <div>
+            <p className="eyebrow mb-1.5">Trades</p>
+            <div className="flex flex-wrap gap-1.5">
+              {s.trades.map((t) => (
+                <span key={t} className="rounded-full bg-brand/10 px-2 py-0.5 text-[11px] font-medium text-brand-bright ring-1 ring-inset ring-brand/20">
+                  {t}
+                </span>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="eyebrow mb-1.5">Equipment</p>
+            {s.equipment.length > 0 ? (
+              <div className="flex flex-wrap gap-1.5">
+                {s.equipment.map((e) => (
+                  <span key={e} className="rounded-full bg-foreground/[0.05] px-2 py-0.5 text-[11px] text-muted-foreground ring-1 ring-inset ring-foreground/[0.06]">
+                    {e}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[12px] text-muted-foreground">
+                Awaiting capabilities statement from onboarding.
+              </p>
+            )}
+          </div>
+        </PanelBody>
+      </Panel>
 
       {/* Scorecard */}
       {active ? (

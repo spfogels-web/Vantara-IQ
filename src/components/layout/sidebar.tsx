@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronsLeft, PanelLeft } from "lucide-react";
+import { ChevronsLeft, MessageSquarePlus, PanelLeft, Settings, UserRound } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { getIcon } from "@/lib/icons";
@@ -12,7 +12,16 @@ import { organization } from "@/data/mock";
 import { initials } from "@/lib/format";
 import type { NavItem } from "@/lib/types";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { VantaraMark, Wordmark } from "@/components/layout/logo";
+import { FeedbackDialog } from "@/components/layout/feedback-dialog";
 import { useSidebar } from "@/components/layout/sidebar-context";
 
 export const SIDEBAR_WIDTH = 264;
@@ -109,6 +118,7 @@ export function SidebarContent({
   showCollapseButton?: boolean;
 }) {
   const { toggle } = useSidebar();
+  const [feedbackOpen, setFeedbackOpen] = React.useState(false);
 
   return (
     <div className="flex h-full flex-col bg-sidebar">
@@ -165,41 +175,78 @@ export function SidebarContent({
         ))}
       </div>
 
-      {/* Org card */}
+      {/* Org card — opens profile / org settings / feedback (Fortitude is the
+          Enterprise pilot user, so feedback is a first-class action here). */}
       <div className={cn("border-t border-sidebar-border p-3", collapsed && "px-0")}>
-        {collapsed ? (
-          <Tooltip>
-            <TooltipTrigger asChild>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            {collapsed ? (
               <button
                 type="button"
+                aria-label={`${organization.name} — account menu`}
                 className="focus-ring mx-auto grid size-8 place-items-center rounded-lg bg-foreground/[0.06] text-[11px] font-semibold text-foreground ring-1 ring-inset ring-foreground/[0.06]"
               >
                 {initials(organization.name)}
               </button>
-            </TooltipTrigger>
-            <TooltipContent side="right" sideOffset={10}>
-              {organization.name} · {organization.plan}
-            </TooltipContent>
-          </Tooltip>
-        ) : (
-          <button
-            type="button"
-            className="focus-ring flex w-full items-center gap-2.5 rounded-lg p-2 text-left transition-colors hover:bg-foreground/[0.05]"
+            ) : (
+              <button
+                type="button"
+                className="focus-ring flex w-full items-center gap-2.5 rounded-lg p-2 text-left transition-colors hover:bg-foreground/[0.05]"
+              >
+                <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-foreground/[0.06] text-[11px] font-semibold ring-1 ring-inset ring-foreground/[0.06]">
+                  {initials(organization.name)}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[12.5px] font-medium text-foreground">
+                    {organization.name}
+                  </span>
+                  <span className="block truncate text-[11px] text-muted-foreground">
+                    {organization.plan} · pilot
+                  </span>
+                </span>
+              </button>
+            )}
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            side="top"
+            align="start"
+            sideOffset={12}
+            className="w-60 rounded-xl border-foreground/[0.08] shadow-elev-3"
           >
-            <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-foreground/[0.06] text-[11px] font-semibold ring-1 ring-inset ring-foreground/[0.06]">
-              {initials(organization.name)}
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[12.5px] font-medium text-foreground">
-                {organization.name}
+            <DropdownMenuLabel className="flex flex-col gap-0.5">
+              <span className="text-[12.5px] font-medium text-foreground">{organization.name}</span>
+              <span className="text-[10.5px] font-normal text-muted-foreground">
+                {organization.plan} plan · pilot account
               </span>
-              <span className="block truncate text-[11px] text-muted-foreground">
-                {organization.plan} plan
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild className="gap-2.5 py-2 text-[12.5px]">
+              <Link href="/settings">
+                <UserRound className="size-4 text-muted-foreground" />
+                Manage profile
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild className="gap-2.5 py-2 text-[12.5px]">
+              <Link href="/settings">
+                <Settings className="size-4 text-muted-foreground" />
+                Organization settings
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => setFeedbackOpen(true)}
+              className="gap-2.5 py-2 text-[12.5px]"
+            >
+              <MessageSquarePlus className="size-4 text-brand-bright" />
+              Give feedback
+              <span className="ml-auto rounded bg-brand/15 px-1.5 py-0.5 text-[10px] font-semibold text-brand-bright">
+                Pilot
               </span>
-            </span>
-          </button>
-        )}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
+
+      <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
     </div>
   );
 }

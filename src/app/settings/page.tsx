@@ -2,9 +2,11 @@
 
 import { getOrganization } from "@/data/queries";
 import { cn } from "@/lib/utils";
+import { initials } from "@/lib/format";
 import { PageShell } from "@/components/common/page-shell";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { StatusPill } from "@/components/common/status-pill";
+import { LogoUpload } from "@/components/common/logo-upload";
 import { Button } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
@@ -46,6 +48,13 @@ export default async function SettingsPage() {
         <Panel>
           <PanelHeader title="Organization" />
           <PanelBody className="flex flex-col gap-2.5">
+            <div className="flex items-center gap-3 border-b border-border/40 pb-3">
+              <LogoUpload fallback={initials(org.name)} size={52} />
+              <div>
+                <p className="text-[14px] font-semibold text-foreground">{org.name}</p>
+                <p className="text-[11.5px] text-muted-foreground">Click the logo to upload your company mark</p>
+              </div>
+            </div>
             <Row label="Company" value={org.name} />
             <Row label="Plan" value={org.plan} />
             <Row label="Primary user" value={org.user.name} />

@@ -899,6 +899,7 @@ export const subcontractors: Subcontractor[] = [
       avgProductionPct: 1.04,
     },
     crewSize: 6,
+    equipment: ["Vermeer D24x40 drill", "Ditch Witch JT20", "Mini excavator", "Vac trailer", "Fiber jetting rig"],
     since: "2021",
   },
   {
@@ -930,6 +931,7 @@ export const subcontractors: Subcontractor[] = [
       avgProductionPct: 0.96,
     },
     crewSize: 4,
+    equipment: ["Vermeer D40x55 drill", "Rock bore tooling", "Vac trailer", "Skid steer"],
     since: "2022",
   },
   {
@@ -961,6 +963,7 @@ export const subcontractors: Subcontractor[] = [
       avgProductionPct: 1.07,
     },
     crewSize: 8,
+    equipment: ["2x Case trenchers", "Excavator (12t)", "Plow rig", "3x dump trailers", "Asphalt saw", "Compaction rollers"],
     since: "2020",
   },
   {
@@ -992,6 +995,7 @@ export const subcontractors: Subcontractor[] = [
       avgProductionPct: 0,
     },
     crewSize: 5,
+    equipment: ["Vermeer D60x90 drill", "Rock drilling head", "Vac trailer", "Excavator (15t)"],
     since: "2026",
   },
   {
@@ -1023,6 +1027,7 @@ export const subcontractors: Subcontractor[] = [
       avgProductionPct: 1.11,
     },
     crewSize: 12,
+    equipment: ["3x directional drills", "2x excavators", "Hydro-excavator", "Fusion machines", "Fiber jetting rigs", "Fleet of service trucks"],
     since: "2019",
   },
   {
@@ -1054,6 +1059,7 @@ export const subcontractors: Subcontractor[] = [
       avgProductionPct: 0,
     },
     crewSize: 3,
+    equipment: ["Potholing vac truck", "Locator wands", "GPR unit"],
     since: "2026",
   },
 ];

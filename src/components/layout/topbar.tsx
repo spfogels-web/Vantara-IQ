@@ -10,6 +10,7 @@ import {
   FolderPlus,
   LogOut,
   Menu,
+  MessageSquarePlus,
   Plus,
   ReceiptText,
   Search,
@@ -40,6 +41,7 @@ import { SidebarContent } from "@/components/layout/sidebar";
 import { useSidebar } from "@/components/layout/sidebar-context";
 import { useCommandMenu } from "@/components/layout/command-menu";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
+import { FeedbackDialog } from "@/components/layout/feedback-dialog";
 import { LiveDot } from "@/components/common/status-pill";
 
 /** Renders ⌘ on Mac, Ctrl elsewhere — resolved after mount to avoid a mismatch. */
@@ -207,8 +209,11 @@ function QuickActions() {
 
 function UserMenu() {
   const { user } = organization;
+  const [feedbackOpen, setFeedbackOpen] = React.useState(false);
 
   return (
+    <>
+    <FeedbackDialog open={feedbackOpen} onOpenChange={setFeedbackOpen} />
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
@@ -240,13 +245,27 @@ function UserMenu() {
           </div>
         </div>
         <DropdownMenuSeparator />
-        <DropdownMenuItem className="gap-2.5 py-2 text-[12.5px]">
-          <UserRound className="size-4 text-muted-foreground" />
-          Profile
+        <DropdownMenuItem asChild className="gap-2.5 py-2 text-[12.5px]">
+          <Link href="/settings">
+            <UserRound className="size-4 text-muted-foreground" />
+            Manage profile
+          </Link>
         </DropdownMenuItem>
-        <DropdownMenuItem className="gap-2.5 py-2 text-[12.5px]">
-          <Settings className="size-4 text-muted-foreground" />
-          Workspace settings
+        <DropdownMenuItem asChild className="gap-2.5 py-2 text-[12.5px]">
+          <Link href="/settings">
+            <Settings className="size-4 text-muted-foreground" />
+            Workspace settings
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onSelect={() => setFeedbackOpen(true)}
+          className="gap-2.5 py-2 text-[12.5px]"
+        >
+          <MessageSquarePlus className="size-4 text-brand-bright" />
+          Give feedback
+          <span className="ml-auto rounded bg-brand/15 px-1.5 py-0.5 text-[10px] font-semibold text-brand-bright">
+            Pilot
+          </span>
         </DropdownMenuItem>
         <DropdownMenuItem className="gap-2.5 py-2 text-[12.5px]">
           <CreditCard className="size-4 text-muted-foreground" />
@@ -262,6 +281,7 @@ function UserMenu() {
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+    </>
   );
 }
 

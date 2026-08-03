@@ -272,6 +272,8 @@ export interface Subcontractor {
   complianceTone: Tone;
   scorecard: SubScorecard;
   crewSize: number;
+  /** From the required capabilities statement submitted at onboarding. */
+  equipment: string[];
   since: string;
 }
 
