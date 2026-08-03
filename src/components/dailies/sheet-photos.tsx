@@ -22,9 +22,11 @@ export type SheetPhoto = {
   /** What the picture is of — this is what makes a wall of photos searchable. */
   structure: string;
   caption: string;
-  /** Camera time, from the file itself. */
-  takenAt: string;
-  /** When it was attached to this sheet. */
+  /**
+   * When it was attached to the sheet. Deliberately not the camera's capture
+   * time: the photo was usually taken hours earlier, and the record that
+   * matters is when it was filed.
+   */
   addedAt: string;
 };
 
@@ -43,7 +45,6 @@ export function parsePhotos(v: unknown): SheetPhoto[] {
         name: typeof p.name === "string" ? p.name : "photo",
         structure: typeof p.structure === "string" ? p.structure : "Other",
         caption: typeof p.caption === "string" ? p.caption : "",
-        takenAt: typeof p.takenAt === "string" ? p.takenAt : "",
         addedAt: typeof p.addedAt === "string" ? p.addedAt : "",
       },
     ];
@@ -65,15 +66,27 @@ export function SheetPhotos({
   projectId,
   photos,
   onChange,
+  /**
+   * A submitted daily is a filed record. Photos can still be added to it —
+   * that is the one allowance — but nothing already on it may be edited or
+   * removed. The server enforces this too; this only keeps the UI honest.
+   */
+  locked = false,
+  lockedIds,
 }: {
   projectId: string;
   photos: SheetPhoto[];
   onChange: (next: SheetPhoto[]) => void;
+  locked?: boolean;
+  /** Photos already filed — untouchable even while newer ones are editable. */
+  lockedIds?: Set<string>;
 }) {
   const pickRef = React.useRef<HTMLInputElement>(null);
   const shootRef = React.useRef<HTMLInputElement>(null);
   const [busy, setBusy] = React.useState(0);
   const [error, setError] = React.useState<string | null>(null);
+
+  const isFiled = (id: string) => Boolean(locked && lockedIds?.has(id));
 
   async function add(files: FileList | null) {
     if (!files?.length) return;
@@ -95,8 +108,6 @@ export function SheetPhotos({
           name: file.name,
           structure: "Ped",
           caption: "",
-          // The camera's own time, not the moment of upload.
-          takenAt: new Date(file.lastModified).toISOString(),
           addedAt: new Date().toISOString(),
         });
       } catch {
@@ -189,10 +200,11 @@ export function SheetPhotos({
                 <div className="flex items-center gap-1.5">
                   <select
                     value={p.structure}
+                    disabled={isFiled(p.id)}
                     onChange={(e) => patch(p.id, { structure: e.target.value })}
                     className={cn(
                       "num h-6 flex-1 rounded border border-border bg-transparent px-1 text-[10.5px] font-semibold uppercase text-brand-bright outline-none",
-                      "print:border-0",
+                      "print:border-0 disabled:border-transparent disabled:opacity-100",
                     )}
                   >
                     {STRUCTURES.map((s) => (
@@ -203,6 +215,7 @@ export function SheetPhotos({
                   </select>
                   <button
                     type="button"
+                    hidden={isFiled(p.id)}
                     onClick={() => onChange(photos.filter((x) => x.id !== p.id))}
                     title="Remove photo"
                     className="focus-ring grid size-6 shrink-0 place-items-center rounded text-muted-foreground/0 transition group-hover/photo:text-muted-foreground hover:!text-critical print:hidden"
@@ -212,12 +225,16 @@ export function SheetPhotos({
                 </div>
                 <input
                   value={p.caption}
+                  readOnly={isFiled(p.id)}
                   onChange={(e) => patch(p.id, { caption: e.target.value })}
-                  placeholder="Location / note"
-                  className="w-full rounded border border-transparent bg-transparent px-1 text-[11px] text-foreground outline-none hover:border-border focus:border-brand/50"
+                  placeholder={isFiled(p.id) ? "" : "Location / note"}
+                  className={cn(
+                    "w-full rounded border border-transparent bg-transparent px-1 text-[11px] text-foreground outline-none",
+                    isFiled(p.id) ? "cursor-default" : "hover:border-border focus:border-brand/50",
+                  )}
                 />
                 <p className="num px-1 text-[10px] text-muted-foreground">
-                  {stamp(p.takenAt) || stamp(p.addedAt)}
+                  {stamp(p.addedAt)}
                 </p>
               </div>
             </li>

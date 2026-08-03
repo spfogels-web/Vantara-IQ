@@ -18,7 +18,12 @@ import {
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { saveDailySheet, submitDailySheet, type SheetPayload } from "@/app/actions";
+import {
+  addSheetPhotos,
+  saveDailySheet,
+  submitDailySheet,
+  type SheetPayload,
+} from "@/app/actions";
 import { SheetPhotos, parsePhotos, type SheetPhoto } from "@/components/dailies/sheet-photos";
 import { isPdfUrl } from "@/components/projects/project-detail-client";
 import {
@@ -287,6 +292,32 @@ export function DailyBillingSheet({
   );
   const [photos, setPhotos] = React.useState<SheetPhoto[]>(() => parsePhotos(saved?.photos));
 
+  /**
+   * A submitted daily is a filed record: the grids, header, notes and redline
+   * are fixed, and the only thing anyone may still add is photographs. The
+   * server refuses everything else regardless of what this component does.
+   */
+  const locked = saved?.status === "SUBMITTED";
+  const filedPhotoIds = React.useMemo(
+    () => new Set(parsePhotos(saved?.photos).map((p) => p.id)),
+    [saved],
+  );
+  const unsavedPhotos = photos.filter((p) => !filedPhotoIds.has(p.id));
+
+  async function saveNewPhotos() {
+    if (!sheetId || unsavedPhotos.length === 0 || saving) return;
+    setSaving(true);
+    setSaveError(null);
+    const res = await addSheetPhotos(sheetId, unsavedPhotos);
+    setSaving(false);
+    if (res.ok) {
+      setSavedAt(new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
+      router.refresh();
+    } else {
+      setSaveError(res.error);
+    }
+  }
+
   const payload = React.useCallback(
     (): SheetPayload => ({
       id: sheetId,
@@ -396,26 +427,44 @@ export function DailyBillingSheet({
           >
             <Printer className="size-3.5" /> Print
           </Button>
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => void save()}
-            disabled={saving || submitting}
-            className="h-8 gap-1.5 rounded-lg border border-border bg-transparent px-2.5 text-[12px] font-medium text-foreground hover:bg-foreground/[0.05] disabled:opacity-50"
-          >
-            {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
-            {sheetId ? "Save draft" : "Save"}
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => void submit()}
-            disabled={saving || submitting}
-            className="h-8 gap-1.5 rounded-lg bg-brand px-2.5 text-[12px] font-semibold text-white hover:bg-brand-bright disabled:opacity-50"
-          >
-            {submitting ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
-            Submit
-          </Button>
+          {locked ? (
+            // Filed record: photos are the only thing still accepted.
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => void saveNewPhotos()}
+              disabled={saving || unsavedPhotos.length === 0}
+              className="h-8 gap-1.5 rounded-lg bg-brand px-2.5 text-[12px] font-semibold text-white hover:bg-brand-bright disabled:opacity-50"
+            >
+              {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
+              {unsavedPhotos.length > 0
+                ? `Attach ${unsavedPhotos.length} photo${unsavedPhotos.length === 1 ? "" : "s"}`
+                : "Photos only"}
+            </Button>
+          ) : (
+            <>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => void save()}
+                disabled={saving || submitting}
+                className="h-8 gap-1.5 rounded-lg border border-border bg-transparent px-2.5 text-[12px] font-medium text-foreground hover:bg-foreground/[0.05] disabled:opacity-50"
+              >
+                {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
+                {sheetId ? "Save draft" : "Save"}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => void submit()}
+                disabled={saving || submitting}
+                className="h-8 gap-1.5 rounded-lg bg-brand px-2.5 text-[12px] font-semibold text-white hover:bg-brand-bright disabled:opacity-50"
+              >
+                {submitting ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
+                Submit
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -431,8 +480,20 @@ export function DailyBillingSheet({
         </p>
       ) : null}
 
-      <div className="sheet-page overflow-x-auto rounded-xl border border-border bg-background print:overflow-visible print:rounded-none print:border-0">
+      {/* A filed daily is read-only. `inert` blocks focus, typing and clicks on
+          everything inside in one stroke, so no individual field has to
+          remember to disable itself. */}
+      <div
+        className={cn(
+          "sheet-page overflow-x-auto rounded-xl border border-border bg-background print:overflow-visible print:rounded-none print:border-0",
+          locked && "select-text",
+        )}
+      >
         <div className="min-w-[1180px] print:min-w-0">
+          {/* Everything except the photo strip is frozen once filed. A disabled
+              fieldset switches off every control inside it in one place, so no
+              individual input has to remember. */}
+          <fieldset disabled={locked} className="contents">
           {/* ── Masthead ─────────────────────────────────────────── */}
           <div className="flex items-end justify-between gap-4 border-b border-border px-3 pb-2 pt-3">
             <div className="flex items-baseline gap-2 text-[11px] text-muted-foreground print:text-[9px]">
@@ -900,11 +961,20 @@ export function DailyBillingSheet({
             />
           </div>
 
-          {/* ── Field photos ────────────────────────────────────── */}
+          </fieldset>
+
+          {/* ── Field photos — the one thing a filed daily still accepts ── */}
           {project ? (
-            <SheetPhotos projectId={project.id} photos={photos} onChange={setPhotos} />
+            <SheetPhotos
+              projectId={project.id}
+              photos={photos}
+              onChange={setPhotos}
+              locked={locked}
+              lockedIds={filedPhotoIds}
+            />
           ) : null}
 
+          <fieldset disabled={locked} className="contents">
           {/* ── Job map + as-built redline ───────────────────────── */}
           {project ? (
             <div className="border-t border-border print:break-before-page">
@@ -959,6 +1029,7 @@ export function DailyBillingSheet({
               )}
             </div>
           ) : null}
+          </fieldset>
         </div>
       </div>
 
