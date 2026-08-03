@@ -901,3 +901,41 @@ export async function getOrganizationLogo(): Promise<string | null> {
   const org = await prisma.organization.findFirst({ select: { logoUrl: true } });
   return org?.logoUrl ?? null;
 }
+
+/** One line under the greeting: how many projects, across how many states. */
+export async function getPortfolioSummary(): Promise<string> {
+  const rows = await prisma.project.findMany({ select: { location: true } });
+  if (rows.length === 0) return "No active projects yet";
+
+  // "Colbert, GA" -> "GA". Anything without a state part is simply not counted.
+  const states = new Set(
+    rows
+      .map((r) => r.location.split(",").pop()?.trim().toUpperCase())
+      .filter((s): s is string => Boolean(s && s.length <= 3)),
+  );
+
+  const projects = `${rows.length} active project${rows.length === 1 ? "" : "s"}`;
+  if (states.size === 0) return projects;
+  return `${projects} across ${states.size} state${states.size === 1 ? "" : "s"}`;
+}
+
+/**
+ * Live counts for the sidebar badges, keyed by href.
+ *
+ * These were hardcoded in the nav config, so they stayed at 2 / 12 / 4 no
+ * matter what the account actually held. A badge that never changes is worse
+ * than no badge — it trains people to ignore it.
+ */
+export async function getNavBadges(): Promise<Record<string, number>> {
+  const [atRisk, awaiting, subsPending] = await Promise.all([
+    prisma.project.count({ where: { tone: { in: ["critical", "warning"] } } }),
+    prisma.daily.count({ where: { status: { in: ["Submitted", "In review"] } } }),
+    prisma.subcontractor.count({ where: { state: "PENDING_REVIEW" } }),
+  ]);
+
+  const badges: Record<string, number> = {};
+  if (atRisk > 0) badges["/projects"] = atRisk;
+  if (awaiting > 0) badges["/dailies"] = awaiting;
+  if (subsPending > 0) badges["/subcontractors"] = subsPending;
+  return badges;
+}

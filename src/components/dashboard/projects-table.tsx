@@ -252,8 +252,8 @@ export function ProjectsTable({ projects }: { projects: Project[] }) {
 
       <PanelFooter className="justify-between">
         <span>
-          Showing <span className="num font-medium text-foreground">{projects.length}</span> of{" "}
-          <span className="num font-medium text-foreground">14</span> active projects
+          Showing <span className="num font-medium text-foreground">{projects.length}</span>{" "}
+          {projects.length === 1 ? "project" : "projects"}
         </span>
         <Link href="/projects" className="focus-ring rounded text-muted-foreground transition-colors hover:text-foreground">
           View all →

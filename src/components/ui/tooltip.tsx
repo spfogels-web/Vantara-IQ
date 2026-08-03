@@ -18,10 +18,27 @@ function TooltipProvider({
   )
 }
 
+/**
+ * Self-providing tooltip.
+ *
+ * Radix requires a Provider above every Root. Relying on one far up in the app
+ * shell breaks when a client component using a tooltip renders inside a
+ * streamed Suspense boundary — the Root can render before that ancestor
+ * context is established, and the whole subtree falls back to client
+ * rendering with "`Tooltip` must be used within `TooltipProvider`".
+ *
+ * Wrapping each Root in its own Provider makes every tooltip correct on its
+ * own. Nested Providers are supported; the only cost is that the shared
+ * skip-delay grouping no longer spans tooltips from different subtrees.
+ */
 function Tooltip({
   ...props
 }: React.ComponentProps<typeof TooltipPrimitive.Root>) {
-  return <TooltipPrimitive.Root data-slot="tooltip" {...props} />
+  return (
+    <TooltipProvider>
+      <TooltipPrimitive.Root data-slot="tooltip" {...props} />
+    </TooltipProvider>
+  )
 }
 
 function TooltipTrigger({

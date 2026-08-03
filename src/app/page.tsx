@@ -10,6 +10,7 @@ import {
   getNotifications,
   getProductionSummary,
   getProductionSplit,
+  getPortfolioSummary,
   getProjectsRequiringAttention,
   getRevenueSummary,
 } from "@/data/queries";
@@ -101,11 +102,14 @@ async function ActivitySection() {
 }
 
 export default async function OperationsCenterPage() {
-  const currentUser = await getCurrentUser();
+  const [currentUser, portfolioSummary] = await Promise.all([
+    getCurrentUser(),
+    getPortfolioSummary(),
+  ]);
 
   return (
     <div className="mx-auto w-full max-w-[1600px] px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
-      <PageHeader name={currentUser?.name} />
+      <PageHeader name={currentUser?.name} summary={portfolioSummary} />
 
       {/* 12-column rhythm: an 8/4 split for the primary rows, 4/4/4 to close.
           Everything collapses to a single column below xl. */}

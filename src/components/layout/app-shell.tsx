@@ -24,10 +24,12 @@ function ShellFrame({
   children,
   user,
   logoUrl,
+  badges,
 }: {
   children: React.ReactNode;
   user: CurrentUser | null;
   logoUrl?: string | null;
+  badges?: Record<string, number>;
 }) {
   const { collapsed } = useSidebar();
   const isDesktop = useIsDesktop();
@@ -36,7 +38,7 @@ function ShellFrame({
 
   return (
     <div className="aurora relative min-h-svh">
-      <DesktopSidebar logoUrl={logoUrl} />
+      <DesktopSidebar logoUrl={logoUrl} badges={badges} />
 
       <div
         className="relative z-10 flex min-h-svh flex-col"
@@ -45,7 +47,7 @@ function ShellFrame({
           transition: "margin-inline-start 260ms cubic-bezier(0.16, 1, 0.3, 1)",
         }}
       >
-        <Topbar user={user} logoUrl={logoUrl} />
+        <Topbar user={user} logoUrl={logoUrl} badges={badges} />
         <main className="flex-1">{children}</main>
       </div>
     </div>
@@ -56,10 +58,12 @@ export function AppShell({
   children,
   user,
   logoUrl,
+  badges,
 }: {
   children: React.ReactNode;
   user: CurrentUser | null;
   logoUrl?: string | null;
+  badges?: Record<string, number>;
 }) {
   const pathname = usePathname();
 
@@ -77,7 +81,7 @@ export function AppShell({
     <TooltipProvider delayDuration={300} skipDelayDuration={200}>
       <SidebarProvider>
         <CommandMenuProvider>
-          <ShellFrame user={user} logoUrl={logoUrl}>{children}</ShellFrame>
+          <ShellFrame user={user} logoUrl={logoUrl} badges={badges}>{children}</ShellFrame>
         </CommandMenuProvider>
       </SidebarProvider>
     </TooltipProvider>

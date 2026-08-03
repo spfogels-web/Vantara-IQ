@@ -113,12 +113,15 @@ export function SidebarContent({
   onNavigate,
   showCollapseButton = true,
   logoUrl,
+  badges,
 }: {
   collapsed: boolean;
   onNavigate?: () => void;
   showCollapseButton?: boolean;
   /** The company mark, once one has been uploaded. */
   logoUrl?: string | null;
+  /** Live counts by href, overriding the static nav config. */
+  badges?: Record<string, number>;
 }) {
   const { toggle } = useSidebar();
   const [feedbackOpen, setFeedbackOpen] = React.useState(false);
@@ -165,7 +168,13 @@ export function SidebarContent({
               <div className="mx-auto mb-2 h-px w-6 bg-foreground/[0.07]" />
             )}
             {section.items.map((item) => (
-              <NavRow key={item.href} item={item} collapsed={collapsed} onNavigate={onNavigate} />
+              // Live count wins over the static config; no count means no badge.
+              <NavRow
+                key={item.href}
+                item={badges ? { ...item, badge: badges[item.href] } : item}
+                collapsed={collapsed}
+                onNavigate={onNavigate}
+              />
             ))}
           </div>
         ))}
@@ -265,7 +274,13 @@ export function SidebarContent({
 }
 
 /** Desktop rail. Hidden below lg — mobile uses the Sheet in the topbar. */
-export function DesktopSidebar({ logoUrl }: { logoUrl?: string | null }) {
+export function DesktopSidebar({
+  logoUrl,
+  badges,
+}: {
+  logoUrl?: string | null;
+  badges?: Record<string, number>;
+}) {
   const { collapsed, toggle } = useSidebar();
 
   return (
@@ -277,7 +292,7 @@ export function DesktopSidebar({ logoUrl }: { logoUrl?: string | null }) {
         transition: "width 260ms cubic-bezier(0.16, 1, 0.3, 1)",
       }}
     >
-      <SidebarContent collapsed={collapsed} logoUrl={logoUrl} />
+      <SidebarContent collapsed={collapsed} logoUrl={logoUrl} badges={badges} />
 
       {/* Expand affordance, only visible while collapsed */}
       {collapsed ? (

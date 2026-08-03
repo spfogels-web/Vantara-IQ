@@ -13,7 +13,7 @@ function greeting(hour: number) {
   return "Good evening";
 }
 
-export function PageHeader({ name }: { name?: string }) {
+export function PageHeader({ name, summary }: { name?: string; summary?: string }) {
   // Rendered after mount so the server and client markup can't disagree about
   // the clock.
   const [now, setNow] = React.useState<Date | null>(null);
@@ -44,8 +44,12 @@ export function PageHeader({ name }: { name?: string }) {
                 })
               : " "}
           </span>
-          <span className="mx-2 text-muted-foreground/40">·</span>
-          14 active projects across 4 states
+          {summary ? (
+            <>
+              <span className="mx-2 text-muted-foreground/40">·</span>
+              {summary}
+            </>
+          ) : null}
         </p>
       </div>
 

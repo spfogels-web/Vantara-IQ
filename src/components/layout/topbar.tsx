@@ -307,7 +307,13 @@ function UserMenu({ user: current }: { user: CurrentUser | null }) {
   );
 }
 
-function MobileNav({ logoUrl }: { logoUrl?: string | null }) {
+function MobileNav({
+  logoUrl,
+  badges,
+}: {
+  logoUrl?: string | null;
+  badges?: Record<string, number>;
+}) {
   const { mobileOpen, setMobileOpen } = useSidebar();
 
   return (
@@ -325,6 +331,7 @@ function MobileNav({ logoUrl }: { logoUrl?: string | null }) {
         <SheetTitle className="sr-only">Navigation</SheetTitle>
         <SidebarContent
           logoUrl={logoUrl}
+          badges={badges}
           collapsed={false}
           showCollapseButton={false}
           onNavigate={() => setMobileOpen(false)}
@@ -334,12 +341,20 @@ function MobileNav({ logoUrl }: { logoUrl?: string | null }) {
   );
 }
 
-export function Topbar({ user, logoUrl }: { user: CurrentUser | null; logoUrl?: string | null }) {
+export function Topbar({
+  user,
+  logoUrl,
+  badges,
+}: {
+  user: CurrentUser | null;
+  logoUrl?: string | null;
+  badges?: Record<string, number>;
+}) {
   const { setOpen: setCommandOpen } = useCommandMenu();
 
   return (
     <header className="glass sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-border px-3 sm:gap-3 sm:px-5">
-      <MobileNav logoUrl={logoUrl} />
+      <MobileNav logoUrl={logoUrl} badges={badges} />
 
       {/* shrink-0 so the search field absorbs the squeeze at tablet widths
           instead of the page title collapsing to an ellipsis. */}
