@@ -11,6 +11,13 @@ import { getCurrentUser } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
+const ROLE_LABEL: Record<string, string> = {
+  ADMIN: "Administrator",
+  PM: "Project manager",
+  OFFICE: "Office",
+  SUBCONTRACTOR: "Subcontractor",
+};
+
 export const metadata = { title: "Settings · Vantara IQ" };
 
 const integrations = [
@@ -69,9 +76,9 @@ export default async function SettingsPage() {
             </div>
             <Row label="Company" value={org.name} />
             <Row label="Plan" value={org.plan} />
-            <Row label="Primary user" value={org.user.name} />
-            <Row label="Email" value={org.user.email} />
-            <Row label="Role" value={org.user.role} />
+            <Row label="Signed in as" value={me?.name ?? "—"} />
+            <Row label="Email" value={me?.email ?? "—"} />
+            <Row label="Role" value={me ? ROLE_LABEL[me.role] ?? me.role : "—"} />
           </PanelBody>
         </Panel>
 
