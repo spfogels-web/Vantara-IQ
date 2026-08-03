@@ -245,7 +245,7 @@ export async function createDaily(input: {
       subcontractor: input.subcontractor || "—",
       crew: input.crew || "—",
       workDate: input.workDate,
-      submittedAt: "Just now",
+      submittedAt: new Date().toISOString(),
       status: "Submitted",
       tone: "info",
       totalFt,

@@ -16,7 +16,7 @@ import {
 import { cn } from "@/lib/utils";
 import { toneStyles } from "@/lib/tone";
 import type { DailyReport, DailyStatus } from "@/lib/types";
-import { formatCurrency, formatFeet, formatNumber } from "@/lib/format";
+import { formatCurrency, formatFeet, formatNumber, formatWhen } from "@/lib/format";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { StatusPill } from "@/components/common/status-pill";
 import { Button } from "@/components/ui/button";
@@ -99,7 +99,7 @@ export function DailiesView({
                     </div>
                     <div className="mt-0.5 flex items-center justify-between text-[10.5px] text-muted-foreground/70">
                       <span className="num">{d.sheetNumber}</span>
-                      <span>{d.submittedAt}</span>
+                      <span>{formatWhen(d.submittedAt)}</span>
                     </div>
                   </button>
                 </li>
@@ -143,7 +143,7 @@ function DailyDetail({
                 {d.customer} · {d.subcontractor} · {d.crew}
               </p>
               <p className="mt-0.5 text-[11.5px] text-muted-foreground/80">
-                Sheet <span className="num">{d.sheetNumber}</span> · Work date {d.workDate} · submitted {d.submittedAt}
+                Sheet <span className="num">{d.sheetNumber}</span> · Work date {d.workDate} · submitted {formatWhen(d.submittedAt)}
               </p>
             </div>
             <div className="text-right">

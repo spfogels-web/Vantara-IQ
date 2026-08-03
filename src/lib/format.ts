@@ -57,6 +57,25 @@ export function formatDaysOut(days: number) {
   return `in ${days} days`;
 }
 
+const whenFmt = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+  timeZone: "America/New_York",
+});
+
+/**
+ * Render a submission timestamp. Real ISO timestamps (from `createDaily`) become
+ * "Aug 3, 1:24 PM ET" — pinned to Eastern so the server and client agree (no
+ * hydration mismatch). Non-date strings (mock "10 min ago") pass through as-is.
+ */
+export function formatWhen(value: string) {
+  const t = Date.parse(value);
+  if (Number.isNaN(t)) return value;
+  return `${whenFmt.format(new Date(t))} ET`;
+}
+
 export function initials(name: string) {
   return name
     .split(" ")
