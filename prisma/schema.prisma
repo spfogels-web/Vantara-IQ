@@ -95,6 +95,8 @@ model Project {
   pctComplete      Int       @default(0)
   crew             String    @default("Unassigned")
   updatedAt        String    @default("")
+  mapUrl           String?
+  mapOriginalUrl   String?
   customer         Customer? @relation(fields: [customerId], references: [id])
   customerId       String?
   dailies          Daily[]

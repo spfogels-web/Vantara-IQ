@@ -1,5 +1,5 @@
 ﻿import Link from "next/link";
-import { AlertTriangle, ChevronRight } from "lucide-react";
+import { AlertTriangle, ChevronRight, Map as MapIcon, Plus } from "lucide-react";
 
 import { getProjects } from "@/data/queries";
 import { cn } from "@/lib/utils";
@@ -10,7 +10,6 @@ import { Panel } from "@/components/common/panel";
 import { HealthRing } from "@/components/common/health-ring";
 import { StatusPill } from "@/components/common/status-pill";
 import { Meter } from "@/components/common/metric";
-import { Button } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Projects · Vantara IQ" };
@@ -29,9 +28,12 @@ export default async function ProjectsPage() {
       title="Projects"
       description="Every active build with its own identity — health, pace, forecast and the intelligence behind each one."
       actions={
-        <Button size="sm" className="h-9 gap-1.5 rounded-lg bg-brand px-3.5 text-[12.5px] font-semibold text-white hover:bg-brand-bright">
-          New project
-        </Button>
+        <Link
+          href="/projects/new"
+          className="brand-gradient focus-ring inline-flex h-9 items-center gap-1.5 rounded-lg px-3.5 text-[12.5px] font-semibold text-white"
+        >
+          <Plus className="size-4" /> New project
+        </Link>
       }
     >
       <div className="flex flex-col gap-3">
@@ -51,7 +53,25 @@ export default async function ProjectsPage() {
             const paceTone = pace >= 1 ? "success" : pace >= 0.85 ? "warning" : "critical";
             return (
               <Link key={p.id} href={`/projects/${p.id}`} className="focus-ring group block rounded-2xl">
-                <Panel className="p-4 transition-colors group-hover:bg-foreground/[0.04]">
+                <Panel className="overflow-hidden p-0 transition-colors group-hover:bg-foreground/[0.04]">
+                  {/* Map banner — the project's map leads the card */}
+                  <div className="relative h-28 w-full overflow-hidden border-b border-border/60 bg-foreground/[0.03]">
+                    {p.mapUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={p.mapUrl} alt="" className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" />
+                    ) : (
+                      <div className="grid size-full place-items-center bg-[radial-gradient(60%_120%_at_50%_-10%,color-mix(in_oklab,var(--vq-blue)_14%,transparent),transparent)]">
+                        <span className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground/70">
+                          <MapIcon className="size-3.5" /> No map uploaded
+                        </span>
+                      </div>
+                    )}
+                    <span className="num absolute left-2 top-2 rounded bg-black/45 px-1.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm">
+                      {p.number}
+                    </span>
+                  </div>
+
+                  <div className="p-4">
                   <div className="flex items-start gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
@@ -93,6 +113,7 @@ export default async function ProjectsPage() {
                         {formatNumber(p.actualFtPerDay)}/{formatNumber(p.requiredFtPerDay)} ft/day · {p.crew}
                       </span>
                     </div>
+                  </div>
                   </div>
                 </Panel>
               </Link>

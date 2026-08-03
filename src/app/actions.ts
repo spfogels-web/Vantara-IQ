@@ -206,6 +206,103 @@ export async function listSubDocuments(subcontractorId: string) {
   }));
 }
 
+/* ---- Projects (create / edit / delete / map) ------------------------------ */
+
+const STATUS_TONE: Record<string, string> = {
+  "Ahead of schedule": "success",
+  "On schedule": "info",
+  "At risk": "warning",
+  "Behind schedule": "critical",
+};
+
+export type ProjectInput = {
+  number: string;
+  name: string;
+  client: string;
+  location: string;
+  status: string;
+  crew: string;
+  remainingFt: number;
+  requiredFtPerDay: number;
+  actualFtPerDay: number;
+  pctComplete: number;
+  health: number;
+  forecast: string;
+};
+
+function projectData(input: ProjectInput) {
+  const tone = STATUS_TONE[input.status] ?? "info";
+  return {
+    number: input.number,
+    name: input.name,
+    client: input.client,
+    location: input.location,
+    status: input.status,
+    tone,
+    crew: input.crew || "Unassigned",
+    remainingFt: Number(input.remainingFt) || 0,
+    requiredFtPerDay: Number(input.requiredFtPerDay) || 0,
+    actualFtPerDay: Number(input.actualFtPerDay) || 0,
+    pctComplete: Math.max(0, Math.min(100, Number(input.pctComplete) || 0)),
+    health: Math.max(0, Math.min(100, Number(input.health) || 80)),
+    forecast: input.forecast || "On track",
+    forecastTone: tone,
+    updatedAt: "Just now",
+  };
+}
+
+export async function createProject(input: ProjectInput) {
+  if (!input.name.trim() || !input.number.trim()) {
+    return { ok: false as const, error: "Project number and name are required." };
+  }
+  const customer = await prisma.customer.findFirst({ where: { name: input.client } });
+  const p = await prisma.project.create({
+    data: { ...projectData(input), customerId: customer?.id ?? null },
+  });
+  revalidatePath("/projects");
+  return { ok: true as const, id: p.id };
+}
+
+export async function updateProject(id: string, input: ProjectInput) {
+  const customer = await prisma.customer.findFirst({ where: { name: input.client } });
+  await prisma.project.update({
+    where: { id },
+    data: { ...projectData(input), customerId: customer?.id ?? null },
+  });
+  revalidatePath("/projects");
+  revalidatePath(`/projects/${id}`);
+  return { ok: true as const, id };
+}
+
+export async function deleteProject(id: string) {
+  await prisma.project.delete({ where: { id } });
+  revalidatePath("/projects");
+  return { ok: true as const };
+}
+
+const MAX_MAP_BYTES = 15 * 1024 * 1024;
+
+/** Uploads a project map image (stored as a data URL; original preserved). */
+export async function uploadProjectMap(formData: FormData) {
+  const file = formData.get("file") as File | null;
+  const projectId = String(formData.get("projectId") || "");
+  if (!file || !projectId) return { ok: false as const, error: "Missing map file." };
+  if (!file.type.startsWith("image/")) {
+    return { ok: false as const, error: "Upload an image (PNG/JPG). For PDFs, export the page as an image." };
+  }
+  if (file.size > MAX_MAP_BYTES) return { ok: false as const, error: "Map is over 15 MB." };
+
+  const buf = Buffer.from(await file.arrayBuffer());
+  const dataUrl = `data:${file.type};base64,${buf.toString("base64")}`;
+  await prisma.project.update({
+    where: { id: projectId },
+    data: { mapUrl: dataUrl, mapOriginalUrl: dataUrl },
+  });
+  revalidatePath("/projects");
+  revalidatePath(`/projects/${projectId}`);
+  return { ok: true as const, dataUrl };
+}
+
 /* ---- Dailies (linked to a project by number + name) ----------------------- */
 
 export type DailyLineInput = { location: string; code: string; quantity: number; unit: "ft" | "ea" };

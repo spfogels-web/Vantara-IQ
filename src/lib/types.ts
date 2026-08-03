@@ -47,6 +47,8 @@ export interface Project {
   pctComplete: number;
   crew: string;
   updatedAt: string;
+  /** Uploaded project map (data URL); may carry redline markup. */
+  mapUrl?: string | null;
 }
 
 export interface HealthBucket {

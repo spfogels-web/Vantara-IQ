@@ -122,6 +122,7 @@ function toProject(r: ProjectRow): Project {
     pctComplete: r.pctComplete,
     crew: r.crew,
     updatedAt: r.updatedAt,
+    mapUrl: r.mapUrl,
   };
 }
 

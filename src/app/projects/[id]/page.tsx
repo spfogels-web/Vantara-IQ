@@ -22,6 +22,7 @@ import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { HealthRing } from "@/components/common/health-ring";
 import { StatusPill } from "@/components/common/status-pill";
 import { Meter } from "@/components/common/metric";
+import { ProjectHeaderActions, ProjectMapPanel } from "@/components/projects/project-detail-client";
 
 export const dynamic = "force-dynamic";
 
@@ -65,13 +66,14 @@ export default async function ProjectDetailPage({
       title={project.name}
       description={`${project.client} · ${project.location}`}
     >
-      <div className="mb-3">
+      <div className="mb-3 flex items-center justify-between gap-3">
         <Link
           href="/projects"
           className="focus-ring inline-flex items-center gap-1.5 rounded-md text-[12px] text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="size-3.5" /> All projects
         </Link>
+        <ProjectHeaderActions projectId={project.id} />
       </div>
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
@@ -111,6 +113,9 @@ export default async function ProjectDetailPage({
               <Meter value={project.pctComplete / 100} tone={project.tone} className="mt-1.5" />
             </div>
           </Panel>
+
+          {/* Project map */}
+          <ProjectMapPanel projectId={project.id} initialMapUrl={project.mapUrl} />
 
           {/* Economics — the "brain" numbers */}
           <Panel>
