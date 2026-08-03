@@ -1096,6 +1096,8 @@ export type SheetPayload = {
   matCodes: unknown;
   matRows: unknown;
   redlines: unknown;
+  notes?: string;
+  photos?: unknown;
 };
 
 const asJson = (v: unknown) => (v ?? null) as Prisma.InputJsonValue;
@@ -1113,6 +1115,8 @@ export async function saveDailySheet(input: SheetPayload) {
     matCodes: asJson(input.matCodes),
     matRows: asJson(input.matRows),
     redlines: asJson(input.redlines),
+    notes: input.notes ?? "",
+    photos: asJson(input.photos ?? []),
   };
 
   const sheet = input.id

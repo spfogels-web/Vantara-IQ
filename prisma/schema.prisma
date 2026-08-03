@@ -163,6 +163,13 @@ model DailySheet {
   matRows       Json     @default("[]")
   /// As-built redline drawn over the project map for this day's work.
   redlines      Json     @default("[]")
+  /// Free-text notes from the crew — conditions, delays, anything the grid
+  /// has no column for.
+  notes         String   @default("")
+  /// Field photos: peds, handholes, as-built evidence. Each entry carries its
+  /// own capture/upload timestamp, so the record shows when it was taken and
+  /// not merely when the sheet was submitted.
+  photos        Json     @default("[]")
   status        String   @default("DRAFT") // DRAFT | SUBMITTED
   /// The Daily this sheet produced on submit, if any.
   dailyId       String?

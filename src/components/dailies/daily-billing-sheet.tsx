@@ -188,6 +188,8 @@ export type SavedSheet = {
   matRows: unknown;
   redlines: unknown;
   status: string;
+  notes?: string;
+  photos?: unknown;
 };
 
 /** Saved JSON is untyped by the time it comes back — coerce, never trust. */
@@ -279,6 +281,10 @@ export function DailyBillingSheet({
   const [savedAt, setSavedAt] = React.useState<string | null>(null);
   const [saveError, setSaveError] = React.useState<string | null>(null);
 
+  const [notes, setNotes] = React.useState<string>(
+    typeof saved?.notes === "string" ? saved.notes : "",
+  );
+
   const payload = React.useCallback(
     (): SheetPayload => ({
       id: sheetId,
@@ -292,8 +298,9 @@ export function DailyBillingSheet({
       matCodes,
       matRows: mat,
       redlines,
+      notes,
     }),
-    [sheetId, project, header, laborCodes, labor, matCodes, mat, redlines],
+    [sheetId, project, header, laborCodes, labor, matCodes, mat, redlines, notes],
   );
 
   async function save() {
@@ -869,6 +876,25 @@ export function DailyBillingSheet({
               <Plus className="size-3.5" /> Add material row
             </button>
             <p className="text-[10px] text-muted-foreground">Flash Graphics, Inc. · 706-278-7779</p>
+          </div>
+
+          {/* ── Notes ───────────────────────────────────────────── */}
+          <div className="border-t border-border">
+            <div className="border-b border-border px-3 py-2">
+              <p className="text-[9px] font-bold uppercase tracking-[0.1em] text-muted-foreground print:text-[7px]">
+                Notes
+              </p>
+              <p className="text-[11px] text-muted-foreground print:hidden">
+                Conditions, delays, refusals, anything the grid has no column for.
+              </p>
+            </div>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={4}
+              placeholder="Hit rock at STA 12+40, switched to missile. Homeowner refused access at 214."
+              className="w-full resize-y bg-transparent px-3 py-2.5 text-[12.5px] text-foreground placeholder:text-muted-foreground/60 focus:outline-none print:text-[10px] print:placeholder:text-transparent"
+            />
           </div>
 
           {/* ── Job map + as-built redline ───────────────────────── */}
