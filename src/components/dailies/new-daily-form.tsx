@@ -44,7 +44,15 @@ export function NewDailyForm({ projects }: { projects: ProjectOption[] }) {
   const project = projects.find((p) => p.id === projectId);
   const totalFt = lines.filter((l) => l.unit === "ft").reduce((s, l) => s + (Number(l.quantity) || 0), 0);
 
-  const codes = React.useMemo(() => project?.codes ?? [], [project]);
+  const allCodes = React.useMemo(() => project?.codes ?? [], [project]);
+  const [showAerial, setShowAerial] = React.useState(false);
+  const aerialCount = allCodes.filter((c) => c.aerial).length;
+  // Aerial units are hidden, not removed — a crew that genuinely hits one can
+  // still bill it, it just isn't cluttering an underground job's picker.
+  const codes = React.useMemo(
+    () => (showAerial ? allCodes : allCodes.filter((c) => !c.aerial)),
+    [allCodes, showAerial],
+  );
   const codeListId = React.useId();
 
   /** Codes are matched case- and space-insensitively — BFO48 vs bfo48 vs "BFO48 ". */
@@ -157,11 +165,20 @@ export function NewDailyForm({ projects }: { projects: ProjectOption[] }) {
           title="Production line items"
           description={
             codes.length
-              ? `${codes.length} codes on this job's material list — pick one and its unit and remaining quantity come with it.`
+              ? `${codes.length} underground codes on this job — pick one and its unit and remaining quantity come with it.`
               : "Location, unit code and quantity — like the paper daily."
           }
           count={lines.length}
         >
+          {aerialCount > 0 ? (
+            <button
+              type="button"
+              onClick={() => setShowAerial((v) => !v)}
+              className="focus-ring rounded-md px-2 py-1 text-[11.5px] font-medium text-muted-foreground hover:text-foreground"
+            >
+              {showAerial ? "Hide" : "Show"} {aerialCount} aerial
+            </button>
+          ) : null}
           <Button
             type="button"
             size="sm"

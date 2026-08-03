@@ -1,7 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
-import { compareByPriority, isPriorityCode } from "@/lib/unit-codes";
+import { compareByPriority, isAerialCode, isPriorityCode } from "@/lib/unit-codes";
 import {
   brief,
   crews,
@@ -497,6 +497,8 @@ export interface MaterialCodeOption {
   remaining: number;
   /** One of the high-traffic underground families — surfaced first in pickers. */
   priority: boolean;
+  /** Aerial (CO*) — real, billable, but hidden by default on underground jobs. */
+  aerial: boolean;
 }
 
 /**
@@ -516,6 +518,7 @@ export async function getProjectMaterialCodes(projectId: string): Promise<Materi
       billed: m.completed,
       remaining: m.remaining,
       priority: isPriorityCode(m.code),
+      aerial: isAerialCode(m.code),
     }))
     // The underground codes crews reach for most come first.
     .sort((a, b) => compareByPriority(a.code, b.code));

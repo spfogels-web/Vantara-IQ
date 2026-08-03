@@ -47,8 +47,47 @@ export function priorityFamily(code: string): string | null {
   return best;
 }
 
+/**
+ * RI = micro ribbon fiber — "PLACE MICRO RIBBON FIBER IN DUCT" (BFO12RI,
+ * BFO24RI). Underground work that belongs with the rest.
+ *
+ * Matched as a *suffix*, not a substring: FRIBBONIZE ("RIBBONIZE LOOSE FIBERS")
+ * contains RI and is not an RI code. The lookahead allows a trailing variant
+ * like BFO12RI(2) while still rejecting RI followed by more letters.
+ */
+export function isRibbonInDuctCode(code: string): boolean {
+  return /RI(?![A-Z])/.test(normalizeCode(code));
+}
+
+/**
+ * Every BM unit is underground — pipe crossings, pedestal grounds, warning
+ * signs, riser guards. The named families above are the high-traffic ones, but
+ * BM26F and BM82PF belong in the same bucket.
+ */
+export function isBuriedMiscCode(code: string): boolean {
+  return /^BM/.test(normalizeCode(code));
+}
+
+/**
+ * CO units are aerial placement — "PLACE AERIAL FLAT RIBBON FIBER", "AERIAL
+ * FILLED FO ASSEMBLY". On an underground job they're noise in every picker.
+ * They are hidden, never dropped: a sheet that carries them can still bill
+ * them, and silently discarding a billable unit is worse than a longer list.
+ */
+export function isAerialCode(code: string): boolean {
+  return /^CO/.test(normalizeCode(code));
+}
+
 export function isPriorityCode(code: string): boolean {
-  return priorityFamily(code) !== null;
+  return priorityFamily(code) !== null || isBuriedMiscCode(code) || isRibbonInDuctCode(code);
+}
+
+export type CodeClass = "underground" | "aerial" | "other";
+
+export function codeClass(code: string): CodeClass {
+  if (isAerialCode(code)) return "aerial";
+  if (isPriorityCode(code)) return "underground";
+  return "other";
 }
 
 /**
@@ -56,6 +95,17 @@ export function isPriorityCode(code: string): boolean {
  * grouped under their family, everything else after in alphabetical order.
  */
 export function compareByPriority(a: string, b: string): number {
+  // Aerial sinks below everything — on an underground job it's the last thing
+  // anyone is looking for.
+  const aerialA = isAerialCode(a);
+  const aerialB = isAerialCode(b);
+  if (aerialA !== aerialB) return aerialA ? 1 : -1;
+
+  // Then the rest of the underground set (all BM*, all *RI) above unclassified.
+  const undA = isPriorityCode(a);
+  const undB = isPriorityCode(b);
+  if (undA !== undB) return undA ? -1 : 1;
+
   const fa = priorityFamily(a);
   const fb = priorityFamily(b);
   if (fa && !fb) return -1;
