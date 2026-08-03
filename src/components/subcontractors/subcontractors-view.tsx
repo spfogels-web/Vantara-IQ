@@ -33,6 +33,7 @@ import { LogoUpload } from "@/components/common/logo-upload";
 import { Button } from "@/components/ui/button";
 import { InviteDialog } from "@/components/subcontractors/invite-dialog";
 import { SubcontractorForm } from "@/components/subcontractors/subcontractor-form";
+import { SubRateCard } from "@/components/subcontractors/sub-rate-card";
 import { DocumentCenter, type SubDoc } from "@/components/subcontractors/document-center";
 import { approveSubcontractor, deleteSubcontractor, listSubDocuments } from "@/app/actions";
 
@@ -474,6 +475,9 @@ function SubDetail({
           </PanelBody>
         </Panel>
       </div>
+
+      {/* What we pay them, per code — drives pay applications and real margin */}
+      <SubRateCard key={s.id} subcontractorId={s.id} />
 
       {/* Capabilities statement — required at onboarding */}
       <Panel>

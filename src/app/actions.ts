@@ -186,6 +186,105 @@ export async function setSubcontractorProjects(id: string, projects: string[]) {
   return { ok: true as const };
 }
 
+/* ---- Subcontractor rate card — what we pay, per unit code ---------------- */
+
+export type SubRateInput = {
+  code: string;
+  description: string;
+  unit: string;
+  rate: number;
+  minimum?: number | null;
+  rules?: string;
+  effectiveDate?: string;
+  expirationDate?: string;
+};
+
+export async function listSubRates(subcontractorId: string) {
+  const rows = await prisma.subcontractorRate.findMany({
+    where: { subcontractorId },
+    orderBy: { code: "asc" },
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    code: r.code,
+    description: r.description,
+    unit: r.unit,
+    rate: r.rate,
+    minimum: r.minimum,
+    rules: r.rules,
+    effectiveDate: r.effectiveDate,
+    expirationDate: r.expirationDate,
+    source: r.source,
+  }));
+}
+
+export async function addSubRate(subcontractorId: string, input: SubRateInput) {
+  const code = input.code.trim().toUpperCase();
+  if (!code) return { ok: false as const, error: "Unit code is required." };
+  if (!Number.isFinite(input.rate) || input.rate < 0) {
+    return { ok: false as const, error: "Enter a rate." };
+  }
+  await prisma.subcontractorRate.create({
+    data: {
+      subcontractorId,
+      code,
+      description: input.description.trim(),
+      unit: input.unit.trim(),
+      rate: input.rate,
+      minimum: input.minimum ?? null,
+      rules: input.rules?.trim() ?? "",
+      effectiveDate: input.effectiveDate?.trim() ?? "",
+      expirationDate: input.expirationDate?.trim() ?? "",
+      source: "manual",
+    },
+  });
+  revalidatePath("/subcontractors");
+  return { ok: true as const };
+}
+
+export async function updateSubRate(id: string, patch: { rate?: number; description?: string }) {
+  await prisma.subcontractorRate.update({
+    where: { id },
+    data: {
+      ...(patch.rate != null && Number.isFinite(patch.rate) ? { rate: patch.rate } : {}),
+      ...(patch.description != null ? { description: patch.description.trim() } : {}),
+    },
+  });
+  revalidatePath("/subcontractors");
+  return { ok: true as const };
+}
+
+export async function deleteSubRate(id: string) {
+  await prisma.subcontractorRate.delete({ where: { id } });
+  revalidatePath("/subcontractors");
+  return { ok: true as const };
+}
+
+/**
+ * Push approved rows from a SUB_RATE_CARD import onto a sub's rate card, so a
+ * rate sheet can be uploaded and extracted rather than typed line by line.
+ */
+export async function pushImportToSubcontractor(importId: string, subcontractorId: string) {
+  const rows = await prisma.extractedRow.findMany({
+    where: { importId, status: "APPROVED" },
+  });
+  if (rows.length === 0) return { ok: false as const, error: "No approved rows in that import." };
+  await prisma.subcontractorRate.createMany({
+    data: rows.map((r) => ({
+      subcontractorId,
+      code: (r.code || "—").toUpperCase(),
+      description: r.description,
+      unit: r.unit,
+      rate: r.rate ?? 0,
+      minimum: r.minimum,
+      rules: r.rules,
+      source: "import",
+    })),
+  });
+  revalidatePath("/subcontractors");
+  return { ok: true as const, count: rows.length };
+}
+
 export async function createSubcontractorDraft(input: {
   company: string;
   name: string;

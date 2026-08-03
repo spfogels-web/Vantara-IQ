@@ -207,6 +207,28 @@ model ProjectMaterial {
   @@index([projectId])
 }
 
+/// What we pay a sub, per unit code. The mirror of CustomerRate: that side is
+/// what we bill, this side is what the work costs. Margin is the difference
+/// between the two on the same code — never a blended average, because two
+/// codes on the same job can carry very different spreads.
+model SubcontractorRate {
+  id              String        @id @default(cuid())
+  subcontractor   Subcontractor @relation(fields: [subcontractorId], references: [id], onDelete: Cascade)
+  subcontractorId String
+  code            String
+  description     String        @default("")
+  unit            String        @default("")
+  rate            Float         @default(0)
+  minimum         Float?
+  rules           String        @default("")
+  effectiveDate   String        @default("")
+  expirationDate  String        @default("")
+  source          String        @default("manual")
+  createdAt       DateTime      @default(now())
+
+  @@index([subcontractorId])
+}
+
 model Subcontractor {
   id               String    @id @default(cuid())
   company          String
@@ -227,6 +249,7 @@ model Subcontractor {
   since            String    @default("")
   users            User[]
   documents        SubDocument[]
+  rates            SubcontractorRate[]
   createdAt        DateTime  @default(now())
 }
 
