@@ -107,6 +107,7 @@ type ProjectRow = Awaited<ReturnType<typeof prisma.project.findMany>>[number];
 function toProject(r: ProjectRow): Project {
   return {
     id: r.id,
+    number: r.number,
     name: r.name,
     client: r.client,
     location: r.location,

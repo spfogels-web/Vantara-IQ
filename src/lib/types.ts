@@ -29,6 +29,8 @@ export type ProjectStatus =
 
 export interface Project {
   id: string;
+  /** Fortitude job / project number. */
+  number: string;
   name: string;
   client: string;
   location: string;

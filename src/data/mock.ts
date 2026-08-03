@@ -121,6 +121,7 @@ export const kpis: Kpi[] = [
 export const projects: Project[] = [
   {
     id: "prj-windstream-wp",
+    number: "WIN-WP-24001",
     name: "Windstream White Plains",
     client: "Windstream Communications",
     location: "White Plains, SC",
@@ -138,6 +139,7 @@ export const projects: Project[] = [
   },
   {
     id: "prj-duke-anderson",
+    number: "DUK-AND-24002",
     name: "Duke Energy Upgrade",
     client: "Duke Energy",
     location: "Anderson, SC",
@@ -155,6 +157,7 @@ export const projects: Project[] = [
   },
   {
     id: "prj-att-spartanburg",
+    number: "ATT-SPB-24003",
     name: "AT&T Fiber Backhaul",
     client: "AT&T",
     location: "Spartanburg, SC",
@@ -172,6 +175,7 @@ export const projects: Project[] = [
   },
   {
     id: "prj-commerce-ga",
+    number: "GAP-COM-24004",
     name: "Commerce GA Expansion",
     client: "Georgia Power",
     location: "Commerce, GA",
@@ -189,6 +193,7 @@ export const projects: Project[] = [
   },
   {
     id: "prj-piedmont-water",
+    number: "PMW-GVL-24005",
     name: "Piedmont Water Main",
     client: "Piedmont Municipal",
     location: "Greenville, SC",
@@ -206,6 +211,7 @@ export const projects: Project[] = [
   },
   {
     id: "prj-charter-greer",
+    number: "CHT-GRE-24006",
     name: "Charter Node Split",
     client: "Charter Spectrum",
     location: "Greer, SC",
@@ -223,6 +229,7 @@ export const projects: Project[] = [
   },
   {
     id: "prj-att-savannah",
+    number: "ATT-SAV-24007",
     name: "AT&T Coastal Fiber",
     client: "AT&T",
     location: "Savannah, GA",
@@ -240,6 +247,7 @@ export const projects: Project[] = [
   },
   {
     id: "prj-dominion-richmond",
+    number: "DOM-RIC-24008",
     name: "Dominion Grid Hardening",
     client: "Dominion Energy",
     location: "Richmond, VA",

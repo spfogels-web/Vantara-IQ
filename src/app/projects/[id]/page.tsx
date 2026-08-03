@@ -61,7 +61,7 @@ export default async function ProjectDetailPage({
 
   return (
     <PageShell
-      eyebrow="Project"
+      eyebrow={`Project ${project.number}`}
       title={project.name}
       description={`${project.client} · ${project.location}`}
     >

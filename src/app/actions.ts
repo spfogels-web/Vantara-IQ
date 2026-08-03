@@ -206,6 +206,63 @@ export async function listSubDocuments(subcontractorId: string) {
   }));
 }
 
+/* ---- Dailies (linked to a project by number + name) ----------------------- */
+
+export type DailyLineInput = { location: string; code: string; quantity: number; unit: "ft" | "ea" };
+
+/**
+ * Creates a daily production report tied to a project. Project number, name and
+ * customer are pulled from the chosen project so the daily is always linked.
+ */
+export async function createDaily(input: {
+  projectId: string;
+  subcontractor: string;
+  crew: string;
+  workDate: string;
+  lineItems: DailyLineInput[];
+  photos?: number;
+  hasAsBuilt?: boolean;
+  hasBoreLog?: boolean;
+}) {
+  const project = await prisma.project.findUnique({ where: { id: input.projectId } });
+  if (!project) return { ok: false as const, error: "Pick a project." };
+
+  const lineItems = input.lineItems.filter((l) => l.code.trim() || l.quantity > 0);
+  if (lineItems.length === 0) return { ok: false as const, error: "Add at least one line item." };
+
+  const totalFt = lineItems
+    .filter((l) => l.unit === "ft")
+    .reduce((s, l) => s + (Number(l.quantity) || 0), 0);
+
+  const sheetNumber = `GLS-${Math.floor(100000 + Math.random() * 899999)}`;
+
+  const daily = await prisma.daily.create({
+    data: {
+      sheetNumber,
+      projectId: project.id,
+      projectName: project.name,
+      customer: project.client,
+      subcontractor: input.subcontractor || "—",
+      crew: input.crew || "—",
+      workDate: input.workDate,
+      submittedAt: "Just now",
+      status: "Submitted",
+      tone: "info",
+      totalFt,
+      billableAmount: 0,
+      lineItems: lineItems as unknown as Prisma.InputJsonValue,
+      photos: input.photos ?? 0,
+      hasAsBuilt: input.hasAsBuilt ?? false,
+      hasBoreLog: input.hasBoreLog ?? false,
+      flags: [] as unknown as Prisma.InputJsonValue,
+    },
+  });
+
+  revalidatePath("/dailies");
+  revalidatePath(`/projects/${project.id}`);
+  return { ok: true as const, id: daily.id };
+}
+
 /* ---- Rate-document extraction (AI extracts, human approves) --------------- */
 
 const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);

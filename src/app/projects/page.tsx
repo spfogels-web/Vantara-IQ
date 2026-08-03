@@ -64,7 +64,7 @@ export default async function ProjectsPage() {
                         <ChevronRight className="ml-auto size-4 shrink-0 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground" />
                       </div>
                       <p className="mt-0.5 truncate text-[11.5px] text-muted-foreground">
-                        {p.client} · {p.location}
+                        <span className="num text-muted-foreground/80">{p.number}</span> · {p.client} · {p.location}
                       </p>
                     </div>
                     <HealthRing score={p.health} size={44} stroke={3.5} />

@@ -80,6 +80,7 @@ model Customer {
 
 model Project {
   id               String    @id @default(cuid())
+  number           String    @default("")
   name             String
   client           String
   location         String
