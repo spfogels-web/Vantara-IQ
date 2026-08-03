@@ -238,7 +238,9 @@ export function ProjectMaterials({
 
       {/* What we're actually tracking — approved rows that crossed the line. */}
       {tracked.length > 0 ? (
-        <ul className="border-b border-border/70 p-2">
+        // Two or three across on a wide screen: a job's code list is long, and
+        // a single column turns it into a scroll.
+        <ul className="grid grid-cols-1 gap-x-2 border-b border-border/70 p-2 lg:grid-cols-2 2xl:grid-cols-3">
           {tracked.map((m) => (
             <li key={m.id} className="group/mat rounded-lg px-2.5 py-2 hover:bg-foreground/[0.03]">
               <div className="flex items-baseline gap-2">
@@ -314,13 +316,13 @@ export function ProjectMaterials({
         </ul>
       ) : null}
 
-      <div className="flex flex-col gap-2 border-b border-border/70 px-4 py-3">
+      <div className="flex flex-wrap items-center gap-2 border-b border-border/70 px-4 py-3">
         <div className="flex items-center gap-2">
           <button
             type="button"
             disabled={busy}
             onClick={() => fileRef.current?.click()}
-            className="focus-ring inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg bg-brand px-2.5 text-[12px] font-semibold text-white hover:bg-brand-bright disabled:opacity-50"
+            className="focus-ring inline-flex h-8 items-center justify-center gap-1.5 rounded-lg bg-brand px-3 text-[12px] font-semibold text-white hover:bg-brand-bright disabled:opacity-50"
           >
             {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Upload className="size-3.5" />}
             {busy ? "Reading…" : "Upload list"}
@@ -334,12 +336,12 @@ export function ProjectMaterials({
             <Camera className="size-3.5" /> Scan
           </button>
         </div>
-        <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+        <p className="flex min-w-0 flex-1 items-center gap-1.5 text-[11px] text-muted-foreground">
           <Sparkles className="size-3 shrink-0" />
-          PDF, Excel, CSV or a photo. Claude pulls every code, quantity and reel number.
+          PDF, Excel, CSV or a photo — every code, quantity and reel number.
         </p>
-        {error ? <p className="text-[11.5px] text-critical">{error}</p> : null}
-        {note ? <p className="text-[11.5px] text-success">{note}</p> : null}
+        {error ? <p className="w-full text-[11.5px] text-critical">{error}</p> : null}
+        {note ? <p className="w-full text-[11.5px] text-success">{note}</p> : null}
       </div>
 
       {imports.length === 0 ? (

@@ -81,18 +81,9 @@ export default async function ProjectDetailPage({
         <ProjectHeaderActions projectId={project.id} photoUrl={project.photoUrl} />
       </div>
 
-      {/* Project map — full width across desktop and mobile */}
+      {/* Status first: health, pace and progress read in one line before
+          anything else on the page. */}
       <div className="mb-3">
-        <ProjectMapPanel
-          projectId={project.id}
-          initialMapUrl={project.mapUrl}
-          initialMarkups={project.markups}
-        />
-      </div>
-
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
-        {/* Left: status + economics */}
-        <div className="flex flex-col gap-3 xl:col-span-8">
           <Panel>
             <PanelBody className="flex flex-wrap items-center gap-5">
               <div className="flex items-center gap-4">
@@ -127,8 +118,19 @@ export default async function ProjectDetailPage({
               <Meter value={project.pctComplete / 100} tone={project.tone} className="mt-1.5" />
             </div>
           </Panel>
+      </div>
 
-          {/* Economics — the "brain" numbers */}
+      {/* Map alongside the economics — the map wants width, the numbers don't. */}
+      <div className="mb-3 grid grid-cols-1 gap-3 xl:grid-cols-12">
+        <div className="xl:col-span-7">
+          <ProjectMapPanel
+            projectId={project.id}
+            initialMapUrl={project.mapUrl}
+            initialMarkups={project.markups}
+          />
+        </div>
+
+        <div className="xl:col-span-5">
           <Panel>
             <PanelHeader
               title="Project economics"
@@ -144,8 +146,32 @@ export default async function ProjectDetailPage({
               <Economic label="Blended rate" value={`${formatCurrency(avgRate)}/ft`} />
             </PanelBody>
           </Panel>
+        </div>
+      </div>
 
-          {/* Dailies for this project */}
+      {/* Material gets the full width. It is the densest thing on the page —
+          a job carries dozens of codes — and squeezing it into a sidebar
+          column was what made every other panel stretch to match it. */}
+      <div className="mb-3">
+        <Panel>
+          <PanelHeader
+            title="Material on project"
+            count={trackedMaterials.length}
+            icon={<Boxes className="size-3.5" />}
+            action="Materials"
+            actionHref="/materials"
+          />
+          <ProjectMaterials
+            projectId={project.id}
+            imports={materialImports}
+            tracked={trackedMaterials}
+          />
+        </Panel>
+      </div>
+
+      {/* Dailies and the customer close the page. */}
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
+        <div className="xl:col-span-8">
           <Panel>
             <PanelHeader
               title="Recent dailies"
@@ -182,8 +208,7 @@ export default async function ProjectDetailPage({
           </Panel>
         </div>
 
-        {/* Right: customer + materials */}
-        <div className="flex flex-col gap-3 xl:col-span-4">
+        <div className="xl:col-span-4">
           <Panel>
             <PanelHeader title="Customer" icon={<Calendar className="size-3.5" />} />
             <PanelBody className="flex flex-col gap-2.5">
@@ -204,23 +229,6 @@ export default async function ProjectDetailPage({
                 <p className="text-[12px] text-muted-foreground">Customer record not linked.</p>
               )}
             </PanelBody>
-          </Panel>
-
-          {/* Upload or photograph the material list; Claude pulls the codes off
-              it; approved rows become tracked material on the project. */}
-          <Panel>
-            <PanelHeader
-              title="Material on project"
-              count={trackedMaterials.length}
-              icon={<Boxes className="size-3.5" />}
-              action="Materials"
-              actionHref="/materials"
-            />
-            <ProjectMaterials
-              projectId={project.id}
-              imports={materialImports}
-              tracked={trackedMaterials}
-            />
           </Panel>
         </div>
       </div>
