@@ -8,7 +8,6 @@ import {
   deadlines,
   healthSummary,
   invoices,
-  kpis,
   materials,
   missingDocuments,
   notifications,
@@ -207,9 +206,149 @@ export async function getOrganization(): Promise<Organization> {
 
 /* -- Dashboard aggregates (fixtures for now) -------------------------------- */
 
+/**
+ * The headline strip, computed from what is actually in the database.
+ *
+ * Where a number has no real source yet it reports zero rather than an
+ * invented figure. A zero that is true tells you what to go and set up; a
+ * plausible number that is fiction tells you nothing and hides the gap.
+ */
 export async function getKpis(): Promise<Kpi[]> {
-  await delay(LATENCY.kpis);
-  return kpis;
+  const [projects, dailies] = await Promise.all([
+    prisma.project.findMany({ select: { tone: true, status: true } }),
+    prisma.daily.findMany({
+      select: {
+        status: true,
+        workDate: true,
+        submittedAt: true,
+        totalFt: true,
+        billableAmount: true,
+        lineItems: true,
+      },
+    }),
+  ]);
+
+  /** Local calendar day for a daily — work date if usable, else submission. */
+  const dayOf = (d: { workDate: string; submittedAt: string }) => {
+    const t = Date.parse(d.workDate) || Date.parse(d.submittedAt);
+    if (Number.isNaN(t) || !t) return null;
+    const dt = new Date(t);
+    return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).getTime();
+  };
+
+  const today = new Date();
+  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  const DAY = 86_400_000;
+
+  /** Footage per day for the last 12 days, oldest first — the sparkline. */
+  const ftByDay = new Array(12).fill(0);
+  let ftToday = 0;
+  let ftYesterday = 0;
+
+  for (const d of dailies) {
+    const day = dayOf(d);
+    if (day === null) continue;
+    const back = Math.round((startOfToday - day) / DAY);
+    if (back === 0) ftToday += d.totalFt;
+    if (back === 1) ftYesterday += d.totalFt;
+    if (back >= 0 && back < 12) ftByDay[11 - back] += d.totalFt;
+  }
+
+  const awaiting = dailies.filter(
+    (d) => d.status === "Submitted" || d.status === "In review",
+  ).length;
+  const approved = dailies.filter((d) => d.status === "Approved");
+  const readyToBill = approved.reduce((s, d) => s + d.billableAmount, 0);
+  const atRisk = projects.filter((p) => p.tone === "critical" || p.tone === "warning").length;
+
+  const pctChange = (now: number, before: number) =>
+    before === 0 ? (now === 0 ? 0 : 100) : Number((((now - before) / before) * 100).toFixed(1));
+
+  const flat = (v: number) => new Array(12).fill(v);
+
+  return [
+    {
+      id: "active-projects",
+      label: "Active projects",
+      value: projects.length,
+      format: "number",
+      delta: null,
+      deltaLabel: `${atRisk} needing attention`,
+      trend: "flat",
+      tone: "info",
+      icon: "projects",
+      href: "/projects",
+      series: flat(projects.length),
+    },
+    {
+      id: "production-today",
+      label: "Production today",
+      value: ftToday,
+      format: "feet",
+      delta: pctChange(ftToday, ftYesterday),
+      deltaLabel: "vs. yesterday",
+      trend: ftToday > ftYesterday ? "up" : ftToday < ftYesterday ? "down" : "flat",
+      tone: "success",
+      icon: "trending",
+      href: "/dailies",
+      series: ftByDay,
+    },
+    {
+      id: "revenue-ready",
+      label: "Revenue ready to bill",
+      value: readyToBill,
+      format: "currency",
+      delta: null,
+      deltaLabel:
+        readyToBill > 0
+          ? `${approved.length} approved ${approved.length === 1 ? "daily" : "dailies"}`
+          : "needs customer rates loaded",
+      trend: "flat",
+      tone: readyToBill > 0 ? "success" : "neutral",
+      icon: "dollar",
+      href: "/billing",
+      series: flat(readyToBill),
+    },
+    {
+      id: "approved-pay-apps",
+      label: "Approved pay apps",
+      value: 0,
+      format: "currency",
+      delta: null,
+      deltaLabel: "no pay applications yet",
+      trend: "flat",
+      tone: "neutral",
+      icon: "payapps",
+      href: "/pay-applications",
+      series: flat(0),
+    },
+    {
+      id: "dailies-waiting",
+      label: "Dailies awaiting review",
+      value: awaiting,
+      format: "number",
+      delta: null,
+      deltaLabel: awaiting === 0 ? "all caught up" : "submitted or in review",
+      trend: "flat",
+      tone: awaiting > 0 ? "warning" : "success",
+      icon: "clipboard",
+      href: "/dailies",
+      series: flat(awaiting),
+    },
+    {
+      id: "projects-at-risk",
+      label: "Projects at risk",
+      value: atRisk,
+      format: "number",
+      delta: null,
+      deltaLabel: atRisk === 0 ? "none flagged" : "behind or at risk",
+      trend: "flat",
+      tone: atRisk > 0 ? "critical" : "success",
+      icon: "alert",
+      href: "/projects",
+      series: flat(atRisk),
+    },
+  ];
 }
 
 export async function getHealthSummary(): Promise<HealthSummary> {
