@@ -56,13 +56,13 @@ export default async function ProjectsPage() {
                 <Panel className="overflow-hidden p-0 transition-colors group-hover:bg-foreground/[0.04]">
                   {/* Map banner — the project's map leads the card */}
                   <div className="relative h-28 w-full overflow-hidden border-b border-border/60 bg-foreground/[0.03]">
-                    {p.mapUrl ? (
+                    {p.mapUrl && !p.mapUrl.startsWith("data:application/pdf") ? (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img src={p.mapUrl} alt="" className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" />
                     ) : (
                       <div className="grid size-full place-items-center bg-[radial-gradient(60%_120%_at_50%_-10%,color-mix(in_oklab,var(--vq-blue)_14%,transparent),transparent)]">
                         <span className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground/70">
-                          <MapIcon className="size-3.5" /> No map uploaded
+                          <MapIcon className="size-3.5" /> {p.mapUrl ? "PDF map attached" : "No map uploaded"}
                         </span>
                       </div>
                     )}

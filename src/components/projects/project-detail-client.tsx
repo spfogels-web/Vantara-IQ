@@ -87,7 +87,7 @@ export function ProjectMapPanel({
             {mapUrl ? "Replace" : "Upload"}
             <input
               type="file"
-              accept="image/*"
+              accept="image/*,application/pdf,.pdf"
               className="hidden"
               disabled={busy}
               onChange={(e) => {
@@ -102,14 +102,23 @@ export function ProjectMapPanel({
       <PanelBody>
         {error ? <p className="mb-2 text-[12px] text-critical">{error}</p> : null}
         {mapUrl ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={mapUrl} alt="Project map" className="w-full rounded-lg border border-border/60 object-contain" />
+          mapUrl.startsWith("data:application/pdf") ? (
+            <object data={mapUrl} type="application/pdf" className="h-[70vh] w-full rounded-lg border border-border/60">
+              <p className="p-4 text-[12px] text-muted-foreground">
+                PDF preview isn&apos;t supported here.{" "}
+                <a href={mapUrl} target="_blank" rel="noopener noreferrer" className="text-brand-bright underline">Open the PDF</a>.
+              </p>
+            </object>
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={mapUrl} alt="Project map" className="w-full rounded-lg border border-border/60 object-contain" />
+          )
         ) : (
           <div className="grid h-48 place-items-center rounded-lg border border-dashed border-border/70 bg-foreground/[0.02] text-center">
             <div className="flex flex-col items-center gap-1.5 text-muted-foreground">
               <MapIcon className="size-6 opacity-60" />
               <p className="text-[12.5px]">No map uploaded yet</p>
-              <p className="text-[11px] text-muted-foreground/70">Upload a PNG or JPG of the construction map.</p>
+              <p className="text-[11px] text-muted-foreground/70">Upload a PNG, JPG, or PDF of the construction map.</p>
             </div>
           </div>
         )}

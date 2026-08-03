@@ -1,21 +1,26 @@
 ﻿"use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import {
   Building2,
   Check,
+  Loader2,
   Mail,
   MapPin,
+  Pencil,
   Phone,
   Plus,
   Receipt,
   Search,
+  Trash2,
   X,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { toneStyles } from "@/lib/tone";
 import type { Customer } from "@/lib/types";
+import { createCustomer, deleteCustomer, updateCustomer } from "@/app/actions";
 import {
   formatCompactCurrency,
   formatCurrency,
@@ -28,28 +33,30 @@ import { Button } from "@/components/ui/button";
 import { CustomerBilling } from "@/components/customers/customer-billing";
 
 export function CustomersView({ customers }: { customers: Customer[] }) {
-  const [list, setList] = React.useState(customers);
+  const router = useRouter();
   const [query, setQuery] = React.useState("");
   const [selectedId, setSelectedId] = React.useState(customers[0]?.id ?? null);
   const [adding, setAdding] = React.useState(false);
+  const [editing, setEditing] = React.useState<Customer | null>(null);
 
   const filtered = React.useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return list;
-    return list.filter(
+    if (!q) return customers;
+    return customers.filter(
       (c) =>
         c.name.toLowerCase().includes(q) ||
         c.location.toLowerCase().includes(q) ||
         c.industry.toLowerCase().includes(q),
     );
-  }, [list, query]);
+  }, [customers, query]);
 
-  const selected = list.find((c) => c.id === selectedId) ?? filtered[0] ?? null;
+  const selected = customers.find((c) => c.id === selectedId) ?? filtered[0] ?? null;
 
-  function handleCreate(c: Customer) {
-    setList((prev) => [c, ...prev]);
-    setSelectedId(c.id);
+  function handleDone(id?: string) {
     setAdding(false);
+    setEditing(null);
+    if (id) setSelectedId(id);
+    router.refresh();
   }
 
   return (
@@ -133,10 +140,18 @@ export function CustomersView({ customers }: { customers: Customer[] }) {
 
       {/* Detail / add form */}
       <div className="lg:col-span-7 xl:col-span-8">
-        {adding ? (
-          <AddCustomerForm onCancel={() => setAdding(false)} onCreate={handleCreate} />
+        {adding || editing ? (
+          <AddCustomerForm
+            key={editing?.id ?? "new"}
+            initial={editing ?? undefined}
+            onCancel={() => {
+              setAdding(false);
+              setEditing(null);
+            }}
+            onDone={handleDone}
+          />
         ) : selected ? (
-          <CustomerDetail customer={selected} />
+          <CustomerDetail customer={selected} onEdit={() => setEditing(selected)} />
         ) : (
           <Panel className="items-center justify-center py-24 text-center text-[13px] text-muted-foreground">
             No customer selected
@@ -147,7 +162,7 @@ export function CustomersView({ customers }: { customers: Customer[] }) {
   );
 }
 
-function CustomerDetail({ customer: c }: { customer: Customer }) {
+function CustomerDetail({ customer: c, onEdit }: { customer: Customer; onEdit: () => void }) {
   const billedPct = c.contractValue > 0 ? c.billedToDate / c.contractValue : 0;
 
   return (
@@ -185,9 +200,10 @@ function CustomerDetail({ customer: c }: { customer: Customer }) {
             <Button
               variant="outline"
               size="sm"
-              className="h-9 gap-2 rounded-lg border-foreground/[0.08] bg-foreground/[0.03] text-[12.5px] text-muted-foreground hover:text-foreground"
+              onClick={onEdit}
+              className="h-9 gap-1.5 rounded-lg border-foreground/[0.08] bg-foreground/[0.03] text-[12.5px] text-muted-foreground hover:text-foreground"
             >
-              Edit
+              <Pencil className="size-3.5" /> Edit
             </Button>
           </div>
 
@@ -295,77 +311,71 @@ function RuleRow({ label, value, mono }: { label: string; value: string; mono?: 
 
 function AddCustomerForm({
   onCancel,
-  onCreate,
+  onDone,
+  initial,
 }: {
   onCancel: () => void;
-  onCreate: (c: Customer) => void;
+  onDone: (id?: string) => void;
+  initial?: Customer;
 }) {
+  const editing = Boolean(initial);
+  const [busy, setBusy] = React.useState(false);
   const [form, setForm] = React.useState({
-    name: "",
-    shortCode: "",
-    industry: "Telecom" as Customer["industry"],
-    location: "",
-    contactName: "",
-    contactTitle: "",
-    contactEmail: "",
-    contactPhone: "",
-    billingEmail: "",
-    paymentTerms: "Net 30",
-    retainagePct: "10",
-    invoiceMinimum: "5000",
-    notes: "",
+    name: initial?.name ?? "",
+    shortCode: initial?.shortCode ?? "",
+    industry: (initial?.industry ?? "Telecom") as Customer["industry"],
+    location: initial?.location ?? "",
+    contactName: initial?.contacts?.[0]?.name ?? "",
+    contactTitle: initial?.contacts?.[0]?.title ?? "",
+    contactEmail: initial?.contacts?.[0]?.email ?? "",
+    contactPhone: initial?.contacts?.[0]?.phone ?? "",
+    billingEmail: initial?.billingEmail ?? "",
+    paymentTerms: initial?.paymentTerms ?? "Net 30",
+    retainagePct: initial ? String(Math.round(initial.retainagePct * 100)) : "10",
+    invoiceMinimum: initial ? String(initial.invoiceMinimum) : "5000",
+    notes: initial?.notes ?? "",
   });
 
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
 
-  const canSave = form.name.trim() && form.contactEmail.trim();
+  const canSave = Boolean(form.name.trim());
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!canSave) return;
-    const industryTone: Record<Customer["industry"], Customer["tone"]> = {
-      Telecom: "info",
-      Power: "warning",
-      Water: "success",
-      Gas: "critical",
-    };
-    onCreate({
-      id: `cust-${form.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
-      name: form.name.trim(),
-      shortCode: (form.shortCode || form.name.slice(0, 3)).toUpperCase(),
+    if (!canSave || busy) return;
+    setBusy(true);
+    const input = {
+      name: form.name,
+      shortCode: form.shortCode,
       industry: form.industry,
-      tone: industryTone[form.industry],
-      status: "Prospect",
-      logoTint: industryTone[form.industry],
-      location: form.location.trim() || "—",
-      contacts: [
-        {
-          name: form.contactName.trim() || "—",
-          title: form.contactTitle.trim() || "—",
-          email: form.contactEmail.trim(),
-          phone: form.contactPhone.trim() || "—",
-          primary: true,
-        },
-      ],
-      billingEmail: form.billingEmail.trim() || "—",
+      location: form.location,
+      contactName: form.contactName,
+      contactTitle: form.contactTitle,
+      contactEmail: form.contactEmail,
+      contactPhone: form.contactPhone,
+      billingEmail: form.billingEmail,
       paymentTerms: form.paymentTerms,
-      retainagePct: (Number(form.retainagePct) || 0) / 100,
+      retainagePct: Number(form.retainagePct) || 0,
       invoiceMinimum: Number(form.invoiceMinimum) || 0,
-      activeProjects: 0,
-      contractValue: 0,
-      billedToDate: 0,
-      openAr: 0,
-      avgDaysToPay: 0,
-      rateSheet: [],
-      notes: form.notes.trim(),
-      since: "2026",
-    });
+      notes: form.notes,
+    };
+    const res = editing ? await updateCustomer(initial!.id, input) : await createCustomer(input);
+    setBusy(false);
+    if (res.ok) onDone(res.id);
+  }
+
+  async function del() {
+    if (!initial || busy) return;
+    if (!window.confirm("Delete this customer? This can't be undone.")) return;
+    setBusy(true);
+    await deleteCustomer(initial.id);
+    onDone();
   }
 
   return (
     <Panel>
-      <PanelHeader title="New customer" description="Capture the account identity — billing rules and rate sheet can be added after." icon={<Plus className="size-3.5" />}>
+      <PanelHeader title={editing ? "Edit customer" : "New customer"} description="Company, contact and billing rules. Contract & rate card live on the customer once saved." icon={<Plus className="size-3.5" />}>
         <button onClick={onCancel} className="focus-ring rounded-md p-1 text-muted-foreground hover:text-foreground" aria-label="Cancel">
           <X className="size-4" />
         </button>
@@ -439,13 +449,21 @@ function AddCustomerForm({
           </Fieldset>
         </PanelBody>
 
-        <div className="mt-auto flex items-center justify-end gap-2 border-t border-border/70 px-4 py-3 sm:px-5">
-          <Button type="button" variant="outline" size="sm" onClick={onCancel} className="h-9 rounded-lg border-foreground/[0.08] bg-foreground/[0.03] text-[12.5px] text-muted-foreground hover:text-foreground">
-            Cancel
-          </Button>
-          <Button type="submit" size="sm" disabled={!canSave} className="h-9 gap-1.5 rounded-lg bg-brand px-3.5 text-[12.5px] font-semibold text-white hover:bg-brand-bright disabled:opacity-40">
-            <Check className="size-3.5" /> Create customer
-          </Button>
+        <div className="mt-auto flex items-center gap-2 border-t border-border/70 px-4 py-3 sm:px-5">
+          {editing ? (
+            <Button type="button" variant="outline" size="sm" onClick={del} disabled={busy} className="h-9 gap-1.5 rounded-lg border-critical/25 bg-critical/10 text-[12.5px] font-medium text-critical hover:bg-critical/15 disabled:opacity-50">
+              <Trash2 className="size-3.5" /> Delete
+            </Button>
+          ) : null}
+          <div className="ml-auto flex items-center gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={onCancel} className="h-9 rounded-lg border-foreground/[0.08] bg-foreground/[0.03] text-[12.5px] text-muted-foreground hover:text-foreground">
+              Cancel
+            </Button>
+            <Button type="submit" size="sm" disabled={!canSave || busy} className="h-9 gap-1.5 rounded-lg bg-brand px-3.5 text-[12.5px] font-semibold text-white hover:bg-brand-bright disabled:opacity-40">
+              {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
+              {editing ? "Save changes" : "Create customer"}
+            </Button>
+          </div>
         </div>
       </form>
     </Panel>

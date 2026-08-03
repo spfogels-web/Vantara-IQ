@@ -206,6 +206,72 @@ export async function listSubDocuments(subcontractorId: string) {
   }));
 }
 
+/* ---- Customers (create / edit / delete, persisted) ------------------------ */
+
+export type CustomerInput = {
+  name: string;
+  shortCode: string;
+  industry: string;
+  location: string;
+  contactName: string;
+  contactTitle: string;
+  contactEmail: string;
+  contactPhone: string;
+  billingEmail: string;
+  paymentTerms: string;
+  retainagePct: number;
+  invoiceMinimum: number;
+  notes: string;
+};
+
+function customerData(input: CustomerInput) {
+  const tone: Record<string, string> = { Telecom: "info", Power: "warning", Water: "success", Gas: "critical" };
+  const t = tone[input.industry] ?? "info";
+  return {
+    name: input.name.trim(),
+    shortCode: (input.shortCode || input.name.slice(0, 3)).toUpperCase(),
+    industry: input.industry,
+    tone: t,
+    logoTint: t,
+    location: input.location.trim(),
+    contacts: [
+      {
+        name: input.contactName.trim() || "—",
+        title: input.contactTitle.trim() || "—",
+        email: input.contactEmail.trim(),
+        phone: input.contactPhone.trim() || "—",
+        primary: true,
+      },
+    ] as unknown as Prisma.InputJsonValue,
+    billingEmail: input.billingEmail.trim(),
+    paymentTerms: input.paymentTerms,
+    retainagePct: (Number(input.retainagePct) || 0) / 100,
+    invoiceMinimum: Number(input.invoiceMinimum) || 0,
+    notes: input.notes.trim(),
+  };
+}
+
+export async function createCustomer(input: CustomerInput) {
+  if (!input.name.trim()) return { ok: false as const, error: "Company name is required." };
+  const c = await prisma.customer.create({
+    data: { ...customerData(input), status: "Active", since: "2026" },
+  });
+  revalidatePath("/customers");
+  return { ok: true as const, id: c.id };
+}
+
+export async function updateCustomer(id: string, input: CustomerInput) {
+  await prisma.customer.update({ where: { id }, data: customerData(input) });
+  revalidatePath("/customers");
+  return { ok: true as const, id };
+}
+
+export async function deleteCustomer(id: string) {
+  await prisma.customer.delete({ where: { id } });
+  revalidatePath("/customers");
+  return { ok: true as const };
+}
+
 /* ---- Customer contract documents + rate card ------------------------------ */
 
 export async function listCustomerDocuments(customerId: string) {
@@ -430,13 +496,16 @@ export async function uploadProjectMap(formData: FormData) {
   const file = formData.get("file") as File | null;
   const projectId = String(formData.get("projectId") || "");
   if (!file || !projectId) return { ok: false as const, error: "Missing map file." };
-  if (!file.type.startsWith("image/")) {
-    return { ok: false as const, error: "Upload an image (PNG/JPG). For PDFs, export the page as an image." };
+  const isImage = file.type.startsWith("image/");
+  const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+  if (!isImage && !isPdf) {
+    return { ok: false as const, error: "Upload an image (PNG/JPG) or a PDF." };
   }
   if (file.size > MAX_MAP_BYTES) return { ok: false as const, error: "Map is over 15 MB." };
 
   const buf = Buffer.from(await file.arrayBuffer());
-  const dataUrl = `data:${file.type};base64,${buf.toString("base64")}`;
+  const mediaType = file.type || (isPdf ? "application/pdf" : "image/png");
+  const dataUrl = `data:${mediaType};base64,${buf.toString("base64")}`;
   await prisma.project.update({
     where: { id: projectId },
     data: { mapUrl: dataUrl, mapOriginalUrl: dataUrl },
