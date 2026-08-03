@@ -6,7 +6,14 @@ import { Loader2, Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/format";
 import { compareByPriority } from "@/lib/unit-codes";
-import { addSubRate, deleteSubRate, listSubRates, updateSubRate } from "@/app/actions";
+import {
+  addSubRate,
+  deleteSubRate,
+  listRateImports,
+  listSubRates,
+  pushImportToSubcontractor,
+  updateSubRate,
+} from "@/app/actions";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 
 /**
@@ -33,6 +40,34 @@ export function SubRateCard({ subcontractorId }: { subcontractorId: string }) {
   const [description, setDescription] = React.useState("");
   const [unit, setUnit] = React.useState("ft");
   const [rate, setRate] = React.useState("");
+
+  // Extracted rate documents available to push onto this sub's card, so a
+  // signed rate sheet can be uploaded once and applied rather than retyped.
+  const [imports, setImports] = React.useState<
+    { id: string; fileName: string; rowCount: number }[]
+  >([]);
+  const [importId, setImportId] = React.useState("");
+  const [note, setNote] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    listRateImports().then(setImports).catch(() => setImports([]));
+  }, []);
+
+  async function pushImport() {
+    if (!importId || busy) return;
+    setBusy(true);
+    setError(null);
+    setNote(null);
+    const res = await pushImportToSubcontractor(importId, subcontractorId);
+    setBusy(false);
+    if (res.ok) {
+      setNote(`Added ${res.count} rate${res.count === 1 ? "" : "s"} from that document.`);
+      setImportId("");
+      void load();
+    } else {
+      setError(res.error);
+    }
+  }
 
   const load = React.useCallback(async () => {
     const rows = await listSubRates(subcontractorId);
@@ -136,6 +171,36 @@ export function SubRateCard({ subcontractorId }: { subcontractorId: string }) {
           </div>
           {error ? <p className="col-span-full text-[11.5px] text-critical">{error}</p> : null}
         </form>
+      ) : null}
+
+      {/* Apply an extracted rate document — the GC contract or the sub's own
+          signed rate sheet — instead of keying every line. */}
+      {imports.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-2 border-b border-border/70 px-3 py-2.5">
+          <span className="text-[11.5px] text-muted-foreground">From an uploaded rate sheet:</span>
+          <select
+            value={importId}
+            onChange={(e) => setImportId(e.target.value)}
+            className={cn(inputClass, "h-8 w-auto min-w-[200px] appearance-none py-0")}
+          >
+            <option value="">Choose a document…</option>
+            {imports.map((i) => (
+              <option key={i.id} value={i.id}>
+                {i.fileName} ({i.rowCount} rows)
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => void pushImport()}
+            disabled={!importId || busy}
+            className="focus-ring inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-[12px] font-medium text-foreground hover:bg-foreground/[0.05] disabled:opacity-40"
+          >
+            {busy ? <Loader2 className="size-3.5 animate-spin" /> : null} Apply approved rows
+          </button>
+          {note ? <span className="text-[11.5px] text-success">{note}</span> : null}
+          {error && !adding ? <span className="text-[11.5px] text-critical">{error}</span> : null}
+        </div>
       ) : null}
 
       {rates === null ? (
