@@ -12,6 +12,7 @@ import {
   type RateDocType,
 } from "@/lib/extract";
 import { parseDelimitedMaterialList, pdfTextLayer } from "@/lib/parse-material-list";
+import { findJobProfile } from "@/lib/job-profiles";
 
 /** Pilot feedback -> Feedback table. */
 export async function submitFeedback(input: {
@@ -798,9 +799,53 @@ async function runMaterialExtraction(projectId: string, file: File) {
       where: { id: imp.id },
       data: { status: "EXTRACTED", summary: result.summary },
     });
+
+    /*
+     * Standing rules for customers whose paperwork never changes. Windstream
+     * work through Globe is the same unit summary sheet every time, so the
+     * codes this system already recognises approve and start tracking without
+     * anyone clicking through them. Unrecognised, low-confidence and aerial
+     * rows still wait for review.
+     */
+    const profile = findJobProfile({
+      client: project.client,
+      fileName: name,
+      summary: result.summary,
+    });
+
+    let tracked = 0;
+    let pending = result.rows.length;
+    if (profile?.autoApprove) {
+      const saved = await prisma.extractedRow.findMany({
+        where: { importId: imp.id },
+        select: { id: true, code: true, confidence: true },
+      });
+      const approve = saved.filter((r) => profile.approves(r)).map((r) => r.id);
+      if (approve.length > 0) {
+        await prisma.extractedRow.updateMany({
+          where: { id: { in: approve } },
+          data: { status: "APPROVED" },
+        });
+        if (profile.autoTrack) {
+          const pushed = await pushMaterialsToProject(imp.id, project.id);
+          if (pushed.ok) tracked = pushed.count;
+        }
+        pending = result.rows.length - approve.length;
+      }
+    }
+
     revalidatePath(`/projects/${projectId}`);
+    revalidatePath("/dailies/new");
     revalidatePath("/rate-import");
-    return { ok: true as const, id: imp.id, count: result.rows.length, summary: result.summary };
+    return {
+      ok: true as const,
+      id: imp.id,
+      count: result.rows.length,
+      summary: result.summary,
+      profile: profile?.label ?? null,
+      tracked,
+      pending,
+    };
   } catch (e) {
     const error = e instanceof Error ? e.message : "Extraction failed";
     // A failed extraction has no rows and nothing to review — leaving it behind

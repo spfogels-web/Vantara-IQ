@@ -104,11 +104,19 @@ export function ProjectMaterials({
 
     setBusy(false);
     if (res.ok) {
-      setNote(
-        res.count === 0
-          ? "Claude read the document but found no material lines on it."
-          : `Pulled ${res.count} material ${res.count === 1 ? "line" : "lines"} — review and approve to start tracking.`,
-      );
+      if (res.count === 0) {
+        setNote("Read the document but found no material lines on it.");
+      } else if (res.tracked > 0) {
+        // A job profile recognised the paperwork and did the approving.
+        setNote(
+          `${res.profile}: pulled ${res.count} lines and started tracking ${res.tracked} codes automatically` +
+            (res.pending > 0 ? ` — ${res.pending} left for review.` : "."),
+        );
+      } else {
+        setNote(
+          `Pulled ${res.count} material ${res.count === 1 ? "line" : "lines"} — review and approve to start tracking.`,
+        );
+      }
       router.refresh();
     } else {
       setError(res.error);
