@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { FortitudeLogo } from "@/components/common/fortitude-logo";
 
 /** "White Plains, SC" → "SC"; falls back to the whole string. */
 function stateOf(location: string) {
@@ -142,16 +143,18 @@ export function InviteDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Invite subcontractor</DialogTitle>
+      <DialogContent className="max-h-[88vh] overflow-y-auto overflow-x-hidden sm:max-w-lg">
+        <DialogHeader className="min-w-0">
+          <div className="flex items-center gap-2.5">
+            <FortitudeLogo size={30} />
+            <DialogTitle className="truncate">Invite subcontractor</DialogTitle>
+          </div>
           <DialogDescription>
-            Send a project-specific onboarding link. They&apos;ll verify their email and phone when
-            they accept, then it&apos;s tied to the project you pick.
+            Send a project-specific onboarding link tied to the project you pick.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col gap-3">
+        <div className="flex min-w-0 flex-col gap-3">
           {/* Project assignment */}
           <label className="flex flex-col gap-1.5">
             <span className="text-[11.5px] font-medium text-muted-foreground">
@@ -181,9 +184,9 @@ export function InviteDialog({
           </label>
 
           {/* Generated link */}
-          <div className="flex flex-col gap-1.5">
+          <div className="flex min-w-0 flex-col gap-1.5">
             <span className="text-[11.5px] font-medium text-muted-foreground">Invite link</span>
-            <div className="flex items-center gap-2 rounded-lg border border-foreground/[0.08] bg-foreground/[0.03] px-2.5 py-1.5">
+            <div className="flex min-w-0 items-center gap-2 rounded-lg border border-foreground/[0.08] bg-foreground/[0.03] px-2.5 py-1.5">
               <Link2 className="size-3.5 shrink-0 text-muted-foreground" />
               <span className="num min-w-0 flex-1 truncate text-[11.5px] text-foreground">
                 {link || "Select a project…"}
@@ -217,8 +220,8 @@ export function InviteDialog({
             />
           </label>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div className="flex flex-col gap-1">
+          <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="flex min-w-0 flex-col gap-1">
               <span className="flex items-center gap-1.5 text-[11.5px] font-medium text-foreground">
                 <Mail className="size-3.5 text-muted-foreground" /> Email
               </span>
@@ -236,7 +239,7 @@ export function InviteDialog({
               ) : null}
             </div>
 
-            <div className="flex flex-col gap-1">
+            <div className="flex min-w-0 flex-col gap-1">
               <span className="flex items-center gap-1.5 text-[11.5px] font-medium text-foreground">
                 <MessageSquare className="size-3.5 text-muted-foreground" /> Mobile number
               </span>
@@ -272,7 +275,7 @@ export function InviteDialog({
           </label>
 
           {/* Send */}
-          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+          <div className="grid min-w-0 grid-cols-1 gap-2.5 sm:grid-cols-2">
             <Button
               type="button"
               size="sm"
