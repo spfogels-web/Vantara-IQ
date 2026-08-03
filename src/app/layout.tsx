@@ -4,6 +4,7 @@ import { GeistMono } from "geist/font/mono";
 
 import "./globals.css";
 import { AppShell } from "@/components/layout/app-shell";
+import { getCurrentUser } from "@/lib/auth";
 
 export const metadata: Metadata = {
   title: {
@@ -20,11 +21,15 @@ export const viewport: Viewport = {
   colorScheme: "dark",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Read once here so the shell can show who is signed in without every page
+  // re-querying it.
+  const user = await getCurrentUser();
+
   return (
     <html
       lang="en"
@@ -40,7 +45,7 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-svh bg-background font-sans antialiased">
-        <AppShell>{children}</AppShell>
+        <AppShell user={user}>{children}</AppShell>
       </body>
     </html>
   );

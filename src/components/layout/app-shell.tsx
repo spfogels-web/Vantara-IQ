@@ -12,6 +12,7 @@ import {
   SIDEBAR_WIDTH_COLLAPSED,
 } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
+import type { CurrentUser } from "@/lib/auth";
 import { useIsDesktop } from "@/hooks/use-media-query";
 
 /**
@@ -19,7 +20,7 @@ import { useIsDesktop } from "@/hooks/use-media-query";
  * flex row, so the sidebar can stay `fixed` and the page scrolls independently
  * of it — no nested scroll containers, no sticky-header jitter.
  */
-function ShellFrame({ children }: { children: React.ReactNode }) {
+function ShellFrame({ children, user }: { children: React.ReactNode; user: CurrentUser | null }) {
   const { collapsed } = useSidebar();
   const isDesktop = useIsDesktop();
 
@@ -36,14 +37,14 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
           transition: "margin-inline-start 260ms cubic-bezier(0.16, 1, 0.3, 1)",
         }}
       >
-        <Topbar />
+        <Topbar user={user} />
         <main className="flex-1">{children}</main>
       </div>
     </div>
   );
 }
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({ children, user }: { children: React.ReactNode; user: CurrentUser | null }) {
   const pathname = usePathname();
 
   // Public, external-facing routes (e.g. subcontractor onboarding) render
@@ -60,7 +61,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <TooltipProvider delayDuration={300} skipDelayDuration={200}>
       <SidebarProvider>
         <CommandMenuProvider>
-          <ShellFrame>{children}</ShellFrame>
+          <ShellFrame user={user}>{children}</ShellFrame>
         </CommandMenuProvider>
       </SidebarProvider>
     </TooltipProvider>

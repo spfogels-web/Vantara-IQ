@@ -24,6 +24,8 @@ import { getIcon } from "@/lib/icons";
 import { initials } from "@/lib/format";
 import { toneStyles } from "@/lib/tone";
 import { notifications, organization } from "@/data/mock";
+import type { CurrentUser } from "@/lib/auth";
+import { logout } from "@/app/auth-actions";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -208,8 +210,24 @@ function QuickActions() {
   );
 }
 
-function UserMenu() {
-  const { user } = organization;
+const ROLE_LABEL: Record<string, string> = {
+  ADMIN: "Administrator",
+  PM: "Project manager",
+  OFFICE: "Office",
+  SUBCONTRACTOR: "Subcontractor",
+};
+
+function UserMenu({ user: current }: { user: CurrentUser | null }) {
+  // Falls back to the fixture only when nobody is signed in, which in practice
+  // means a page rendered outside the authenticated shell.
+  const user = current
+    ? {
+        name: current.name,
+        email: current.email,
+        role: ROLE_LABEL[current.role] ?? current.role,
+      }
+    : organization.user;
+  const plan = current?.organizationPlan ?? organization.plan;
   const [feedbackOpen, setFeedbackOpen] = React.useState(false);
 
   return (
@@ -272,11 +290,14 @@ function UserMenu() {
           <CreditCard className="size-4 text-muted-foreground" />
           Billing &amp; plan
           <span className="ml-auto rounded bg-brand/15 px-1.5 py-0.5 text-[10px] font-semibold text-brand-bright">
-            {organization.plan}
+            {plan}
           </span>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem className="gap-2.5 py-2 text-[12.5px] text-critical focus:text-critical">
+        <DropdownMenuItem
+          onSelect={() => void logout()}
+          className="gap-2.5 py-2 text-[12.5px] text-critical focus:text-critical"
+        >
           <LogOut className="size-4" />
           Sign out
         </DropdownMenuItem>
@@ -312,7 +333,7 @@ function MobileNav() {
   );
 }
 
-export function Topbar() {
+export function Topbar({ user }: { user: CurrentUser | null }) {
   const { setOpen: setCommandOpen } = useCommandMenu();
 
   return (
@@ -352,7 +373,7 @@ export function Topbar() {
         <ThemeToggle />
         <NotificationsPopover />
         <span className="mx-1 hidden h-5 w-px bg-border sm:block" />
-        <UserMenu />
+        <UserMenu user={user} />
       </div>
     </header>
   );

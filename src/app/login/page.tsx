@@ -1,10 +1,9 @@
 import Link from "next/link";
 import { Zap } from "lucide-react";
 
-export const metadata = { title: "Log in · Vantara IQ" };
+import { LoginForm } from "@/components/auth/login-form";
 
-const inputClass =
-  "w-full rounded-lg border border-foreground/[0.1] bg-foreground/[0.03] px-3 py-2.5 text-[13px] text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-brand/40";
+export const metadata = { title: "Log in · Vantara IQ" };
 
 export default function LoginPage() {
   return (
@@ -24,28 +23,10 @@ export default function LoginPage() {
           Sign in to your Vantara IQ account.
         </p>
 
-        <form className="mt-5 flex flex-col gap-3.5">
-          <label className="flex flex-col gap-1.5">
-            <span className="text-[11.5px] font-medium text-muted-foreground">Work email</span>
-            <input type="email" placeholder="you@company.com" className={inputClass} />
-          </label>
-          <label className="flex flex-col gap-1.5">
-            <span className="flex items-baseline justify-between">
-              <span className="text-[11.5px] font-medium text-muted-foreground">Password</span>
-              <span className="text-[11px] text-brand-bright">Forgot?</span>
-            </span>
-            <input type="password" placeholder="••••••••" className={inputClass} />
-          </label>
-          <button
-            type="button"
-            className="brand-gradient focus-ring mt-1 inline-flex items-center justify-center rounded-lg px-4 py-2.5 text-[13px] font-semibold text-white"
-          >
-            Sign in
-          </button>
-        </form>
+        <LoginForm />
 
         <p className="mt-4 rounded-lg border border-border/60 bg-foreground/[0.02] px-3 py-2 text-center text-[11px] text-muted-foreground">
-          Accounts &amp; sign-in are being wired up. New subcontractors join via the invite link Fortitude sends.
+          New subcontractors join via the invite link Fortitude sends.
         </p>
       </div>
 
