@@ -18,12 +18,7 @@ import {
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import {
-  addSheetPhotos,
-  saveDailySheet,
-  submitDailySheet,
-  type SheetPayload,
-} from "@/app/actions";
+import { saveDailySheet, submitDailySheet, type SheetPayload } from "@/app/actions";
 import { SheetPhotos, parsePhotos, type SheetPhoto } from "@/components/dailies/sheet-photos";
 import { isPdfUrl } from "@/components/projects/project-detail-client";
 import {
@@ -293,30 +288,11 @@ export function DailyBillingSheet({
   const [photos, setPhotos] = React.useState<SheetPhoto[]>(() => parsePhotos(saved?.photos));
 
   /**
-   * A submitted daily is a filed record: the grids, header, notes and redline
-   * are fixed, and the only thing anyone may still add is photographs. The
-   * server refuses everything else regardless of what this component does.
+   * A submitted daily is a filed record — read and print only. The server
+   * refuses edits to it as well, so this is not the only thing standing
+   * between a filed sheet and a change.
    */
   const locked = saved?.status === "SUBMITTED";
-  const filedPhotoIds = React.useMemo(
-    () => new Set(parsePhotos(saved?.photos).map((p) => p.id)),
-    [saved],
-  );
-  const unsavedPhotos = photos.filter((p) => !filedPhotoIds.has(p.id));
-
-  async function saveNewPhotos() {
-    if (!sheetId || unsavedPhotos.length === 0 || saving) return;
-    setSaving(true);
-    setSaveError(null);
-    const res = await addSheetPhotos(sheetId, unsavedPhotos);
-    setSaving(false);
-    if (res.ok) {
-      setSavedAt(new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
-      router.refresh();
-    } else {
-      setSaveError(res.error);
-    }
-  }
 
   const payload = React.useCallback(
     (): SheetPayload => ({
@@ -428,19 +404,8 @@ export function DailyBillingSheet({
             <Printer className="size-3.5" /> Print
           </Button>
           {locked ? (
-            // Filed record: photos are the only thing still accepted.
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => void saveNewPhotos()}
-              disabled={saving || unsavedPhotos.length === 0}
-              className="h-8 gap-1.5 rounded-lg bg-brand px-2.5 text-[12px] font-semibold text-white hover:bg-brand-bright disabled:opacity-50"
-            >
-              {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
-              {unsavedPhotos.length > 0
-                ? `Attach ${unsavedPhotos.length} photo${unsavedPhotos.length === 1 ? "" : "s"}`
-                : "Photos only"}
-            </Button>
+            // A filed daily is a closed record — read and print only.
+            <span className="text-[11.5px] text-muted-foreground">Submitted · read only</span>
           ) : (
             <>
               <Button
@@ -961,20 +926,15 @@ export function DailyBillingSheet({
             />
           </div>
 
-          </fieldset>
-
-          {/* ── Field photos — the one thing a filed daily still accepts ── */}
+          {/* ── Field photos ────────────────────────────────────── */}
           {project ? (
             <SheetPhotos
               projectId={project.id}
               photos={photos}
               onChange={setPhotos}
-              locked={locked}
-              lockedIds={filedPhotoIds}
             />
           ) : null}
 
-          <fieldset disabled={locked} className="contents">
           {/* ── Job map + as-built redline ───────────────────────── */}
           {project ? (
             <div className="border-t border-border print:break-before-page">

@@ -9,10 +9,9 @@ import { cn } from "@/lib/utils";
 /**
  * Field photos on a daily — peds, handholes, as-built evidence.
  *
- * Each photo carries two timestamps: when the camera took it (read from the
- * file's own lastModified) and when it was added to the sheet. Those differ
- * whenever a crew shoots in the morning and files the sheet at end of day,
- * and for a dispute the first one is the one that matters.
+ * Each photo is stamped with when it was attached to the sheet, not when the
+ * camera took it — the picture is usually hours older than the filing, and the
+ * submission time is the one that matters.
  */
 
 export type SheetPhoto = {
@@ -66,27 +65,15 @@ export function SheetPhotos({
   projectId,
   photos,
   onChange,
-  /**
-   * A submitted daily is a filed record. Photos can still be added to it —
-   * that is the one allowance — but nothing already on it may be edited or
-   * removed. The server enforces this too; this only keeps the UI honest.
-   */
-  locked = false,
-  lockedIds,
 }: {
   projectId: string;
   photos: SheetPhoto[];
   onChange: (next: SheetPhoto[]) => void;
-  locked?: boolean;
-  /** Photos already filed — untouchable even while newer ones are editable. */
-  lockedIds?: Set<string>;
 }) {
   const pickRef = React.useRef<HTMLInputElement>(null);
   const shootRef = React.useRef<HTMLInputElement>(null);
   const [busy, setBusy] = React.useState(0);
   const [error, setError] = React.useState<string | null>(null);
-
-  const isFiled = (id: string) => Boolean(locked && lockedIds?.has(id));
 
   async function add(files: FileList | null) {
     if (!files?.length) return;
@@ -135,7 +122,7 @@ export function SheetPhotos({
             Field photos
           </p>
           <p className="text-[11px] text-muted-foreground print:hidden">
-            Peds, handholes and as-built evidence — each stamped with when it was taken.
+            Peds, handholes and as-built evidence — stamped when the daily is filed.
           </p>
         </div>
 
@@ -200,7 +187,6 @@ export function SheetPhotos({
                 <div className="flex items-center gap-1.5">
                   <select
                     value={p.structure}
-                    disabled={isFiled(p.id)}
                     onChange={(e) => patch(p.id, { structure: e.target.value })}
                     className={cn(
                       "num h-6 flex-1 rounded border border-border bg-transparent px-1 text-[10.5px] font-semibold uppercase text-brand-bright outline-none",
@@ -215,7 +201,6 @@ export function SheetPhotos({
                   </select>
                   <button
                     type="button"
-                    hidden={isFiled(p.id)}
                     onClick={() => onChange(photos.filter((x) => x.id !== p.id))}
                     title="Remove photo"
                     className="focus-ring grid size-6 shrink-0 place-items-center rounded text-muted-foreground/0 transition group-hover/photo:text-muted-foreground hover:!text-critical print:hidden"
@@ -225,13 +210,9 @@ export function SheetPhotos({
                 </div>
                 <input
                   value={p.caption}
-                  readOnly={isFiled(p.id)}
                   onChange={(e) => patch(p.id, { caption: e.target.value })}
-                  placeholder={isFiled(p.id) ? "" : "Location / note"}
-                  className={cn(
-                    "w-full rounded border border-transparent bg-transparent px-1 text-[11px] text-foreground outline-none",
-                    isFiled(p.id) ? "cursor-default" : "hover:border-border focus:border-brand/50",
-                  )}
+                  placeholder="Location / note"
+                  className="w-full rounded border border-transparent bg-transparent px-1 text-[11px] text-foreground outline-none hover:border-border focus:border-brand/50"
                 />
                 <p className="num px-1 text-[10px] text-muted-foreground">
                   {stamp(p.addedAt)}

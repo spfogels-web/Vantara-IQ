@@ -1313,33 +1313,6 @@ export async function submitDailySheet(input: SheetPayload) {
   return { ok: true as const, id: sheet.id, dailyId: daily.id, lines: lineItems.length };
 }
 
-/**
- * Append photographs to a sheet — the one change a submitted daily still
- * accepts. Append-only by construction: existing entries are read from the
- * record and re-saved untouched, so a client cannot drop or rewrite one by
- * sending a shorter list.
- */
-export async function addSheetPhotos(sheetId: string, photos: unknown[]) {
-  const sheet = await prisma.dailySheet.findUnique({
-    where: { id: sheetId },
-    select: { photos: true, projectId: true },
-  });
-  if (!sheet) return { ok: false as const, error: "Sheet not found." };
-
-  const existing = Array.isArray(sheet.photos) ? sheet.photos : [];
-  const incoming = Array.isArray(photos) ? photos : [];
-  if (incoming.length === 0) return { ok: false as const, error: "No photos to add." };
-
-  await prisma.dailySheet.update({
-    where: { id: sheetId },
-    data: { photos: [...existing, ...incoming] as Prisma.InputJsonValue },
-  });
-
-  revalidatePath("/dailies");
-  if (sheet.projectId) revalidatePath(`/projects/${sheet.projectId}`);
-  return { ok: true as const, count: incoming.length, total: existing.length + incoming.length };
-}
-
 export async function deleteDailySheet(id: string) {
   await prisma.dailySheet.delete({ where: { id } });
   revalidatePath("/dailies");
