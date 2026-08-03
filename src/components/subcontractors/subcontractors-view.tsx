@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   BadgeCheck,
   Check,
+  FileText,
   FolderKanban,
   HardHat,
   Lock,
@@ -28,7 +29,8 @@ import { StatusPill } from "@/components/common/status-pill";
 import { LogoUpload } from "@/components/common/logo-upload";
 import { Button } from "@/components/ui/button";
 import { InviteDialog } from "@/components/subcontractors/invite-dialog";
-import { approveSubcontractor } from "@/app/actions";
+import { DocumentCenter, type SubDoc } from "@/components/subcontractors/document-center";
+import { approveSubcontractor, listSubDocuments } from "@/app/actions";
 
 const complianceTone: Record<ComplianceStatus, "success" | "warning" | "critical" | "neutral"> = {
   valid: "success",
@@ -171,6 +173,18 @@ function SubDetail({ sub: s, onInvite }: { sub: Subcontractor; onInvite: () => v
   const pending = s.state === "Pending review";
   const router = useRouter();
   const [approving, setApproving] = React.useState(false);
+  const [docs, setDocs] = React.useState<SubDoc[] | null>(null);
+
+  React.useEffect(() => {
+    let active = true;
+    setDocs(null);
+    listSubDocuments(s.id).then((d) => {
+      if (active) setDocs(d);
+    });
+    return () => {
+      active = false;
+    };
+  }, [s.id]);
 
   async function approve() {
     if (approving) return;
@@ -404,6 +418,22 @@ function SubDetail({ sub: s, onInvite }: { sub: Subcontractor; onInvite: () => v
               </p>
             )}
           </div>
+        </PanelBody>
+      </Panel>
+
+      {/* Documents — onboarding & compliance files, review + download */}
+      <Panel>
+        <PanelHeader
+          title="Documents"
+          description="Onboarding & compliance files — review, download, or upload on the sub's behalf"
+          icon={<FileText className="size-3.5" />}
+        />
+        <PanelBody>
+          {docs === null ? (
+            <p className="text-[12px] text-muted-foreground">Loading documents…</p>
+          ) : (
+            <DocumentCenter key={s.id} subcontractorId={s.id} initialDocs={docs} uploadedBy="contractor" />
+          )}
         </PanelBody>
       </Panel>
 

@@ -48,7 +48,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   // Public, external-facing routes (e.g. subcontractor onboarding) render
   // full-bleed — no internal sidebar, topbar or command palette.
-  if (pathname?.startsWith("/invite")) {
+  if (pathname?.startsWith("/invite") || pathname?.startsWith("/login")) {
     return (
       <TooltipProvider delayDuration={300} skipDelayDuration={200}>
         <div className="aurora relative min-h-svh">{children}</div>

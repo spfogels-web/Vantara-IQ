@@ -83,6 +83,129 @@ export async function approveSubcontractor(id: string) {
   return { ok: true as const };
 }
 
+/**
+ * Creates the subcontractor record at the START of onboarding (account step) so
+ * documents can be attached during the flow. Returns the id.
+ */
+export async function createSubcontractorDraft(input: {
+  company: string;
+  name: string;
+  email: string;
+  projectName?: string;
+}) {
+  const compliance = [
+    { label: "General liability COI", status: "missing", expires: "—", daysOut: null },
+    { label: "Workers' comp", status: "missing", expires: "—", daysOut: null },
+    { label: "W-9", status: "missing", expires: "—", daysOut: null },
+    { label: "Master subcontract", status: "missing", expires: "—", daysOut: null },
+  ];
+  const scorecard = {
+    rating: 0, projectsCompleted: 0, avgApprovalDays: 0, avgDailyFt: 0,
+    docAccuracy: 0, safetyIncidents: 0, disputes: 0, avgProductionPct: 0,
+  };
+  const sub = await prisma.subcontractor.create({
+    data: {
+      company: input.company,
+      lead: input.name,
+      email: input.email,
+      state: "PENDING_REVIEW",
+      tone: "warning",
+      complianceTone: "neutral",
+      assignedProjects: input.projectName ? [input.projectName] : [],
+      compliance: compliance as unknown as Prisma.InputJsonValue,
+      scorecard: scorecard as unknown as Prisma.InputJsonValue,
+      since: "2026",
+    },
+  });
+  return { ok: true as const, id: sub.id };
+}
+
+/** Saves the capabilities statement onto an existing (draft) subcontractor. */
+export async function updateSubcontractorCapabilities(
+  id: string,
+  input: { trades: string[]; crews?: string; fieldStaff?: string; equipment: string[] },
+) {
+  await prisma.subcontractor.update({
+    where: { id },
+    data: {
+      trades: input.trades,
+      equipment: input.equipment,
+      crewSize: Number(input.fieldStaff) || Number(input.crews) || 0,
+    },
+  });
+  revalidatePath("/subcontractors");
+  return { ok: true as const };
+}
+
+const MAX_DOC_BYTES = 10 * 1024 * 1024; // 10 MB
+
+/** Uploads one compliance/onboarding document, stored as a data URL. */
+export async function uploadSubDocument(formData: FormData) {
+  const file = formData.get("file") as File | null;
+  const subcontractorId = String(formData.get("subcontractorId") || "");
+  const section = String(formData.get("section") || "");
+  const uploadedBy = String(formData.get("uploadedBy") || "subcontractor");
+  if (!file || !subcontractorId || !section) {
+    return { ok: false as const, error: "Missing file or section." };
+  }
+  if (file.size > MAX_DOC_BYTES) {
+    return { ok: false as const, error: "File is over 10 MB." };
+  }
+  const buf = Buffer.from(await file.arrayBuffer());
+  const mediaType = file.type || "application/octet-stream";
+  const dataUrl = `data:${mediaType};base64,${buf.toString("base64")}`;
+
+  const doc = await prisma.subDocument.create({
+    data: {
+      subcontractorId,
+      section,
+      fileName: file.name,
+      mediaType,
+      sizeBytes: file.size,
+      dataUrl,
+      uploadedBy,
+    },
+  });
+  revalidatePath("/subcontractors");
+  return {
+    ok: true as const,
+    doc: {
+      id: doc.id,
+      section: doc.section,
+      fileName: doc.fileName,
+      mediaType: doc.mediaType,
+      sizeBytes: doc.sizeBytes,
+      dataUrl: doc.dataUrl,
+      uploadedBy: doc.uploadedBy,
+      createdAt: doc.createdAt.toISOString(),
+    },
+  };
+}
+
+export async function deleteSubDocument(id: string) {
+  await prisma.subDocument.delete({ where: { id } });
+  revalidatePath("/subcontractors");
+  return { ok: true as const };
+}
+
+/** Load all documents for a subcontractor (contractor-side review). */
+export async function listSubDocuments(subcontractorId: string) {
+  const rows = await prisma.subDocument.findMany({
+    where: { subcontractorId },
+    orderBy: { createdAt: "asc" },
+  });
+  return rows.map((d) => ({
+    id: d.id,
+    section: d.section,
+    fileName: d.fileName,
+    mediaType: d.mediaType,
+    sizeBytes: d.sizeBytes,
+    dataUrl: d.dataUrl,
+    uploadedBy: d.uploadedBy,
+    createdAt: d.createdAt.toISOString(),
+  }));
+}
+
 /* ---- Rate-document extraction (AI extracts, human approves) --------------- */
 
 const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);

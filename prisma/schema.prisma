@@ -119,7 +119,23 @@ model Subcontractor {
   logoUrl          String?
   since            String    @default("")
   users            User[]
+  documents        SubDocument[]
   createdAt        DateTime  @default(now())
+}
+
+/// A file a subcontractor uploads to an onboarding/compliance section. Stored as
+/// a data URL so it's downloadable without external blob storage (pilot).
+model SubDocument {
+  id              String        @id @default(cuid())
+  subcontractor   Subcontractor @relation(fields: [subcontractorId], references: [id], onDelete: Cascade)
+  subcontractorId String
+  section         String
+  fileName        String
+  mediaType       String        @default("")
+  sizeBytes       Int           @default(0)
+  dataUrl         String
+  uploadedBy      String        @default("subcontractor")
+  createdAt       DateTime      @default(now())
 }
 
 model Daily {

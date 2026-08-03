@@ -1,41 +1,20 @@
 "use client";
 
 import * as React from "react";
-import {
-  Building2,
-  Check,
-  CircleDot,
-  FileCheck2,
-  HardHat,
-  Landmark,
-  MapPin,
-  ShieldCheck,
-  Sparkles,
-  Zap,
-} from "lucide-react";
+import Link from "next/link";
+import { Check, HardHat, MapPin, Zap } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { initials } from "@/lib/format";
-import { submitOnboarding } from "@/app/actions";
+import { createSubcontractorDraft, updateSubcontractorCapabilities } from "@/app/actions";
 import { LogoUpload } from "@/components/common/logo-upload";
+import { DocumentCenter } from "@/components/subcontractors/document-center";
 
 export type InviteProject = {
   name: string;
   client: string;
   location: string;
 } | null;
-
-/** The onboarding pipeline a subcontractor moves through after the invite. */
-const STEPS = [
-  { key: "account", label: "Create your account", detail: "Name, email and a password.", icon: Sparkles },
-  { key: "company", label: "Company information", detail: "Legal name, address, EIN and contacts.", icon: Building2 },
-  { key: "docs", label: "W-9, insurance & agreements", detail: "COI, workers' comp, W-9 and the signed subcontract.", icon: ShieldCheck },
-  { key: "payment", label: "Payment documents", detail: "ACH / banking details for pay applications.", icon: Landmark },
-  { key: "capabilities", label: "Capabilities statement", detail: "Trades, crews and equipment available — required.", icon: HardHat },
-  { key: "check", label: "Requirements check", detail: "Vantara IQ verifies everything required is on file.", icon: FileCheck2 },
-  { key: "review", label: "Fortitude review & approval", detail: "Fortitude reviews and approves the account.", icon: Check },
-  { key: "active", label: "You're active", detail: "Access opens for your assigned project.", icon: Zap },
-] as const;
 
 const TRADES = [
   "Directional bore",
@@ -53,41 +32,14 @@ const TRADES = [
 const inputClass =
   "w-full rounded-lg border border-foreground/[0.1] bg-foreground/[0.03] px-3 py-2.5 text-[13px] text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-brand/40";
 
-type Step = "account" | "capabilities" | "done";
+type Step = "account" | "onboard" | "done";
 
-export function InviteOnboarding({
-  project,
-}: {
-  token: string;
-  project: InviteProject;
-}) {
+export function InviteOnboarding({ project }: { token: string; project: InviteProject }) {
   const [step, setStep] = React.useState<Step>("account");
+  const [subId, setSubId] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
   const [account, setAccount] = React.useState({ company: "", name: "", email: "", password: "" });
   const [caps, setCaps] = React.useState({ crews: "", fieldStaff: "", equipment: "", trades: [] as string[] });
-
-  async function finishOnboarding() {
-    if (!capsValid || saving) return;
-    setSaving(true);
-    try {
-      await submitOnboarding({
-        company: account.company,
-        name: account.name,
-        email: account.email,
-        projectName: project?.name,
-        trades: caps.trades,
-        crews: caps.crews,
-        fieldStaff: caps.fieldStaff,
-        equipment: caps.equipment
-          .split("\n")
-          .map((s) => s.trim())
-          .filter(Boolean),
-      });
-      setStep("done");
-    } finally {
-      setSaving(false);
-    }
-  }
 
   const setA = (k: keyof typeof account) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setAccount((f) => ({ ...f, [k]: e.target.value }));
@@ -97,18 +49,58 @@ export function InviteOnboarding({
     setCaps((f) => ({ ...f, trades: f.trades.includes(t) ? f.trades.filter((x) => x !== t) : [...f.trades, t] }));
 
   const accountValid = account.company.trim() && account.name.trim() && account.email.trim() && account.password.length >= 8;
-  const capsValid = caps.trades.length > 0 && caps.crews.trim() && caps.equipment.trim();
+  const capsValid = caps.trades.length > 0 && caps.crews.trim();
+
+  async function createAccount() {
+    if (!accountValid || saving) return;
+    setSaving(true);
+    try {
+      const res = await createSubcontractorDraft({
+        company: account.company,
+        name: account.name,
+        email: account.email,
+        projectName: project?.name,
+      });
+      if (res.ok) {
+        setSubId(res.id);
+        setStep("onboard");
+      }
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function finish() {
+    if (!subId || !capsValid || saving) return;
+    setSaving(true);
+    try {
+      await updateSubcontractorCapabilities(subId, {
+        trades: caps.trades,
+        crews: caps.crews,
+        fieldStaff: caps.fieldStaff,
+        equipment: caps.equipment.split("\n").map((s) => s.trim()).filter(Boolean),
+      });
+      setStep("done");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
-    <div className="mx-auto flex min-h-svh w-full max-w-3xl flex-col px-4 py-8 sm:px-6 sm:py-12">
+    <div className="mx-auto flex min-h-svh w-full max-w-5xl flex-col px-4 py-8 sm:px-6 sm:py-12">
       {/* Brand header */}
-      <div className="flex items-center gap-2.5">
-        <span className="brand-gradient glow-brand grid size-8 place-items-center rounded-lg text-white">
-          <Zap className="size-4" strokeWidth={2.4} />
-        </span>
-        <span className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">
-          VANTARA <span className="text-brand-bright">IQ</span>
-        </span>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <span className="brand-gradient glow-brand grid size-8 place-items-center rounded-lg text-white">
+            <Zap className="size-4" strokeWidth={2.4} />
+          </span>
+          <span className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">
+            VANTARA <span className="text-brand-bright">IQ</span>
+          </span>
+        </div>
+        <Link href="/login" className="text-[12.5px] font-medium text-muted-foreground hover:text-foreground">
+          Log in
+        </Link>
       </div>
 
       {/* Invitation banner */}
@@ -124,46 +116,28 @@ export function InviteOnboarding({
             </span>
             <div className="min-w-0">
               <p className="text-[13.5px] font-semibold text-foreground">{project.name}</p>
-              <p className="text-[12px] text-muted-foreground">
-                {project.client} · {project.location}
-              </p>
+              <p className="text-[12px] text-muted-foreground">{project.client} · {project.location}</p>
             </div>
             <span className="ml-auto rounded-full bg-brand/15 px-2.5 py-1 text-[11px] font-semibold text-brand-bright">
               Your assigned project
             </span>
           </div>
-        ) : (
-          <p className="mt-3 rounded-xl border border-warning/25 bg-warning/[0.08] px-4 py-3 text-[12.5px] text-warning">
-            This invite link is missing its project assignment. Ask Fortitude to resend it.
-          </p>
-        )}
+        ) : null}
         <p className="mt-4 text-[13px] leading-relaxed text-muted-foreground">
           Complete onboarding to start submitting dailies. You&apos;ll only ever see the project
           you&apos;re assigned to — your production, your approvals, your pay.
         </p>
       </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {/* Wizard */}
-        <div className="surface p-5">
-          {/* Step indicator */}
-          {step !== "done" ? (
+      {step === "account" ? (
+        <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {/* Create account */}
+          <div className="surface p-5">
             <div className="mb-4 flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
-              <StepDot on={step === "account"} done={step !== "account"} n={1} />
-              <span className="h-px w-6 bg-foreground/[0.1]" />
-              <StepDot on={step === "capabilities"} done={false} n={2} />
-              <span className="ml-2">{step === "account" ? "Create account" : "Capabilities statement"}</span>
+              <StepDot on n={1} /> <span className="h-px w-6 bg-foreground/[0.1]" /> <StepDot n={2} />
+              <span className="ml-2">Create account</span>
             </div>
-          ) : null}
-
-          {step === "account" ? (
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (accountValid) setStep("capabilities");
-              }}
-              className="flex flex-col gap-3.5"
-            >
+            <form onSubmit={(e) => { e.preventDefault(); void createAccount(); }} className="flex flex-col gap-3.5">
               <h2 className="text-[15px] font-semibold text-foreground">Create your account</h2>
               <Field label="Company name">
                 <input value={account.company} onChange={setA("company")} placeholder="ABC Utilities" className={inputClass} />
@@ -179,161 +153,125 @@ export function InviteOnboarding({
               </Field>
               <button
                 type="submit"
-                disabled={!accountValid}
+                disabled={!accountValid || saving}
                 className="brand-gradient focus-ring mt-1 inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2.5 text-[13px] font-semibold text-white disabled:opacity-40"
               >
-                Continue →
+                {saving ? "Creating…" : "Continue →"}
               </button>
-            </form>
-          ) : step === "capabilities" ? (
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                void finishOnboarding();
-              }}
-              className="flex flex-col gap-3.5"
-            >
-              <div>
-                <h2 className="flex items-center gap-1.5 text-[15px] font-semibold text-foreground">
-                  <HardHat className="size-4 text-brand-bright" /> Capabilities statement
-                </h2>
-                <p className="mt-1 text-[11.5px] text-muted-foreground">
-                  Required. Tell Fortitude what your crews and equipment can do — this drives which
-                  projects you&apos;re a fit for.
-                </p>
-              </div>
-
-              <div className="flex items-center gap-3 rounded-xl border border-border/70 bg-foreground/[0.02] p-3">
-                <LogoUpload fallback={initials(account.company || "Co")} size={44} />
-                <div>
-                  <p className="text-[12.5px] font-medium text-foreground">Company logo</p>
-                  <p className="text-[11px] text-muted-foreground">Optional — appears on your profile.</p>
-                </div>
-              </div>
-
-              <div>
-                <span className="mb-1.5 block text-[11.5px] font-medium text-muted-foreground">
-                  Trades &amp; capabilities<span className="ml-0.5 text-critical">*</span>
-                </span>
-                <div className="flex flex-wrap gap-1.5">
-                  {TRADES.map((t) => {
-                    const on = caps.trades.includes(t);
-                    return (
-                      <button
-                        key={t}
-                        type="button"
-                        onClick={() => toggleTrade(t)}
-                        className={cn(
-                          "focus-ring rounded-full border px-2.5 py-1 text-[11.5px] font-medium transition-colors",
-                          on
-                            ? "border-brand/40 bg-brand/10 text-brand-bright"
-                            : "border-border/70 bg-foreground/[0.02] text-muted-foreground hover:text-foreground",
-                        )}
-                      >
-                        {on ? <Check className="mr-1 inline size-3" /> : null}
-                        {t}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Number of crews">
-                  <input value={caps.crews} onChange={setC("crews")} inputMode="numeric" placeholder="3" className={inputClass} />
-                </Field>
-                <Field label="Total field staff">
-                  <input value={caps.fieldStaff} onChange={setC("fieldStaff")} inputMode="numeric" placeholder="18" className={inputClass} />
-                </Field>
-              </div>
-
-              <Field label="Equipment available" hint="One per line">
-                <textarea
-                  value={caps.equipment}
-                  onChange={setC("equipment")}
-                  rows={4}
-                  placeholder={"Vermeer D24x40 directional drill\nMini excavator\nVac trailer\nHydro-excavator"}
-                  className={cn(inputClass, "resize-none")}
-                />
-              </Field>
-
-              <div className="flex items-center justify-between gap-2">
-                <button
-                  type="button"
-                  onClick={() => setStep("account")}
-                  className="focus-ring rounded-lg px-3 py-2 text-[12.5px] font-medium text-muted-foreground hover:text-foreground"
-                >
-                  ← Back
-                </button>
-                <button
-                  type="submit"
-                  disabled={!capsValid || saving}
-                  className="brand-gradient focus-ring inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2.5 text-[13px] font-semibold text-white disabled:opacity-40"
-                >
-                  {saving ? "Submitting…" : "Submit for review"}
-                </button>
-              </div>
-            </form>
-          ) : (
-            <div className="flex flex-col items-center py-8 text-center">
-              <span className="grid size-12 place-items-center rounded-2xl bg-success/12 text-success">
-                <Check className="size-6" />
-              </span>
-              <h2 className="mt-4 text-[16px] font-semibold text-foreground">Submitted for review</h2>
-              <p className="mt-1.5 max-w-xs text-[12.5px] text-muted-foreground">
-                Your account and capabilities statement are in. Fortitude reviews and approves before
-                your access opens — you&apos;ll get an email the moment you&apos;re active on{" "}
-                {project ? project.name : "your project"}.
+              <p className="text-center text-[12px] text-muted-foreground">
+                Already have an account?{" "}
+                <Link href="/login" className="font-medium text-brand-bright hover:underline">Log in</Link>
               </p>
-              <div className="mt-4 flex flex-wrap justify-center gap-1.5">
-                {caps.trades.slice(0, 4).map((t) => (
-                  <span key={t} className="rounded-full bg-foreground/[0.05] px-2 py-0.5 text-[11px] text-muted-foreground ring-1 ring-inset ring-foreground/[0.06]">
-                    {t}
+            </form>
+          </div>
+
+          {/* Journey preview */}
+          <div className="surface p-5">
+            <p className="eyebrow">What you&apos;ll complete</p>
+            <ol className="mt-3 flex flex-col gap-3">
+              {["Create your account", "Company logo & capabilities", "W-9, insurance & agreements", "Payment / ACH details", "Fortitude review & approval", "You're active on your project"].map((label, i) => (
+                <li key={label} className="flex items-center gap-3">
+                  <span className="grid size-6 shrink-0 place-items-center rounded-full bg-foreground/[0.05] text-[10px] font-semibold text-muted-foreground ring-1 ring-inset ring-foreground/[0.08]">
+                    {i + 1}
                   </span>
-                ))}
+                  <span className="text-[12.5px] text-muted-foreground">{label}</span>
+                </li>
+              ))}
+            </ol>
+            <p className="mt-4 rounded-lg border border-border/60 bg-foreground/[0.02] p-3 text-[11.5px] leading-relaxed text-muted-foreground">
+              Nothing is approved automatically — Fortitude reviews every document before your access opens.
+            </p>
+          </div>
+        </div>
+      ) : step === "onboard" && subId ? (
+        <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {/* Capabilities */}
+          <div className="surface flex flex-col p-5">
+            <h2 className="flex items-center gap-1.5 text-[15px] font-semibold text-foreground">
+              <HardHat className="size-4 text-brand-bright" /> Capabilities statement
+            </h2>
+            <p className="mt-1 text-[11.5px] text-muted-foreground">
+              Tell Fortitude what your crews and equipment can do.
+            </p>
+
+            <div className="mt-3 flex items-center gap-3 rounded-xl border border-border/70 bg-foreground/[0.02] p-3">
+              <LogoUpload fallback={initials(account.company || "Co")} size={44} />
+              <div>
+                <p className="text-[12.5px] font-medium text-foreground">Company logo</p>
+                <p className="text-[11px] text-muted-foreground">Optional — appears on your profile.</p>
               </div>
             </div>
-          )}
-        </div>
 
-        {/* Pipeline */}
-        <div className="surface p-5">
-          <p className="eyebrow">The full journey</p>
-          <ol className="mt-3 flex flex-col">
-            {STEPS.map((s, i) => {
-              const st = statusOf(s.key, step);
-              const Icon = s.icon;
-              return (
-                <li key={s.key} className="flex gap-3 pb-3.5 last:pb-0">
-                  <div className="flex flex-col items-center">
-                    <span
+            <div className="mt-3">
+              <span className="mb-1.5 block text-[11.5px] font-medium text-muted-foreground">
+                Trades &amp; capabilities<span className="ml-0.5 text-critical">*</span>
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {TRADES.map((t) => {
+                  const on = caps.trades.includes(t);
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => toggleTrade(t)}
                       className={cn(
-                        "grid size-7 shrink-0 place-items-center rounded-full ring-1 ring-inset transition-colors",
-                        st === "done"
-                          ? "bg-success/15 text-success ring-success/30"
-                          : st === "current"
-                            ? "bg-brand/15 text-brand-bright ring-brand/30"
-                            : "bg-foreground/[0.04] text-muted-foreground ring-foreground/[0.08]",
+                        "focus-ring rounded-full border px-2.5 py-1 text-[11.5px] font-medium transition-colors",
+                        on ? "border-brand/40 bg-brand/10 text-brand-bright" : "border-border/70 bg-foreground/[0.02] text-muted-foreground hover:text-foreground",
                       )}
                     >
-                      {st === "done" ? <Check className="size-3.5" /> : st === "current" ? <CircleDot className="size-3.5" /> : <Icon className="size-3.5" />}
-                    </span>
-                    {i < STEPS.length - 1 ? (
-                      <span className={cn("mt-1 w-px flex-1", st === "done" ? "bg-success/30" : "bg-foreground/[0.08]")} />
-                    ) : null}
-                  </div>
-                  <div className="min-w-0 pb-1">
-                    <p className={cn("text-[12.5px] font-medium", st !== "pending" ? "text-foreground" : "text-muted-foreground")}>
-                      {s.label}
-                    </p>
-                    <p className="text-[11px] leading-snug text-muted-foreground/80">{s.detail}</p>
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
+                      {on ? <Check className="mr-1 inline size-3" /> : null}{t}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <Field label="Number of crews *">
+                <input value={caps.crews} onChange={setC("crews")} inputMode="numeric" placeholder="3" className={inputClass} />
+              </Field>
+              <Field label="Total field staff">
+                <input value={caps.fieldStaff} onChange={setC("fieldStaff")} inputMode="numeric" placeholder="18" className={inputClass} />
+              </Field>
+            </div>
+            <div className="mt-3">
+              <Field label="Equipment available" hint="One per line">
+                <textarea value={caps.equipment} onChange={setC("equipment")} rows={3} placeholder={"Directional drill\nMini excavator\nVac trailer"} className={cn(inputClass, "resize-none")} />
+              </Field>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => void finish()}
+              disabled={!capsValid || saving}
+              className="brand-gradient focus-ring mt-auto inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2.5 text-[13px] font-semibold text-white disabled:opacity-40"
+            >
+              {saving ? "Submitting…" : "Submit for review"}
+            </button>
+          </div>
+
+          {/* Document center */}
+          <div className="surface p-5">
+            <div className="mb-3">
+              <h2 className="text-[15px] font-semibold text-foreground">Required documents</h2>
+              <p className="text-[11.5px] text-muted-foreground">Upload each item — Fortitude reviews and downloads them.</p>
+            </div>
+            <DocumentCenter subcontractorId={subId} initialDocs={[]} uploadedBy="subcontractor" />
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="surface mt-6 flex flex-col items-center p-8 text-center">
+          <span className="grid size-12 place-items-center rounded-2xl bg-success/12 text-success">
+            <Check className="size-6" />
+          </span>
+          <h2 className="mt-4 text-[16px] font-semibold text-foreground">Submitted for review</h2>
+          <p className="mt-1.5 max-w-sm text-[12.5px] text-muted-foreground">
+            Your account, capabilities and documents are in. Fortitude reviews and approves before
+            your access opens — you&apos;ll get an email the moment you&apos;re active on{" "}
+            {project ? project.name : "your project"}.
+          </p>
+        </div>
+      )}
 
       <p className="mt-8 text-center text-[11px] text-muted-foreground/70">
         Powered by Vantara IQ · Nothing is approved automatically — Fortitude reviews every step.
@@ -342,30 +280,15 @@ export function InviteOnboarding({
   );
 }
 
-const ORDER = ["account", "company", "docs", "payment", "capabilities", "check", "review", "active"];
-
-function statusOf(key: string, step: Step): "done" | "current" | "pending" {
-  const activeKey = step === "account" ? "account" : step === "capabilities" ? "capabilities" : "check";
-  const idx = ORDER.indexOf(key);
-  const activeIdx = ORDER.indexOf(activeKey);
-  if (idx < activeIdx) return "done";
-  if (idx === activeIdx) return "current";
-  return "pending";
-}
-
-function StepDot({ on, done, n }: { on: boolean; done: boolean; n: number }) {
+function StepDot({ on, n }: { on?: boolean; n: number }) {
   return (
     <span
       className={cn(
         "grid size-5 place-items-center rounded-full text-[10px] font-semibold ring-1 ring-inset",
-        done
-          ? "bg-success/15 text-success ring-success/30"
-          : on
-            ? "bg-brand/15 text-brand-bright ring-brand/30"
-            : "bg-foreground/[0.04] text-muted-foreground ring-foreground/[0.08]",
+        on ? "bg-brand/15 text-brand-bright ring-brand/30" : "bg-foreground/[0.04] text-muted-foreground ring-foreground/[0.08]",
       )}
     >
-      {done ? <Check className="size-3" /> : n}
+      {n}
     </span>
   );
 }
