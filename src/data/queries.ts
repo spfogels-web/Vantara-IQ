@@ -123,6 +123,8 @@ function toProject(r: ProjectRow): Project {
     crew: r.crew,
     updatedAt: r.updatedAt,
     mapUrl: r.mapUrl,
+    photoUrl: r.photoUrl,
+    markups: r.markups,
   };
 }
 

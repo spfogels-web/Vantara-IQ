@@ -73,7 +73,16 @@ export default async function ProjectDetailPage({
         >
           <ArrowLeft className="size-3.5" /> All projects
         </Link>
-        <ProjectHeaderActions projectId={project.id} />
+        <ProjectHeaderActions projectId={project.id} photoUrl={project.photoUrl} />
+      </div>
+
+      {/* Project map — full width across desktop and mobile */}
+      <div className="mb-3">
+        <ProjectMapPanel
+          projectId={project.id}
+          initialMapUrl={project.mapUrl}
+          initialMarkups={project.markups}
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
@@ -113,9 +122,6 @@ export default async function ProjectDetailPage({
               <Meter value={project.pctComplete / 100} tone={project.tone} className="mt-1.5" />
             </div>
           </Panel>
-
-          {/* Project map */}
-          <ProjectMapPanel projectId={project.id} initialMapUrl={project.mapUrl} />
 
           {/* Economics — the "brain" numbers */}
           <Panel>

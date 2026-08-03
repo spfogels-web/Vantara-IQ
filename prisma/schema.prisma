@@ -130,6 +130,8 @@ model Project {
   updatedAt        String    @default("")
   mapUrl           String?
   mapOriginalUrl   String?
+  photoUrl         String?
+  markups          Json?
   customer         Customer? @relation(fields: [customerId], references: [id])
   customerId       String?
   dailies          Daily[]

@@ -47,8 +47,12 @@ export interface Project {
   pctComplete: number;
   crew: string;
   updatedAt: string;
-  /** Uploaded project map (data URL); may carry redline markup. */
+  /** Uploaded project map (Blob or data URL); may carry redline markup. */
   mapUrl?: string | null;
+  /** Jobsite cover photo shown on the project card. */
+  photoUrl?: string | null;
+  /** As-built redline markups (lines + dots) drawn over the map. */
+  markups?: unknown;
 }
 
 export interface HealthBucket {

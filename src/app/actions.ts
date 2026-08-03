@@ -515,6 +515,45 @@ export async function uploadProjectMap(formData: FormData) {
   return { ok: true as const, dataUrl };
 }
 
+/**
+ * Saves a map URL that was uploaded directly to Vercel Blob from the browser.
+ * This path has no practical size limit (large map PDFs go straight to storage;
+ * we only persist the short https URL).
+ */
+export async function saveProjectMapUrl(projectId: string, url: string) {
+  if (!projectId || !url) return { ok: false as const, error: "Missing map." };
+  await prisma.project.update({
+    where: { id: projectId },
+    data: { mapUrl: url, mapOriginalUrl: url },
+  });
+  revalidatePath("/projects");
+  revalidatePath(`/projects/${projectId}`);
+  return { ok: true as const, url };
+}
+
+/** Saves a jobsite cover photo (Blob URL) shown on the project card. */
+export async function saveProjectPhotoUrl(projectId: string, url: string) {
+  if (!projectId || !url) return { ok: false as const, error: "Missing photo." };
+  await prisma.project.update({
+    where: { id: projectId },
+    data: { photoUrl: url },
+  });
+  revalidatePath("/projects");
+  revalidatePath(`/projects/${projectId}`);
+  return { ok: true as const, url };
+}
+
+/** Persists as-built redline markups (lines + dots) drawn over the map. */
+export async function saveProjectMarkups(projectId: string, markups: unknown) {
+  if (!projectId) return { ok: false as const, error: "Missing project." };
+  await prisma.project.update({
+    where: { id: projectId },
+    data: { markups: (markups ?? null) as Prisma.InputJsonValue },
+  });
+  revalidatePath(`/projects/${projectId}`);
+  return { ok: true as const };
+}
+
 /* ---- Dailies (linked to a project by number + name) ----------------------- */
 
 export type DailyLineInput = { location: string; code: string; quantity: number; unit: "ft" | "ea" };
