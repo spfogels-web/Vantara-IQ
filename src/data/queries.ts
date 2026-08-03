@@ -1,6 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
+import { compareByPriority, isPriorityCode } from "@/lib/unit-codes";
 import {
   brief,
   crews,
@@ -461,7 +462,10 @@ export async function getProjectMaterials(projectId: string): Promise<TrackedMat
     }
   }
 
-  return rows.map((r) => {
+  return rows
+    // High-traffic underground codes lead; the rest follow as listed.
+    .sort((a, b) => compareByPriority(a.code, b.code))
+    .map((r) => {
     const hit = billed.get(normCode(r.code));
     const completed = hit?.qty ?? 0;
     return {
@@ -491,6 +495,8 @@ export interface MaterialCodeOption {
   planned: number;
   billed: number;
   remaining: number;
+  /** One of the high-traffic underground families — surfaced first in pickers. */
+  priority: boolean;
 }
 
 /**
@@ -509,5 +515,8 @@ export async function getProjectMaterialCodes(projectId: string): Promise<Materi
       planned: m.planned,
       billed: m.completed,
       remaining: m.remaining,
-    }));
+      priority: isPriorityCode(m.code),
+    }))
+    // The underground codes crews reach for most come first.
+    .sort((a, b) => compareByPriority(a.code, b.code));
 }

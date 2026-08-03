@@ -6,6 +6,7 @@ import Link from "next/link";
 import { ArrowLeft, Loader2, Plus, Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { relatedCodes } from "@/lib/unit-codes";
 import { createDaily, type DailyLineInput } from "@/app/actions";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { Button } from "@/components/ui/button";
@@ -201,11 +202,35 @@ export function NewDailyForm({ projects }: { projects: ProjectOption[] }) {
                     {(() => {
                       const match = codeFor(l.code);
                       if (!match) {
-                        return l.code.trim() && codes.length ? (
+                        if (!l.code.trim() || !codes.length) return null;
+                        // Sheets carry variants a crew won't type from memory —
+                        // BM61 on the daily vs BM61(2)F on the list. Offer the
+                        // real code rather than substituting one silently.
+                        const near = relatedCodes(l.code, codes.map((c) => c.code)).slice(0, 3);
+                        return (
                           <span className="mt-1 block text-[10.5px] text-warning">
-                            Not on the material list
+                            {near.length ? (
+                              <>
+                                Did you mean{" "}
+                                {near.map((c, n) => (
+                                  <React.Fragment key={c}>
+                                    {n > 0 ? " · " : ""}
+                                    <button
+                                      type="button"
+                                      onClick={() => pickCode(i, c)}
+                                      className="num font-semibold underline hover:text-foreground"
+                                    >
+                                      {c}
+                                    </button>
+                                  </React.Fragment>
+                                ))}
+                                ?
+                              </>
+                            ) : (
+                              "Not on the material list"
+                            )}
                           </span>
-                        ) : null;
+                        );
                       }
                       const left = match.remaining - (Number(l.quantity) || 0);
                       return (
