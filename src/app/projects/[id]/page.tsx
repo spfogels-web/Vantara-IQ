@@ -120,33 +120,34 @@ export default async function ProjectDetailPage({
           </Panel>
       </div>
 
-      {/* Map alongside the economics — the map wants width, the numbers don't. */}
-      <div className="mb-3 grid grid-cols-1 gap-3 xl:grid-cols-12">
-        <div className="xl:col-span-7">
-          <ProjectMapPanel
-            projectId={project.id}
-            initialMapUrl={project.mapUrl}
-            initialMarkups={project.markups}
+      {/* Six numbers in one strip. They read fine side by side, and giving
+          them a column of their own was costing the map the width it needs. */}
+      <div className="mb-3">
+        <Panel>
+          <PanelHeader
+            title="Project economics"
+            description="Derived from installed footage and the customer's blended unit rate"
+            icon={<TrendingUp className="size-3.5" />}
           />
-        </div>
+          <PanelBody className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+            <Economic label="Contract value" value={formatCompactCurrency(contractValue)} />
+            <Economic label="Customer billing" value={formatCompactCurrency(customerBilling)} hint="Installed to date" />
+            <Economic label="Subcontractor pay" value={formatCompactCurrency(subPay)} hint="~68% of billing" />
+            <Economic label="Gross profit" value={formatCompactCurrency(profit)} tone="text-success" />
+            <Economic label="Margin" value={formatPercent(margin)} tone={margin >= 0.25 ? "text-success" : "text-warning"} />
+            <Economic label="Blended rate" value={`${formatCurrency(avgRate)}/ft`} />
+          </PanelBody>
+        </Panel>
+      </div>
 
-        <div className="xl:col-span-5">
-          <Panel>
-            <PanelHeader
-              title="Project economics"
-              description="Derived from installed footage and the customer's blended unit rate"
-              icon={<TrendingUp className="size-3.5" />}
-            />
-            <PanelBody className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              <Economic label="Contract value" value={formatCompactCurrency(contractValue)} />
-              <Economic label="Customer billing" value={formatCompactCurrency(customerBilling)} hint="Installed to date" />
-              <Economic label="Subcontractor pay" value={formatCompactCurrency(subPay)} hint="~68% of billing" />
-              <Economic label="Gross profit" value={formatCompactCurrency(profit)} tone="text-success" />
-              <Economic label="Margin" value={formatPercent(margin)} tone={margin >= 0.25 ? "text-success" : "text-warning"} />
-              <Economic label="Blended rate" value={`${formatCurrency(avgRate)}/ft`} />
-            </PanelBody>
-          </Panel>
-        </div>
+      {/* The map runs the full width — it's a plan drawing, and redlining it
+          is the one thing on this page that genuinely needs the room. */}
+      <div className="mb-3">
+        <ProjectMapPanel
+          projectId={project.id}
+          initialMapUrl={project.mapUrl}
+          initialMarkups={project.markups}
+        />
       </div>
 
       {/* Material gets the full width. It is the densest thing on the page —
