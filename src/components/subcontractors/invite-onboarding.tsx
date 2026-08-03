@@ -16,6 +16,7 @@ import {
 
 import { cn } from "@/lib/utils";
 import { initials } from "@/lib/format";
+import { submitOnboarding } from "@/app/actions";
 import { LogoUpload } from "@/components/common/logo-upload";
 
 export type InviteProject = {
@@ -61,8 +62,32 @@ export function InviteOnboarding({
   project: InviteProject;
 }) {
   const [step, setStep] = React.useState<Step>("account");
+  const [saving, setSaving] = React.useState(false);
   const [account, setAccount] = React.useState({ company: "", name: "", email: "", password: "" });
   const [caps, setCaps] = React.useState({ crews: "", fieldStaff: "", equipment: "", trades: [] as string[] });
+
+  async function finishOnboarding() {
+    if (!capsValid || saving) return;
+    setSaving(true);
+    try {
+      await submitOnboarding({
+        company: account.company,
+        name: account.name,
+        email: account.email,
+        projectName: project?.name,
+        trades: caps.trades,
+        crews: caps.crews,
+        fieldStaff: caps.fieldStaff,
+        equipment: caps.equipment
+          .split("\n")
+          .map((s) => s.trim())
+          .filter(Boolean),
+      });
+      setStep("done");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   const setA = (k: keyof typeof account) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setAccount((f) => ({ ...f, [k]: e.target.value }));
@@ -164,7 +189,7 @@ export function InviteOnboarding({
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                if (capsValid) setStep("done");
+                void finishOnboarding();
               }}
               className="flex flex-col gap-3.5"
             >
@@ -242,10 +267,10 @@ export function InviteOnboarding({
                 </button>
                 <button
                   type="submit"
-                  disabled={!capsValid}
+                  disabled={!capsValid || saving}
                   className="brand-gradient focus-ring inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2.5 text-[13px] font-semibold text-white disabled:opacity-40"
                 >
-                  Submit for review
+                  {saving ? "Submitting…" : "Submit for review"}
                 </button>
               </div>
             </form>

@@ -4,6 +4,7 @@ import * as React from "react";
 import { Bug, Check, Lightbulb, MessageSquarePlus, Sparkles, ThumbsUp } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { submitFeedback } from "@/app/actions";
 import {
   Dialog,
   DialogContent,
@@ -45,10 +46,22 @@ export function FeedbackDialog({
     }
   }, [open]);
 
-  function submit(e: React.FormEvent) {
+  const [saving, setSaving] = React.useState(false);
+
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!message.trim()) return;
-    setSent(true);
+    if (!message.trim() || saving) return;
+    setSaving(true);
+    try {
+      await submitFeedback({
+        category,
+        message: message.trim(),
+        page: typeof window !== "undefined" ? window.location.pathname : undefined,
+      });
+      setSent(true);
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -131,10 +144,10 @@ export function FeedbackDialog({
                 <Button
                   type="submit"
                   size="sm"
-                  disabled={!message.trim()}
+                  disabled={!message.trim() || saving}
                   className="brand-gradient h-9 rounded-lg px-4 text-[12.5px] font-semibold text-white disabled:opacity-40"
                 >
-                  Send feedback
+                  {saving ? "Sending…" : "Send feedback"}
                 </Button>
               </div>
             </form>

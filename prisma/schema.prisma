@@ -1,0 +1,168 @@
+// Vantara IQ — data model.
+//
+// Top-level entities are tables; nested value-objects (contacts, rate sheets,
+// compliance docs, daily line items) are stored as JSON so the rows map almost
+// 1:1 onto the TypeScript types in src/lib/types.ts. That keeps the query seam
+// (src/data/queries.ts) a thin translation and makes the mock -> DB swap clean.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL_UNPOOLED")
+}
+
+enum Role {
+  ADMIN
+  PM
+  OFFICE
+  SUBCONTRACTOR
+}
+
+enum SubState {
+  INVITED
+  ONBOARDING
+  PENDING_REVIEW
+  ACTIVE
+  INACTIVE
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  plan      String   @default("Enterprise")
+  logoUrl   String?
+  users     User[]
+  createdAt DateTime @default(now())
+}
+
+model User {
+  id              String        @id @default(cuid())
+  email           String        @unique
+  passwordHash    String?
+  name            String
+  role            Role          @default(SUBCONTRACTOR)
+  organization    Organization? @relation(fields: [organizationId], references: [id])
+  organizationId  String?
+  subcontractor   Subcontractor? @relation(fields: [subcontractorId], references: [id])
+  subcontractorId String?
+  createdAt       DateTime      @default(now())
+}
+
+model Customer {
+  id             String   @id @default(cuid())
+  name           String
+  shortCode      String
+  industry       String
+  tone           String
+  status         String
+  logoTint       String
+  logoUrl        String?
+  location       String
+  contacts       Json     @default("[]")
+  billingEmail   String   @default("")
+  paymentTerms   String   @default("Net 30")
+  retainagePct   Float    @default(0.1)
+  invoiceMinimum Int      @default(0)
+  contractValue  Int      @default(0)
+  billedToDate   Int      @default(0)
+  openAr         Int      @default(0)
+  avgDaysToPay   Int      @default(0)
+  rateSheet      Json     @default("[]")
+  notes          String   @default("")
+  since          String   @default("")
+  projects       Project[]
+  createdAt      DateTime @default(now())
+}
+
+model Project {
+  id               String    @id @default(cuid())
+  name             String
+  client           String
+  location         String
+  status           String
+  tone             String
+  remainingFt      Int       @default(0)
+  requiredFtPerDay Int       @default(0)
+  actualFtPerDay   Int       @default(0)
+  forecast         String    @default("")
+  forecastTone     String    @default("info")
+  health           Int       @default(80)
+  pctComplete      Int       @default(0)
+  crew             String    @default("Unassigned")
+  updatedAt        String    @default("")
+  customer         Customer? @relation(fields: [customerId], references: [id])
+  customerId       String?
+  dailies          Daily[]
+  createdAt        DateTime  @default(now())
+}
+
+model Subcontractor {
+  id               String    @id @default(cuid())
+  company          String
+  lead             String    @default("")
+  email            String    @default("")
+  phone            String    @default("")
+  location         String    @default("")
+  trades           String[]  @default([])
+  state            SubState  @default(PENDING_REVIEW)
+  tone             String    @default("neutral")
+  assignedProjects String[]  @default([])
+  compliance       Json      @default("[]")
+  complianceTone   String    @default("neutral")
+  scorecard        Json      @default("{}")
+  crewSize         Int       @default(0)
+  equipment        String[]  @default([])
+  logoUrl          String?
+  since            String    @default("")
+  users            User[]
+  createdAt        DateTime  @default(now())
+}
+
+model Daily {
+  id             String   @id @default(cuid())
+  sheetNumber    String   @default("")
+  project        Project? @relation(fields: [projectId], references: [id])
+  projectId      String?
+  projectName    String   @default("")
+  customer       String   @default("")
+  subcontractor  String   @default("")
+  crew           String   @default("")
+  workDate       String   @default("")
+  submittedAt    String   @default("")
+  status         String   @default("Submitted")
+  tone           String   @default("info")
+  totalFt        Int      @default(0)
+  billableAmount Int      @default(0)
+  lineItems      Json     @default("[]")
+  photos         Int      @default(0)
+  hasAsBuilt     Boolean  @default(false)
+  hasBoreLog     Boolean  @default(false)
+  flags          Json     @default("[]")
+  createdAt      DateTime @default(now())
+}
+
+/// One project-specific onboarding invite link.
+model Invite {
+  token        String   @id
+  projectId    String?
+  projectName  String   @default("")
+  customer     String   @default("")
+  email        String?
+  used         Boolean  @default(false)
+  createdAt    DateTime @default(now())
+}
+
+/// Feedback from the pilot account.
+model Feedback {
+  id        String   @id @default(cuid())
+  category  String   @default("idea")
+  message   String
+  fromName  String?
+  fromEmail String?
+  page      String?
+  createdAt DateTime @default(now())
+}

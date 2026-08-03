@@ -265,7 +265,7 @@ export interface Subcontractor {
   phone: string;
   location: string;
   trades: string[];
-  state: "Active" | "Onboarding" | "Invited" | "Inactive";
+  state: "Active" | "Onboarding" | "Pending review" | "Invited" | "Inactive";
   tone: Tone;
   assignedProjects: string[];
   compliance: ComplianceDoc[];

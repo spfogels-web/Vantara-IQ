@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import {
   BadgeCheck,
   Check,
@@ -27,6 +28,7 @@ import { StatusPill } from "@/components/common/status-pill";
 import { LogoUpload } from "@/components/common/logo-upload";
 import { Button } from "@/components/ui/button";
 import { InviteDialog } from "@/components/subcontractors/invite-dialog";
+import { approveSubcontractor } from "@/app/actions";
 
 const complianceTone: Record<ComplianceStatus, "success" | "warning" | "critical" | "neutral"> = {
   valid: "success",
@@ -166,6 +168,20 @@ function SubDetail({ sub: s, onInvite }: { sub: Subcontractor; onInvite: () => v
   const sc = s.scorecard;
   const active = s.state === "Active";
   const gate = workReadiness(s);
+  const pending = s.state === "Pending review";
+  const router = useRouter();
+  const [approving, setApproving] = React.useState(false);
+
+  async function approve() {
+    if (approving) return;
+    setApproving(true);
+    try {
+      await approveSubcontractor(s.id);
+      router.refresh();
+    } finally {
+      setApproving(false);
+    }
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -234,10 +250,22 @@ function SubDetail({ sub: s, onInvite }: { sub: Subcontractor; onInvite: () => v
                   : "This crew cannot be assigned a project or submit dailies until every item below is complete and Fortitude-approved."}
               </p>
             </div>
-            <StatusPill
-              label={gate.eligible ? "Cleared for work" : "Blocked"}
-              tone={gate.eligible ? "success" : "warning"}
-            />
+            <div className="flex items-center gap-2">
+              {pending ? (
+                <Button
+                  size="sm"
+                  onClick={approve}
+                  disabled={approving}
+                  className="h-8 gap-1.5 rounded-lg bg-brand px-3 text-[12px] font-semibold text-white hover:bg-brand-bright disabled:opacity-50"
+                >
+                  {approving ? "Approving…" : "Approve account"}
+                </Button>
+              ) : null}
+              <StatusPill
+                label={gate.eligible ? "Cleared for work" : pending ? "Pending review" : "Blocked"}
+                tone={gate.eligible ? "success" : "warning"}
+              />
+            </div>
           </div>
 
           <ul className="grid grid-cols-1 gap-x-4 gap-y-1.5 sm:grid-cols-2">

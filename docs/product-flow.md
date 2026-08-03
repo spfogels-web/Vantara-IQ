@@ -152,3 +152,53 @@ SUB REGISTERS → FORTITUDE APPROVES ACCOUNT → SUB ASSIGNED TO PROJECT
 → SUB PAY CALCULATED → FORTITUDE APPROVES PAY APP → SUB FINAL APPROVAL
 → STANDARD OR FAST PAY → PAYMENT PROCESSED → FULL AUDIT HISTORY PRESERVED
 ```
+
+---
+
+## Rate, unit, material & subcontractor rate-card automation (billing brain)
+
+Internal authorized users upload **GC rate sheets, unit-description sheets, project
+material lists, and subcontractor rate cards** (PDF/JPG/PNG/XLS/XLSX/CSV). The AI
+**extracts → classifies → drafts**; a human **reviews, edits, approves, activates**.
+AI never activates rates, approves pricing, alters signed cards, or finalizes money.
+
+**GC rate sheets** — extract: customer/GC, project, market, state, county, effective &
+expiration dates, unit code, unit description, UoM, billing rate, min billable qty, min
+charge, billing increment, rate tier, adders, exclusions, billing rules, documentation
+requirements, page/source ref, confidence. Rates are scoped by org + customer +
+contractor + market + project + effective date. **Never apply a rate to an unrelated
+project/market.**
+
+**Unit-description sheets** — extract: unit code, formal description, included labor,
+included material, measurement method, docs required, photo/as-built/bore-log/reel
+requirements, allowed companion units, exclusions, notes, source page, confidence. Match
+to rate-sheet items; flag unmatched/conflicting codes.
+
+**Material lists** — extract: material code, description, manufacturer, size, UoM, planned
+qty, reel #, original footage, customer- vs contractor-furnished, project, market, notes,
+source page, confidence. Creates draft catalog items + project material budgets; inactive
+until approved.
+
+**Subcontractor rate cards** — built from approved project units: sub company, project/
+market, version, effective/expiration, unit codes + descriptions + **sub rates**,
+retainage, payment terms, Fast Pay (availability/days/fee), special conditions, signature
+ack. **Sub must e-sign before rates go active.** Record signer, name, title, timestamp,
+IP, user agent, version, document checksum, ack-text version. Signed cards are
+**immutable**; edits create a new version; historical production/finalized pay apps keep
+the exact rate used.
+
+**Rate separation** — GC rates and sub rates live in separate secured tables/services.
+Subs never see GC rates, customer invoice amounts, Fortitude markup/profit, or other subs'
+rates.
+
+**Billing automation (on daily approval)** — match unit code → select active GC rate for
+work date → select active signed sub rate card for work date → apply deterministic rules →
+compute customer billing → compute sub gross → apply customer retainage → apply sub
+retainage → store exact applied rates + versions → make eligible for customer invoicing +
+sub pay apps.
+
+**Rate-import review screen** — source doc (left) vs extracted rows (right): page, unit
+code, description, unit, rate, minimum, rules, confidence, match status, validation
+warning; actions: approve / edit / reject / merge duplicate / create new unit / link to
+existing. Bulk-approve only rows that pass validation. Permanent audit trail for every
+import/edit/approve/activate/supersede/reject.
