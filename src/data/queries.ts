@@ -420,6 +420,14 @@ export interface TrackedMaterial {
   tone: Tone;
   /** "Microduct" / "Microfiber" — units a crew treats as one, for roll-up. */
   group: string | null;
+  /** Billed past this code's own planned quantity. */
+  overPlan: boolean;
+  /**
+   * Over its own line, but the group it belongs to still has plan left — a
+   * substitution, not an overrun. Happens whenever one size runs out and the
+   * crew bills the interchangeable one instead.
+   */
+  coveredByGroup: boolean;
 }
 
 export type { MaterialGroupTotal } from "@/lib/unit-codes";
@@ -466,7 +474,7 @@ export async function getProjectMaterials(projectId: string): Promise<TrackedMat
     }
   }
 
-  return rows
+  const mapped = rows
     // High-traffic underground codes lead; the rest follow as listed.
     .sort((a, b) => compareByPriority(a.code, b.code))
     .map((r) => {
@@ -488,8 +496,37 @@ export async function getProjectMaterials(projectId: string): Promise<TrackedMat
       furnished: r.furnished,
       tone: materialTone(r.planned, completed),
       group: codeGroupLabel(r.code),
+      overPlan: r.planned > 0 && completed > r.planned,
+      coveredByGroup: false,
     };
   });
+
+  /*
+   * Group-aware overrun. When one size runs out mid-job — 8.5 microduct did —
+   * the crew keeps working and bills the interchangeable code instead. The
+   * substitute then reads "over plan" on its own line while the size it
+   * replaced sits untouched. That is a substitution, not an overrun, so judge
+   * it against the group's total before calling it a problem.
+   */
+  const groupPlan = new Map<string, { planned: number; completed: number }>();
+  for (const m of mapped) {
+    if (!m.group) continue;
+    const g = groupPlan.get(m.group) ?? { planned: 0, completed: 0 };
+    g.planned += m.planned;
+    g.completed += m.completed;
+    groupPlan.set(m.group, g);
+  }
+
+  for (const m of mapped) {
+    if (!m.overPlan || !m.group) continue;
+    const g = groupPlan.get(m.group);
+    if (g && g.completed <= g.planned) {
+      m.coveredByGroup = true;
+      m.tone = "info"; // drawing from the group, not an overrun
+    }
+  }
+
+  return mapped;
 }
 
 /** A code a crew can bill on this project, with what the plan has left. */

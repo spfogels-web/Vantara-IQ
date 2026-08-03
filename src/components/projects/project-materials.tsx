@@ -284,10 +284,20 @@ export function ProjectMaterials({
                   billed {formatNumber(m.completed)}
                   {m.dailyCount > 0 ? ` · ${m.dailyCount} ${m.dailyCount === 1 ? "daily" : "dailies"}` : ""}
                 </span>
-                {m.completed > m.planned && m.planned > 0 ? (
-                  <span className="inline-flex items-center gap-1 text-critical">
-                    <AlertTriangle className="size-3" /> over plan
-                  </span>
+                {m.overPlan ? (
+                  m.coveredByGroup ? (
+                    // One size ran out and the crew billed the interchangeable
+                    // code — the group still has plan left, so this isn't an
+                    // overrun worth flagging red.
+                    <span className="text-info">drawing from {m.group}</span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-critical">
+                      <AlertTriangle className="size-3" /> over plan
+                    </span>
+                  )
+                ) : null}
+                {m.planned > 0 && m.completed === 0 && m.group ? (
+                  <span className="text-muted-foreground/70">untouched</span>
                 ) : null}
                 {m.reelNumber ? <span className="num truncate">Reel {m.reelNumber}</span> : null}
               </div>
