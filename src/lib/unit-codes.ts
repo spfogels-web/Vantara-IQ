@@ -172,11 +172,52 @@ export function groupMaterialTotals(materials: GroupableMaterial[]): MaterialGro
  */
 export type ProductionMethod = "plow" | "bore" | "other";
 
+/**
+ * A depth/condition adder rather than a placement in its own right.
+ *
+ * On Exhibit A these sit next to the code they modify at a fraction of the
+ * price — BFOV(12.7)(2W)12"DEPTH is $1.35, its (D) is $0.30 — and they are
+ * billed across footage that has already been counted once. They must price
+ * (that is the extra $0.30 a foot) but must NOT add footage, or the same run
+ * gets counted twice in the plow total and production looks better than it was.
+ */
+export function isAdderCode(code: string): boolean {
+  const c = normalizeCode(code);
+  // Trailing (D), or a bare D on a placement family: BFO12D, BFOV(1)(2)D.
+  return /\(D\)$/.test(c) || /^(BFO|BM6[01]|BFCR|BFCV|BFD)[^)]*D$/.test(c);
+}
+
 export function productionMethod(code: string): ProductionMethod {
   const c = normalizeCode(code);
+  // An adder rides on footage already counted — pricing it again is right,
+  // counting the feet again is not.
+  if (isAdderCode(c)) return "other";
   if (/^BM6[01]/.test(c)) return "bore";
   if (/^BFO/.test(c)) return "plow";
   return "other";
+}
+
+/**
+ * Hourly labour, trucks and equipment — the T&M side of the rate sheet.
+ *
+ * Exhibit A carries these alongside the unit work items (FOREMAN, LABORER,
+ * BUCKET TRUCK, JETVAC, HC3-5 (B)>300<=600, 1/2 TON TRUCK W/TOOLS (A)F). They
+ * are real rates, but they are not what an underground crew bills a daily
+ * against, and a couple of hundred of them bury the codes that matter.
+ *
+ * They're excluded from the imported rate card rather than deleted from the
+ * concept: if a T&M code ever turns up on a daily it will read as unpriced —
+ * visible and fixable — rather than quietly billing at zero.
+ */
+const TM_WORDS =
+  /\b(TRUCK|TRAILER|TRACTOR|BACKHOE|BUCKET|CHAINSAW|CHIPPER|JETVAC|COMPRESSOR|GENERATOR|GEN\b|PUMP|TAMP|PACKAGE|PLOW CABLE|DROP PLOW|CABLE PLOW|SPLICER|FOREMAN|LABORER|LINEMAN|OPERATOR|CREW|TON)\b/;
+
+export function isLabourOrEquipmentCode(code: string): boolean {
+  const raw = code.trim().toUpperCase();
+  if (TM_WORDS.test(raw)) return true;
+  // House-connect / drop families — copper and coax work, not underground.
+  if (/^(HC|WHC|XXHC)\d/.test(raw.replace(/\s+/g, ""))) return true;
+  return false;
 }
 
 export type CodeClass = "underground" | "aerial" | "other";

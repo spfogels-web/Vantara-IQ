@@ -18,6 +18,7 @@ import {
   pdfTextPages,
 } from "@/lib/parse-material-list";
 import { findJobProfile } from "@/lib/job-profiles";
+import { isLabourOrEquipmentCode } from "@/lib/unit-codes";
 import {
   assertOwnSubcontractor,
   assertProjectAccess,
@@ -1028,9 +1029,17 @@ async function extractLongDocument(input: {
     // A handful of matches means we found stray dollar figures in prose, not a
     // rate table — fall through to the model rather than import noise.
     if (parsed.length >= 25) {
+      // Hourly labour, trucks and equipment are on the same sheet but are not
+      // what an underground crew bills a daily against, and a few hundred of
+      // them bury the codes that matter.
+      const work = parsed.filter((r) => !isLabourOrEquipmentCode(r.code));
+      const dropped = parsed.length - work.length;
+
       return {
-        summary: `Read ${parsed.length} unit rates directly from the sheet — no AI, no truncation.`,
-        rows: parsed.map((r) => ({
+        summary:
+          `Read ${work.length} unit rates directly from the sheet — no AI, no truncation.` +
+          (dropped > 0 ? ` Left out ${dropped} labour, truck and equipment rates.` : ""),
+        rows: work.map((r) => ({
           code: r.code,
           description: "",
           unit: "",
