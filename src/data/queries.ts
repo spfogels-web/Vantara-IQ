@@ -144,7 +144,10 @@ const SUBSTATE_LABEL: Record<string, Subcontractor["state"]> = {
   INACTIVE: "Inactive",
 };
 
-type SubRow = Awaited<ReturnType<typeof prisma.subcontractor.findMany>>[number];
+/** A subcontractor row read with its assigned projects included. */
+type SubRow = Awaited<ReturnType<typeof prisma.subcontractor.findMany>>[number] & {
+  projects?: { id: string; name: string; number: string }[];
+};
 
 function toSubcontractor(r: SubRow): Subcontractor {
   return {
@@ -157,7 +160,11 @@ function toSubcontractor(r: SubRow): Subcontractor {
     trades: r.trades,
     state: SUBSTATE_LABEL[r.state] ?? "Pending review",
     tone: r.tone as Tone,
-    assignedProjects: r.assignedProjects,
+    assignedProjects: (r.projects ?? []).map((p) => ({
+      id: p.id,
+      name: p.name,
+      number: p.number,
+    })),
     compliance: (r.compliance as unknown as Subcontractor["compliance"]) ?? [],
     complianceTone: r.complianceTone as Tone,
     scorecard: (r.scorecard as unknown as SubScorecard) ?? emptyScorecard,
@@ -469,7 +476,10 @@ export async function getProject(id: string): Promise<Project | undefined> {
  */
 export async function getSubcontractors(): Promise<Subcontractor[]> {
   await requireStaff();
-  const rows = await prisma.subcontractor.findMany({ orderBy: { createdAt: "asc" } });
+  const rows = await prisma.subcontractor.findMany({
+    include: { projects: { select: { id: true, name: true, number: true } } },
+    orderBy: { createdAt: "asc" },
+  });
   return rows.map(toSubcontractor);
 }
 

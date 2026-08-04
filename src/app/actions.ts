@@ -36,6 +36,23 @@ import {
  * receive work until Fortitude approves it.
  */
 
+/**
+ * Resolve a job name typed on an invite to a real project, for the one place
+ * a name is still the only handle we have. Everything after onboarding assigns
+ * by id. Matching ignores case and stray whitespace because these names are
+ * typed by hand — one of the live projects is stored with a trailing space.
+ */
+async function connectProjectByName(projectName: string | undefined) {
+  const wanted = projectName?.trim().toLowerCase().replace(/\s+/g, " ");
+  if (!wanted) return undefined;
+
+  const projects = await prisma.project.findMany({ select: { id: true, name: true } });
+  const match = projects.find(
+    (p) => p.name.trim().toLowerCase().replace(/\s+/g, " ") === wanted,
+  );
+  return match ? { connect: { id: match.id } } : undefined;
+}
+
 /** Pilot feedback -> Feedback table. */
 export async function submitFeedback(input: {
   category: string;
@@ -92,7 +109,10 @@ export async function submitOnboarding(input: {
       state: "PENDING_REVIEW",
       tone: "warning",
       complianceTone: "neutral",
-      assignedProjects: input.projectName ? [input.projectName] : [],
+      // The invite may name a job. Resolve it to a real project; if nothing
+      // matches, the crew is created unassigned and staff assign it — better
+      // than recording an assignment that points at nothing.
+      projects: await connectProjectByName(input.projectName),
       compliance: compliance as unknown as Prisma.InputJsonValue,
       scorecard: scorecard as unknown as Prisma.InputJsonValue,
       since: "2026",
@@ -187,14 +207,14 @@ export async function deleteSubcontractor(id: string) {
   await requireStaff();
   const sub = await prisma.subcontractor.findUnique({
     where: { id },
-    select: { assignedProjects: true, company: true },
+    select: { company: true, projects: { select: { id: true } } },
   });
   if (!sub) return { ok: false as const, error: "Subcontractor not found." };
-  if (sub.assignedProjects.length > 0) {
+  if (sub.projects.length > 0) {
     return {
       ok: false as const,
-      error: `${sub.company} is still assigned to ${sub.assignedProjects.length} project${
-        sub.assignedProjects.length === 1 ? "" : "s"
+      error: `${sub.company} is still assigned to ${sub.projects.length} project${
+        sub.projects.length === 1 ? "" : "s"
       }. Unassign it first.`,
     };
   }
@@ -218,15 +238,29 @@ export async function saveOrganizationLogo(url: string) {
   return { ok: true as const };
 }
 
-/** Assign / unassign a project by name — the list drives what a sub can see. */
-export async function setSubcontractorProjects(id: string, projects: string[]) {
+/**
+ * Assign / unassign jobs for a crew. Takes project ids and replaces the whole
+ * set, so the caller sends the list it wants to end up with.
+ *
+ * This is the single control over what a subcontractor can see — the maps,
+ * material lists and redlines all follow from it — so unknown ids are dropped
+ * rather than trusted, and the result is reported back.
+ */
+export async function setSubcontractorProjects(id: string, projectIds: string[]) {
   await requireStaff();
+  const wanted = [...new Set(projectIds.map((p) => p.trim()).filter(Boolean))];
+  const real = await prisma.project.findMany({
+    where: { id: { in: wanted } },
+    select: { id: true },
+  });
+
   await prisma.subcontractor.update({
     where: { id },
-    data: { assignedProjects: projects.map((p) => p.trim()).filter(Boolean) },
+    data: { projects: { set: real.map((p) => ({ id: p.id })) } },
   });
   revalidatePath("/subcontractors");
-  return { ok: true as const };
+  revalidatePath("/projects");
+  return { ok: true as const, count: real.length };
 }
 
 /* ---- Subcontractor rate card — what we pay, per unit code ---------------- */
@@ -357,7 +391,10 @@ export async function createSubcontractorDraft(input: {
       state: "PENDING_REVIEW",
       tone: "warning",
       complianceTone: "neutral",
-      assignedProjects: input.projectName ? [input.projectName] : [],
+      // The invite may name a job. Resolve it to a real project; if nothing
+      // matches, the crew is created unassigned and staff assign it — better
+      // than recording an assignment that points at nothing.
+      projects: await connectProjectByName(input.projectName),
       compliance: compliance as unknown as Prisma.InputJsonValue,
       scorecard: scorecard as unknown as Prisma.InputJsonValue,
       since: "2026",

@@ -40,20 +40,20 @@ model Organization {
 }
 
 model User {
-  id              String        @id @default(cuid())
-  email           String        @unique
+  id              String         @id @default(cuid())
+  email           String         @unique
   passwordHash    String?
   name            String
-  role            Role          @default(SUBCONTRACTOR)
-  organization    Organization? @relation(fields: [organizationId], references: [id])
+  role            Role           @default(SUBCONTRACTOR)
+  organization    Organization?  @relation(fields: [organizationId], references: [id])
   organizationId  String?
   subcontractor   Subcontractor? @relation(fields: [subcontractorId], references: [id])
   subcontractorId String?
-  createdAt       DateTime      @default(now())
+  createdAt       DateTime       @default(now())
 }
 
 model Customer {
-  id             String   @id @default(cuid())
+  id             String             @id @default(cuid())
   name           String
   shortCode      String
   industry       String
@@ -62,22 +62,22 @@ model Customer {
   logoTint       String
   logoUrl        String?
   location       String
-  contacts       Json     @default("[]")
-  billingEmail   String   @default("")
-  paymentTerms   String   @default("Net 30")
-  retainagePct   Float    @default(0.1)
-  invoiceMinimum Int      @default(0)
-  contractValue  Int      @default(0)
-  billedToDate   Int      @default(0)
-  openAr         Int      @default(0)
-  avgDaysToPay   Int      @default(0)
-  rateSheet      Json     @default("[]")
-  notes          String   @default("")
-  since          String   @default("")
+  contacts       Json               @default("[]")
+  billingEmail   String             @default("")
+  paymentTerms   String             @default("Net 30")
+  retainagePct   Float              @default(0.1)
+  invoiceMinimum Int                @default(0)
+  contractValue  Int                @default(0)
+  billedToDate   Int                @default(0)
+  openAr         Int                @default(0)
+  avgDaysToPay   Int                @default(0)
+  rateSheet      Json               @default("[]")
+  notes          String             @default("")
+  since          String             @default("")
   projects       Project[]
   documents      CustomerDocument[]
   rates          CustomerRate[]
-  createdAt      DateTime @default(now())
+  createdAt      DateTime           @default(now())
 }
 
 /// A signed contract / agreement / tax doc on file for a customer.
@@ -112,33 +112,38 @@ model CustomerRate {
 }
 
 model Project {
-  id               String    @id @default(cuid())
-  number           String    @default("")
+  id               String            @id @default(cuid())
+  number           String            @default("")
   name             String
   client           String
   location         String
   status           String
   tone             String
-  remainingFt      Int       @default(0)
-  requiredFtPerDay Int       @default(0)
-  actualFtPerDay   Int       @default(0)
-  forecast         String    @default("")
-  forecastTone     String    @default("info")
-  health           Int       @default(80)
-  pctComplete      Int       @default(0)
-  crew             String    @default("Unassigned")
-  updatedAt        String    @default("")
+  remainingFt      Int               @default(0)
+  requiredFtPerDay Int               @default(0)
+  actualFtPerDay   Int               @default(0)
+  forecast         String            @default("")
+  forecastTone     String            @default("info")
+  health           Int               @default(80)
+  pctComplete      Int               @default(0)
+  crew             String            @default("Unassigned")
+  updatedAt        String            @default("")
   mapUrl           String?
   mapOriginalUrl   String?
   photoUrl         String?
   markups          Json?
-  customer         Customer? @relation(fields: [customerId], references: [id])
+  customer         Customer?         @relation(fields: [customerId], references: [id])
   customerId       String?
   dailies          Daily[]
   materials        ProjectMaterial[]
   materialImports  RateImport[]
   sheets           DailySheet[]
-  createdAt        DateTime  @default(now())
+  /// Crews assigned to this job. This relation is what a subcontractor's
+  /// access is decided by, so it is a real foreign key rather than a list of
+  /// typed names — renaming a project can no longer revoke a crew's access,
+  /// and deleting one cannot leave an assignment pointing at nothing.
+  crews            Subcontractor[]   @relation("ProjectCrews")
+  createdAt        DateTime          @default(now())
 }
 
 /// A saved Globe-style subcontractor daily billing sheet. The grids are stored
@@ -146,35 +151,35 @@ model Project {
 /// a schema we want to migrate every time a column moves. Submitting one also
 /// writes a Daily, which is what billing and material draw-down read.
 model DailySheet {
-  id            String   @id @default(cuid())
-  project       Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  projectId     String?
+  id          String   @id @default(cuid())
+  project     Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  projectId   String?
   /// Denormalised so a sheet still reads correctly if the project is renamed.
-  projectName   String   @default("")
-  workDate      String   @default("")
-  crewNumber    String   @default("")
+  projectName String   @default("")
+  workDate    String   @default("")
+  crewNumber  String   @default("")
   /// Header block: exchange/WO number, customer, job name, crew names, sign-offs.
-  header        Json     @default("{}")
+  header      Json     @default("{}")
   /// Production grid: unit-code columns plus one entry per row.
-  laborCodes    Json     @default("[]")
-  laborRows     Json     @default("[]")
+  laborCodes  Json     @default("[]")
+  laborRows   Json     @default("[]")
   /// Material-only section.
-  matCodes      Json     @default("[]")
-  matRows       Json     @default("[]")
+  matCodes    Json     @default("[]")
+  matRows     Json     @default("[]")
   /// As-built redline drawn over the project map for this day's work.
-  redlines      Json     @default("[]")
+  redlines    Json     @default("[]")
   /// Free-text notes from the crew — conditions, delays, anything the grid
   /// has no column for.
-  notes         String   @default("")
+  notes       String   @default("")
   /// Field photos: peds, handholes, as-built evidence. Each entry carries its
   /// own capture/upload timestamp, so the record shows when it was taken and
   /// not merely when the sheet was submitted.
-  photos        Json     @default("[]")
-  status        String   @default("DRAFT") // DRAFT | SUBMITTED
+  photos      Json     @default("[]")
+  status      String   @default("DRAFT") // DRAFT | SUBMITTED
   /// The Daily this sheet produced on submit, if any.
-  dailyId       String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  dailyId     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   @@index([projectId])
 }
@@ -230,27 +235,28 @@ model SubcontractorRate {
 }
 
 model Subcontractor {
-  id               String    @id @default(cuid())
-  company          String
-  lead             String    @default("")
-  email            String    @default("")
-  phone            String    @default("")
-  location         String    @default("")
-  trades           String[]  @default([])
-  state            SubState  @default(PENDING_REVIEW)
-  tone             String    @default("neutral")
-  assignedProjects String[]  @default([])
-  compliance       Json      @default("[]")
-  complianceTone   String    @default("neutral")
-  scorecard        Json      @default("{}")
-  crewSize         Int       @default(0)
-  equipment        String[]  @default([])
-  logoUrl          String?
-  since            String    @default("")
-  users            User[]
-  documents        SubDocument[]
-  rates            SubcontractorRate[]
-  createdAt        DateTime  @default(now())
+  id             String              @id @default(cuid())
+  company        String
+  lead           String              @default("")
+  email          String              @default("")
+  phone          String              @default("")
+  location       String              @default("")
+  trades         String[]            @default([])
+  state          SubState            @default(PENDING_REVIEW)
+  tone           String              @default("neutral")
+  /// Jobs this crew is assigned to — the authority on what they can see.
+  projects       Project[]           @relation("ProjectCrews")
+  compliance     Json                @default("[]")
+  complianceTone String              @default("neutral")
+  scorecard      Json                @default("{}")
+  crewSize       Int                 @default(0)
+  equipment      String[]            @default([])
+  logoUrl        String?
+  since          String              @default("")
+  users          User[]
+  documents      SubDocument[]
+  rates          SubcontractorRate[]
+  createdAt      DateTime            @default(now())
 }
 
 /// A file a subcontractor uploads to an onboarding/compliance section. Stored as
@@ -298,13 +304,13 @@ model Daily {
 
 /// One project-specific onboarding invite link.
 model Invite {
-  token        String   @id
-  projectId    String?
-  projectName  String   @default("")
-  customer     String   @default("")
-  email        String?
-  used         Boolean  @default(false)
-  createdAt    DateTime @default(now())
+  token       String   @id
+  projectId   String?
+  projectName String   @default("")
+  customer    String   @default("")
+  email       String?
+  used        Boolean  @default(false)
+  createdAt   DateTime @default(now())
 }
 
 /// Feedback from the pilot account.
@@ -341,43 +347,43 @@ enum RowStatus {
 
 /// One uploaded rate/unit/material/rate-card document + its extraction job.
 model RateImport {
-  id          String        @id @default(cuid())
-  docType     RateDocType
-  fileName    String
-  mediaType   String        @default("")
-  status      ImportStatus  @default(PROCESSING)
+  id            String         @id @default(cuid())
+  docType       RateDocType
+  fileName      String
+  mediaType     String         @default("")
+  status        ImportStatus   @default(PROCESSING)
   // Optional scoping the user provides at upload.
-  customer    String        @default("")
-  market      String        @default("")
+  customer      String         @default("")
+  market        String         @default("")
   /// Free-text project label from the rate-import screen. When the import was
   /// started from a project page, `projectId` below is the authoritative link —
   /// this stays populated so renaming a project doesn't lose the label.
-  project     String        @default("")
-  linkedProject Project?    @relation(fields: [projectId], references: [id], onDelete: SetNull)
-  projectId   String?
-  summary     String        @default("")
-  error       String        @default("")
-  rows        ExtractedRow[]
-  createdAt   DateTime      @default(now())
+  project       String         @default("")
+  linkedProject Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  projectId     String?
+  summary       String         @default("")
+  error         String         @default("")
+  rows          ExtractedRow[]
+  createdAt     DateTime       @default(now())
 }
 
 /// One extracted line item, kept as a reviewable draft until approved. The full
 /// per-doc-type field set lives in `data`; the columns below drive the review UI.
 model ExtractedRow {
-  id           String     @id @default(cuid())
-  import       RateImport @relation(fields: [importId], references: [id], onDelete: Cascade)
-  importId     String
-  code         String     @default("")
-  description  String     @default("")
-  unit         String     @default("")
-  rate         Float?
-  minimum      Float?
-  rules        String     @default("")
-  sourcePage   String     @default("")
-  confidence   Float      @default(0)
-  matchStatus  String     @default("new")
-  warning      String     @default("")
-  status       RowStatus  @default(PENDING)
-  data         Json       @default("{}")
-  createdAt    DateTime   @default(now())
+  id          String     @id @default(cuid())
+  import      RateImport @relation(fields: [importId], references: [id], onDelete: Cascade)
+  importId    String
+  code        String     @default("")
+  description String     @default("")
+  unit        String     @default("")
+  rate        Float?
+  minimum     Float?
+  rules       String     @default("")
+  sourcePage  String     @default("")
+  confidence  Float      @default(0)
+  matchStatus String     @default("new")
+  warning     String     @default("")
+  status      RowStatus  @default(PENDING)
+  data        Json       @default("{}")
+  createdAt   DateTime   @default(now())
 }

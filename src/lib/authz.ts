@@ -55,11 +55,10 @@ export async function requireStaff(): Promise<CurrentUser> {
 /**
  * Project ids this user may see, or `null` meaning "everything" for staff.
  *
- * Assignments are stored as project *names* on the subcontractor rather than
- * ids, so they're resolved here — in one place, deliberately. If that ever
- * becomes a real relation, this function is the only thing that changes.
- * Names are compared case- and whitespace-insensitively because they're typed
- * by hand in two different screens.
+ * Assignments are a foreign-key relation, so this is a straight read — there's
+ * no name matching to get wrong. Renaming a project cannot revoke a crew's
+ * access, two projects sharing a job number stay distinct, and deleting a
+ * project drops its assignments rather than leaving them dangling.
  */
 export async function visibleProjectIds(user: CurrentUser): Promise<string[] | null> {
   if (isStaff(user.role)) return null;
@@ -67,16 +66,10 @@ export async function visibleProjectIds(user: CurrentUser): Promise<string[] | n
 
   const sub = await prisma.subcontractor.findUnique({
     where: { id: user.subcontractorId },
-    select: { assignedProjects: true },
+    select: { projects: { select: { id: true } } },
   });
-  const names = (sub?.assignedProjects ?? []).map(normalizeName).filter(Boolean);
-  if (names.length === 0) return [];
-
-  const projects = await prisma.project.findMany({ select: { id: true, name: true } });
-  return projects.filter((p) => names.includes(normalizeName(p.name))).map((p) => p.id);
+  return (sub?.projects ?? []).map((p) => p.id);
 }
-
-const normalizeName = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
 
 /**
  * Throws unless the user may see this project. Everything hanging off a

@@ -265,6 +265,14 @@ export interface SubScorecard {
   avgProductionPct: number;
 }
 
+/** A job a crew is assigned to. Carries the number so two jobs that share one
+ *  are still told apart on screen. */
+export interface AssignedProject {
+  id: string;
+  name: string;
+  number: string;
+}
+
 export interface Subcontractor {
   id: string;
   company: string;
@@ -275,7 +283,8 @@ export interface Subcontractor {
   trades: string[];
   state: "Active" | "Onboarding" | "Pending review" | "Invited" | "Inactive";
   tone: Tone;
-  assignedProjects: string[];
+  /** Real project records, not typed names — this is what gates their access. */
+  assignedProjects: AssignedProject[];
   compliance: ComplianceDoc[];
   complianceTone: Tone;
   scorecard: SubScorecard;

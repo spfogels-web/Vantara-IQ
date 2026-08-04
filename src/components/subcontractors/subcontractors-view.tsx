@@ -31,6 +31,7 @@ import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { StatusPill } from "@/components/common/status-pill";
 import { LogoUpload } from "@/components/common/logo-upload";
 import { Button } from "@/components/ui/button";
+import { AssignProjects } from "@/components/subcontractors/assign-projects";
 import { InviteDialog } from "@/components/subcontractors/invite-dialog";
 import { SubcontractorForm } from "@/components/subcontractors/subcontractor-form";
 import { SubRateCard } from "@/components/subcontractors/sub-rate-card";
@@ -189,7 +190,7 @@ export function SubcontractorsView({
         {selected ? (
           <SubDetail
             sub={selected}
-            onInvite={() => openInvite(selected.company)}
+            projects={projects}
             onEdit={() => {
               setEditing(selected);
               setFormOpen(true);
@@ -249,12 +250,12 @@ export function SubcontractorsView({
 
 function SubDetail({
   sub: s,
-  onInvite,
+  projects,
   onEdit,
   onDeleted,
 }: {
   sub: Subcontractor;
-  onInvite: () => void;
+  projects: Project[];
   onEdit: () => void;
   onDeleted: () => void;
 }) {
@@ -489,36 +490,13 @@ function SubDetail({
             icon={<FolderKanban className="size-3.5" />}
           />
           <PanelBody>
-            {s.assignedProjects.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-border/70 px-3 py-6 text-center text-[12px] text-muted-foreground">
-                No active assignments. Assign a project to grant this sub portal access to it.
-              </div>
-            ) : (
-              <ul className="flex flex-col gap-1.5">
-                {s.assignedProjects.map((p) => (
-                  <li key={p} className="flex items-center gap-2 rounded-lg bg-foreground/[0.03] px-3 py-2 text-[12.5px] text-foreground">
-                    <FolderKanban className="size-3.5 text-muted-foreground" />
-                    {p}
-                  </li>
-                ))}
-              </ul>
-            )}
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onInvite}
+            <AssignProjects
+              subcontractorId={s.id}
+              assigned={s.assignedProjects}
+              projects={projects}
               disabled={!gate.eligible}
-              title={gate.eligible ? undefined : "Complete onboarding before assigning work"}
-              className="mt-3 h-8 w-full gap-1.5 rounded-lg border-foreground/[0.08] bg-foreground/[0.03] text-[12px] text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {gate.eligible ? (
-                "Assign to project"
-              ) : (
-                <>
-                  <Lock className="size-3.5" /> Assign to project
-                </>
-              )}
-            </Button>
+              disabledReason="Complete onboarding before assigning work"
+            />
             {!gate.eligible ? (
               <p className="mt-1.5 text-center text-[10.5px] text-warning">
                 Blocked until onboarding is complete &amp; approved
