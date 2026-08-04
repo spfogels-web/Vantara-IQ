@@ -20,6 +20,19 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "Sign in to upload files." }, { status: 401 });
   }
 
+  // Say which thing is missing. The generic "upload failed" that this used to
+  // produce sends you looking at the file, the size, the network — anywhere
+  // but the one env var that is actually absent.
+  if (!process.env.BLOB_READ_WRITE_TOKEN) {
+    return NextResponse.json(
+      {
+        error:
+          "BLOB_READ_WRITE_TOKEN isn't set in this environment. Connect a Blob store to the project in Vercel → Storage, then redeploy; locally, put the token in .env and restart the dev server.",
+      },
+      { status: 501 },
+    );
+  }
+
   const body = (await request.json()) as HandleUploadBody;
   try {
     const json = await handleUpload({

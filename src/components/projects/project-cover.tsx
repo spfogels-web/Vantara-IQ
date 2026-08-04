@@ -66,8 +66,11 @@ export function ProjectCover({
       } else {
         setError(res.error ?? "Could not save that image.");
       }
-    } catch {
-      setError("Upload failed — Blob storage isn't configured for this environment.");
+    } catch (err) {
+      // Show what the server actually said — the upload route names the missing
+      // env var, which is almost always the real cause.
+      const message = err instanceof Error ? err.message : "";
+      setError(message || "Upload failed.");
     }
     setBusy(false);
   }
