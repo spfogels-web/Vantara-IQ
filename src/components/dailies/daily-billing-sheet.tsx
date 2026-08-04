@@ -147,8 +147,12 @@ function Cell({
     <input
       {...props}
       className={cn(
-        "num h-7 w-full bg-transparent px-1 text-center text-[12px] text-foreground outline-none",
-        "focus:bg-brand/10 print:h-6 print:text-[9px]",
+        // Taller and bigger than the paper form's proportions on screen. This
+        // is filled in on a tablet in the field, often with gloves on, and a
+        // 7mm row is a mis-tap waiting to happen. Print keeps the compact size
+        // so the sheet still fits a page.
+        "num h-9 w-full bg-transparent px-1.5 text-center text-[13px] text-foreground outline-none",
+        "focus:bg-brand/10 print:h-6 print:px-1 print:text-[9px]",
         className,
       )}
     />
@@ -468,7 +472,10 @@ export function DailyBillingSheet({
           locked && "select-text",
         )}
       >
-        <div className="min-w-[1180px] print:min-w-0">
+        {/* Wide enough for the widest of the two grids (the material section,
+            at 1410px) so neither table is squeezed. It scrolls horizontally on
+            a narrow screen, which beats cramming the columns. */}
+        <div className="min-w-[1420px] print:min-w-0">
           {/* Everything except the photo strip is frozen once filed. A disabled
               fieldset switches off every control inside it in one place, so no
               individual input has to remember. */}
@@ -646,13 +653,18 @@ export function DailyBillingSheet({
 
           {/* ── Production grid ──────────────────────────────────── */}
           <table className="w-full table-fixed border-collapse">
+            {/* Column widths follow what actually gets typed, not the paper
+                form's proportions. Ped/pole location numbers are long, and a
+                unit code like BFOV(12.7)2W has to be readable while you enter
+                it. Remarks is the one column that can afford to be narrow —
+                it's used occasionally, and it wraps. */}
             <colgroup>
-              <col className="w-[74px]" />
               <col className="w-[110px]" />
+              <col className="w-[210px]" />
               {Array.from({ length: UNIT_COLS }, (_, i) => (
-                <col key={i} className="w-[62px]" />
+                <col key={i} className="w-[88px]" />
               ))}
-              <col />
+              <col className="w-[150px]" />
             </colgroup>
             <thead>
               <tr>
@@ -678,7 +690,7 @@ export function DailyBillingSheet({
                       onChange={(e) =>
                         setLaborCodes((c) => c.map((v, j) => (j === i ? e.target.value : v)))
                       }
-                      className="mt-0.5 h-6 font-semibold uppercase text-foreground"
+                      className="mt-0.5 h-8 px-0.5 text-[12px] font-semibold uppercase text-foreground print:h-5"
                     />
                   </th>
                 ))}
@@ -769,17 +781,19 @@ export function DailyBillingSheet({
 
           {/* ── Material grid ────────────────────────────────────── */}
           <table className="w-full table-fixed border-collapse">
+            {/* Matched to the production grid above so the two tables line up
+                and read as one form. */}
             <colgroup>
-              <col className="w-[74px]" />
-              <col className="w-[90px]" />
               <col className="w-[110px]" />
-              <col className="w-[46px]" />
+              <col className="w-[150px]" />
+              <col className="w-[170px]" />
+              <col className="w-[54px]" />
               {Array.from({ length: MAT_COLS }, (_, i) => (
-                <col key={i} className="w-[62px]" />
+                <col key={i} className="w-[88px]" />
               ))}
-              <col className="w-[92px]" />
-              <col className="w-[82px]" />
-              <col className="w-[82px]" />
+              <col className="w-[110px]" />
+              <col className="w-[100px]" />
+              <col className="w-[100px]" />
             </colgroup>
             <thead>
               <tr>
@@ -813,7 +827,7 @@ export function DailyBillingSheet({
                       onChange={(e) =>
                         setMatCodes((c) => c.map((v, j) => (j === i ? e.target.value : v)))
                       }
-                      className="mt-0.5 h-6 font-semibold uppercase text-foreground"
+                      className="mt-0.5 h-8 px-0.5 text-[12px] font-semibold uppercase text-foreground print:h-5"
                     />
                   </th>
                 ))}
