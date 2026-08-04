@@ -101,13 +101,24 @@ export type SheetProject = {
 };
 
 /**
+ * Fortitude's crew number with Globe. It is the same on every sheet, so it is
+ * prefilled rather than retyped — and the field stays editable for the day a
+ * second crew number exists.
+ *
+ * This used to be filled with the project's crew *name* ("Garcia"), which is a
+ * different thing entirely and meant every sheet went out with the wrong value
+ * in a field Globe bills against.
+ */
+export const CREW_NUMBER = "24208171927-A27-311";
+
+/**
  * A fresh sheet. Picking a job off the list means the identity fields arrive
  * already filled — the crew only ever writes down production. Every one of
  * them stays editable, because the paper form gets corrected in the field too.
  */
 const blankHeader = (project?: SheetProject): SheetHeader => ({
   exchange: project?.number ?? "",
-  crewNumber: project?.crew ?? "",
+  crewNumber: CREW_NUMBER,
   customer: project?.client ?? "",
   dateWorked: "",
   projectNumber: project?.number ?? "",

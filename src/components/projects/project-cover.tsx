@@ -6,6 +6,7 @@ import { upload as blobUpload } from "@vercel/blob/client";
 import { ImagePlus, Loader2, Map as MapIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { projectImageSrc } from "@/lib/project-image";
 import { saveProjectPhotoUrl } from "@/app/actions";
 
 /**
@@ -39,12 +40,8 @@ export function ProjectCover({
   const [dragging, setDragging] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  // A PDF map can't be shown as an image; a PNG or JPG map can.
-  const rasterMap =
-    mapUrl && !mapUrl.startsWith("data:application/pdf") && !/\.pdf(\?|$)/i.test(mapUrl)
-      ? mapUrl
-      : null;
-  const shown = src || rasterMap;
+  // Same precedence as everywhere else a project is shown.
+  const shown = src || projectImageSrc({ mapUrl });
 
   async function accept(file: File | undefined) {
     if (!file || busy) return;

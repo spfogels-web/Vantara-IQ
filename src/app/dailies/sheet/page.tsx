@@ -3,6 +3,7 @@ import { ChevronRight, FileText, Map as MapIcon, Users } from "lucide-react";
 
 import { getProjects } from "@/data/queries";
 import { toneStyles } from "@/lib/tone";
+import { projectImageSrc as cover } from "@/lib/project-image";
 import { PageShell } from "@/components/common/page-shell";
 import { DailyBillingSheet } from "@/components/dailies/daily-billing-sheet";
 
@@ -65,14 +66,28 @@ export default async function DailyBillingSheetPage({
                 href={`/dailies/sheet/${p.id}`}
                 className="focus-ring group surface flex flex-col overflow-hidden transition hover:border-brand/40"
               >
-                {p.mapUrl ? (
-                  <div className="relative h-24 shrink-0 border-b border-border bg-foreground/[0.04]">
-                    <span className="absolute inset-0 grid place-items-center text-muted-foreground">
-                      <MapIcon className="size-5" />
-                    </span>
-                    <span className="absolute right-2 top-2 rounded-full border border-border bg-background/80 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Map attached
-                    </span>
+                {/* Same cover the project carries everywhere else — a crew
+                    picks their job by recognising it, and an aerial does that
+                    faster than a row of job numbers that all start 704. */}
+                {cover(p) || p.mapUrl ? (
+                  <div className="relative h-36 shrink-0 overflow-hidden border-b border-border bg-foreground/[0.04]">
+                    {cover(p) ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={cover(p)!}
+                        alt=""
+                        className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                      />
+                    ) : (
+                      <span className="absolute inset-0 grid place-items-center text-muted-foreground">
+                        <MapIcon className="size-5" />
+                      </span>
+                    )}
+                    {p.mapUrl ? (
+                      <span className="absolute right-2 top-2 rounded-full border border-border bg-background/80 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground backdrop-blur-sm">
+                        Map attached
+                      </span>
+                    ) : null}
                   </div>
                 ) : null}
 
