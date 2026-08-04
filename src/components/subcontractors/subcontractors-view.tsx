@@ -139,6 +139,21 @@ export function SubcontractorsView({
             </label>
           </div>
           <ul className="max-h-[70vh] flex-1 overflow-y-auto p-1.5">
+            {/* An empty roster and an empty search result are different problems
+                and deserve different sentences. */}
+            {filtered.length === 0 ? (
+              <li className="px-3 py-8 text-center">
+                <HardHat className="mx-auto size-5 text-muted-foreground/50" />
+                <p className="mt-2 text-[12.5px] font-medium text-foreground">
+                  {subs.length === 0 ? "No subcontractors yet" : "No matches"}
+                </p>
+                <p className="mt-1 text-[11.5px] text-muted-foreground">
+                  {subs.length === 0
+                    ? "Add a crew you work with, or send an invite and let them onboard themselves."
+                    : `Nothing matches “${query}”.`}
+                </p>
+              </li>
+            ) : null}
             {filtered.map((s) => {
               const active = selected?.id === s.id;
               return (
@@ -181,7 +196,44 @@ export function SubcontractorsView({
             }}
             onDeleted={() => setSelectedId(null)}
           />
-        ) : null}
+        ) : (
+          <Panel className="grid min-h-[320px] place-items-center p-8 text-center">
+            <div className="max-w-sm">
+              <span className="mx-auto grid size-11 place-items-center rounded-xl bg-brand/10 text-brand-bright ring-1 ring-inset ring-brand/20">
+                <HardHat className="size-5" />
+              </span>
+              <h3 className="mt-3 text-[14px] font-semibold text-foreground">
+                {subs.length === 0 ? "Build your crew list" : "Pick a subcontractor"}
+              </h3>
+              <p className="mt-1 text-[12px] text-muted-foreground">
+                {subs.length === 0
+                  ? "Every sub you add gets a compliance file, a rate card and a place to submit dailies. Add one directly, or invite them to onboard themselves."
+                  : "Choose a company on the left to see compliance, assignments and their rate card."}
+              </p>
+              {subs.length === 0 ? (
+                <div className="mt-4 flex items-center justify-center gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setEditing(null);
+                      setFormOpen(true);
+                    }}
+                    className="h-8 gap-1.5 rounded-lg border border-border bg-transparent px-3 text-[12px] font-medium text-foreground hover:bg-foreground/[0.05]"
+                  >
+                    <Plus className="size-3.5" /> Add a subcontractor
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => openInvite()}
+                    className="h-8 gap-1.5 rounded-lg bg-brand px-3 text-[12px] font-semibold text-white hover:bg-brand-bright"
+                  >
+                    <UserPlus className="size-3.5" /> Send an invite
+                  </Button>
+                </div>
+              ) : null}
+            </div>
+          </Panel>
+        )}
       </div>
 
       <InviteDialog
