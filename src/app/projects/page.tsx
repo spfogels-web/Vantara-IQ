@@ -4,7 +4,7 @@ import { AlertTriangle, ChevronRight, Plus } from "lucide-react";
 import { getProjects } from "@/data/queries";
 import { cn } from "@/lib/utils";
 import { toneStyles } from "@/lib/tone";
-import { formatFeet, formatNumber } from "@/lib/format";
+import { formatFeet, formatNumber, paceRatio } from "@/lib/format";
 import { PageShell, StatStrip } from "@/components/common/page-shell";
 import { ProjectCover } from "@/components/projects/project-cover";
 import { Panel } from "@/components/common/panel";
@@ -50,8 +50,9 @@ export default async function ProjectsPage() {
 
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           {projects.map((p) => {
-            const pace = p.actualFtPerDay / p.requiredFtPerDay;
-            const paceTone = pace >= 1 ? "success" : pace >= 0.85 ? "warning" : "critical";
+            const pace = paceRatio(p.actualFtPerDay, p.requiredFtPerDay);
+            const paceTone =
+              pace === null ? "neutral" : pace >= 1 ? "success" : pace >= 0.85 ? "warning" : "critical";
             return (
               <Link key={p.id} href={`/projects/${p.id}`} className="focus-ring group block rounded-2xl">
                 <Panel className="overflow-hidden p-0 transition-colors group-hover:bg-foreground/[0.04]">
@@ -99,10 +100,16 @@ export default async function ProjectsPage() {
                     <Meter value={p.pctComplete / 100} tone={p.tone} />
                     <div className="flex items-baseline justify-between pt-0.5 text-[11px] text-muted-foreground">
                       <span>
-                        Pace <span className={cn("num font-medium", toneStyles[paceTone].text)}>{Math.round(pace * 100)}%</span>
+                        Pace{" "}
+                        <span className={cn("num font-medium", toneStyles[paceTone].text)}>
+                          {pace === null ? "—" : `${Math.round(pace * 100)}%`}
+                        </span>
                       </span>
                       <span className="num">
-                        {formatNumber(p.actualFtPerDay)}/{formatNumber(p.requiredFtPerDay)} ft/day · {p.crew}
+                        {p.requiredFtPerDay > 0
+                          ? `${formatNumber(p.actualFtPerDay)}/${formatNumber(p.requiredFtPerDay)} ft/day · `
+                          : "No target · "}
+                        {p.crew}
                       </span>
                     </div>
                   </div>

@@ -84,3 +84,18 @@ export function initials(name: string) {
     .map((part) => part[0]?.toUpperCase() ?? "")
     .join("");
 }
+
+/**
+ * Pace as a fraction of the rate needed to hit the date, or null when there is
+ * no target to measure against.
+ *
+ * A project with no required footage per day divides zero by zero, which is
+ * how every card ended up reading "Pace NaN%". A project that hasn't been given
+ * a target isn't running at 0% — there is simply nothing to compare to, and the
+ * UI should say so rather than print a number.
+ */
+export function paceRatio(actual: number, required: number): number | null {
+  if (!Number.isFinite(required) || required <= 0) return null;
+  const ratio = actual / required;
+  return Number.isFinite(ratio) ? ratio : null;
+}

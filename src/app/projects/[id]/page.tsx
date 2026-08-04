@@ -13,11 +13,11 @@ import { cn } from "@/lib/utils";
 import { toneStyles } from "@/lib/tone";
 import {
   formatCompactCurrency,
-  formatCurrency,
   formatFeet,
   formatNumber,
   formatPercent,
 } from "@/lib/format";
+import { ProjectCover } from "@/components/projects/project-cover";
 import { getCurrentUser, isStaff } from "@/lib/auth";
 import { PageShell } from "@/components/common/page-shell";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
@@ -87,6 +87,19 @@ export default async function ProjectDetailPage({
         <ProjectHeaderActions projectId={project.id} photoUrl={project.photoUrl} />
       </div>
 
+      {/* The cover photo, where it belongs — this is the page you land on to
+          orient yourself, and an aerial does that faster than any number. Drop
+          a new one straight onto it, same as on the cards. */}
+      <div className="mb-3">
+        <ProjectCover
+          projectId={project.id}
+          projectNumber={project.number}
+          photoUrl={project.photoUrl}
+          mapUrl={project.mapUrl}
+          className="h-56 rounded-2xl border border-border/60 sm:h-72"
+        />
+      </div>
+
       {/* Status first: health, pace and progress read in one line before
           anything else on the page. */}
       <div className="mb-3">
@@ -136,13 +149,15 @@ export default async function ProjectDetailPage({
               description="Derived from installed footage and the customer's blended unit rate"
               icon={<TrendingUp className="size-3.5" />}
             />
-            <PanelBody className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+            {/* No blended rate. Averaging a rate card across unit codes invents
+                a number nobody bills against — plow, bore and ribbon all price
+                differently, and a single $/ft hides that. */}
+            <PanelBody className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
               <Economic label="Contract value" value={formatCompactCurrency(contractValue)} />
               <Economic label="Customer billing" value={formatCompactCurrency(customerBilling)} hint="Installed to date" />
               <Economic label="Subcontractor pay" value={formatCompactCurrency(subPay)} hint="~68% of billing" />
               <Economic label="Gross profit" value={formatCompactCurrency(profit)} tone="text-success" />
               <Economic label="Margin" value={formatPercent(margin)} tone={margin >= 0.25 ? "text-success" : "text-warning"} />
-              <Economic label="Blended rate" value={`${formatCurrency(avgRate)}/ft`} />
             </PanelBody>
           </Panel>
         </div>

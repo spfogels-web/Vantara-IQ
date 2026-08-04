@@ -6,7 +6,7 @@ import { AlertTriangle, ChevronRight } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { toneStyles } from "@/lib/tone";
-import { formatFeet, formatNumber } from "@/lib/format";
+import { formatFeet, formatNumber, paceRatio } from "@/lib/format";
 import type { Project } from "@/lib/types";
 import { Panel, PanelFooter, PanelHeader } from "@/components/common/panel";
 import { HealthRing } from "@/components/common/health-ring";
@@ -21,8 +21,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
  * number on this table.
  */
 function PaceCell({ project }: { project: Project }) {
-  const pace = project.actualFtPerDay / project.requiredFtPerDay;
-  const tone = pace >= 1 ? "success" : pace >= 0.85 ? "warning" : "critical";
+  const pace = paceRatio(project.actualFtPerDay, project.requiredFtPerDay);
+  const tone =
+    pace === null ? "neutral" : pace >= 1 ? "success" : pace >= 0.85 ? "warning" : "critical";
   const styles = toneStyles[tone];
 
   return (
@@ -40,13 +41,15 @@ function PaceCell({ project }: { project: Project }) {
           <div className="h-1 w-full overflow-hidden rounded-full bg-foreground/[0.07]">
             <div
               className={cn("h-full rounded-full", styles.dot)}
-              style={{ width: `${Math.min(pace, 1) * 100}%` }}
+              style={{ width: `${Math.min(pace ?? 0, 1) * 100}%` }}
             />
           </div>
         </div>
       </TooltipTrigger>
       <TooltipContent>
-        Running at {Math.round(pace * 100)}% of the rate needed to hit the date
+        {pace === null
+          ? "No required pace set for this project yet"
+          : `Running at ${Math.round(pace * 100)}% of the rate needed to hit the date`}
       </TooltipContent>
     </Tooltip>
   );
@@ -126,7 +129,7 @@ function ProjectRow({ project }: { project: Project }) {
 }
 
 function ProjectCard({ project }: { project: Project }) {
-  const pace = project.actualFtPerDay / project.requiredFtPerDay;
+  const pace = paceRatio(project.actualFtPerDay, project.requiredFtPerDay);
 
   return (
     <Link
@@ -171,10 +174,16 @@ function ProjectCard({ project }: { project: Project }) {
             <span
               className={cn(
                 "num font-medium",
-                pace >= 1 ? "text-success" : pace >= 0.85 ? "text-warning" : "text-critical",
+                pace === null
+                  ? "text-muted-foreground"
+                  : pace >= 1
+                    ? "text-success"
+                    : pace >= 0.85
+                      ? "text-warning"
+                      : "text-critical",
               )}
             >
-              {Math.round(pace * 100)}%
+              {pace === null ? "—" : `${Math.round(pace * 100)}%`}
             </span>
           </span>
           <span className="num">

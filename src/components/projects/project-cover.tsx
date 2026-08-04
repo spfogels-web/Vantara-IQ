@@ -90,7 +90,9 @@ export function ProjectCover({
         void accept(e.dataTransfer.files?.[0]);
       }}
       className={cn(
-        "relative h-28 w-full overflow-hidden border-b border-border/60 bg-foreground/[0.03]",
+        // Tall enough to actually read an aerial — at 7rem a jobsite shot was
+        // a stripe you couldn't tell apart from the next one.
+        "relative h-44 w-full overflow-hidden border-b border-border/60 bg-foreground/[0.03]",
         dragging && "ring-2 ring-inset ring-brand",
         className,
       )}
