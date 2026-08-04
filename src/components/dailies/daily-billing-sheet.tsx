@@ -112,6 +112,13 @@ export type SheetProject = {
 export const CREW_NUMBER = "24208171927-A27-311";
 
 /**
+ * The subcontractor Globe is billed under. It goes in the first employee slot
+ * on every sheet, so it is prefilled alongside the crew number. The remaining
+ * slots stay blank for the individual crew members who worked that day.
+ */
+export const SUBCONTRACTOR_NAME = "Fortitude Infrastructure LLC";
+
+/**
  * A fresh sheet. Picking a job off the list means the identity fields arrive
  * already filled — the crew only ever writes down production. Every one of
  * them stays editable, because the paper form gets corrected in the field too.
@@ -123,7 +130,10 @@ const blankHeader = (project?: SheetProject): SheetHeader => ({
   dateWorked: "",
   projectNumber: project?.number ?? "",
   jobName: project?.name ?? "",
-  employees: Array(CREW_SLOTS).fill(""),
+  employees: [
+    SUBCONTRACTOR_NAME,
+    ...Array(CREW_SLOTS - 1).fill(""),
+  ],
   complete: "",
   supervisorSignature: "",
   supervisorDate: "",
