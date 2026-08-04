@@ -232,6 +232,24 @@ export function parseDelimitedMaterialList(
  * Pulls the text layer out of a PDF. Returns null for scans (no text layer)
  * so they go to the model, which is the right tool for an image.
  */
+/**
+ * The same text layer, but one entry per page.
+ *
+ * A 29-page rate sheet cannot be extracted in a single model call — the reply
+ * runs past the output limit and the tool call comes back truncated. Splitting
+ * on page boundaries lets the caller send it in batches and merge the rows,
+ * which is the only way a document that long yields a complete rate card.
+ */
+export async function pdfTextPages(data: Buffer): Promise<string[] | null> {
+  const all = await pdfTextLayer(data);
+  if (!all) return null;
+  const pages = all
+    .split(/\n\n(?=# Sheet: page )/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  return pages.length > 0 ? pages : null;
+}
+
 export async function pdfTextLayer(data: Buffer): Promise<string | null> {
   try {
     const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");

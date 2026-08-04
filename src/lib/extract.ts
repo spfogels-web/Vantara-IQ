@@ -126,9 +126,13 @@ export async function extractDocument(input: {
     content.push({ type: "text", text: "Document contents:\n\n```\n" + input.text + "\n```" });
   }
 
-  const message = await client.messages.create({
+  // Streamed, with a large output budget. A rate sheet is hundreds of rows of
+  // JSON; at 16k tokens the reply was running past the limit mid-tool-call and
+  // the truncated result silently became "0 rows extracted" on a document the
+  // model had read perfectly well.
+  const message = await client.messages.stream({
     model: "claude-opus-4-8",
-    max_tokens: 16000,
+    max_tokens: 32000,
     tools: [
       {
         name: "record_extraction",
@@ -154,7 +158,7 @@ export async function extractDocument(input: {
     ],
     tool_choice: { type: "tool", name: "record_extraction" },
     messages: [{ role: "user", content }],
-  });
+  }).finalMessage();
 
   const toolUse = message.content.find(
     (b): b is Anthropic.ToolUseBlock => b.type === "tool_use",
@@ -162,5 +166,29 @@ export async function extractDocument(input: {
   if (!toolUse) throw new Error("Model returned no extraction");
 
   const result = toolUse.input as ExtractionResult;
-  return { summary: result.summary ?? "", rows: result.rows ?? [] };
+  const rows = Array.isArray(result.rows) ? result.rows : [];
+
+  // Refuse to report a truncated read as a successful one. Returning the rows
+  // that happened to fit would quietly drop the rest of a rate card, and every
+  // number downstream — invoices, pay applications, margin — would be wrong in
+  // a way nothing else would catch.
+  if (message.stop_reason === "max_tokens") {
+    throw new TruncatedExtractionError(
+      `The document is too long to read in one pass — it was cut off after ${rows.length} rows.`,
+      rows.length,
+    );
+  }
+
+  return { summary: result.summary ?? "", rows };
+}
+
+/** Thrown when the model hit its output limit before finishing the document. */
+export class TruncatedExtractionError extends Error {
+  constructor(
+    message: string,
+    readonly rowsBeforeCutoff: number,
+  ) {
+    super(message);
+    this.name = "TruncatedExtractionError";
+  }
 }

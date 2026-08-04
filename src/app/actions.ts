@@ -11,7 +11,7 @@ import {
   type ExtractedRowData,
   type RateDocType,
 } from "@/lib/extract";
-import { parseDelimitedMaterialList, pdfTextLayer } from "@/lib/parse-material-list";
+import { parseDelimitedMaterialList, pdfTextLayer, pdfTextPages } from "@/lib/parse-material-list";
 import { findJobProfile } from "@/lib/job-profiles";
 import {
   assertOwnSubcontractor,
@@ -978,6 +978,80 @@ async function readDocument(file: File) {
  * Upload → Claude extraction → draft rows. Creates a RateImport and its rows in
  * one shot; rows land as PENDING for review. Returns the import id (or an error).
  */
+/** Pages per model call when a document is long enough to need splitting. */
+const PAGES_PER_BATCH = 6;
+
+/**
+ * Extract a document that may be too long for a single pass.
+ *
+ * A 29-page rate sheet produces hundreds of rows of JSON — more than one reply
+ * can hold. Sent whole, the tool call is cut off mid-array and the result reads
+ * as "0 rows" on a document the model understood perfectly, which is how the
+ * Globe Exhibit A import came back empty while its summary was correct.
+ *
+ * When the PDF has a real text layer we split it on page boundaries and merge
+ * the rows. A scan has no text layer, so it still goes through whole — but a
+ * truncated read now raises rather than reporting success.
+ */
+async function extractLongDocument(input: {
+  docType: RateDocType;
+  base64?: string;
+  mediaType?: string;
+  text?: string;
+  file: File;
+}) {
+  const single = () =>
+    extractDocument({
+      docType: input.docType,
+      base64: input.base64,
+      mediaType: input.mediaType,
+      text: input.text,
+    });
+
+  if (input.mediaType !== "application/pdf") return single();
+
+  const pages = await pdfTextPages(Buffer.from(await input.file.arrayBuffer()));
+  // No text layer (a scan), or short enough to read in one go.
+  if (!pages || pages.length <= PAGES_PER_BATCH) return single();
+
+  const batches: string[][] = [];
+  for (let i = 0; i < pages.length; i += PAGES_PER_BATCH) {
+    batches.push(pages.slice(i, i + PAGES_PER_BATCH));
+  }
+
+  const rows: ExtractedRowData[] = [];
+  const summaries: string[] = [];
+  const failed: number[] = [];
+
+  for (const [i, batch] of batches.entries()) {
+    try {
+      const part = await extractDocument({
+        docType: input.docType,
+        text: batch.join("\n\n"),
+      });
+      rows.push(...part.rows);
+      if (part.summary) summaries.push(part.summary);
+    } catch {
+      // Record which pages we lost rather than pretending the read was clean.
+      failed.push(i + 1);
+    }
+  }
+
+  if (rows.length === 0) {
+    throw new Error(
+      `Read ${pages.length} pages in ${batches.length} batches but found no rows. The document may not be a rate sheet.`,
+    );
+  }
+
+  const note = failed.length
+    ? ` — batch${failed.length === 1 ? "" : "es"} ${failed.join(", ")} of ${batches.length} failed, so some pages are missing`
+    : "";
+  return {
+    summary: `${summaries[0] ?? ""} (${pages.length} pages, ${rows.length} rows)${note}`,
+    rows,
+  };
+}
+
 export async function extractRateDocument(formData: FormData) {
   await requireStaff();
   if (!isConfigured()) {
@@ -998,7 +1072,13 @@ export async function extractRateDocument(formData: FormData) {
   });
 
   try {
-    const result = await extractDocument({ docType, base64, mediaType, text });
+    const result = await extractLongDocument({
+      docType,
+      base64,
+      mediaType,
+      text,
+      file,
+    });
     await prisma.extractedRow.createMany({ data: extractedRowData(imp.id, result.rows) });
     await prisma.rateImport.update({
       where: { id: imp.id },
