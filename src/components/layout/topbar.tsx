@@ -173,7 +173,7 @@ function NotificationsPopover() {
 function QuickActions() {
   const meta = useMetaKeyLabel();
   const actions = [
-    { label: "New daily report", icon: FilePlus2, shortcut: "D" },
+    { label: "Daily billing sheet", icon: FilePlus2, shortcut: "D" },
     { label: "New project", icon: FolderPlus, shortcut: "P" },
     { label: "Upload document", icon: Upload, shortcut: "U" },
     { label: "Create invoice", icon: ReceiptText, shortcut: "I" },

@@ -43,7 +43,7 @@ export function useCommandMenu() {
 }
 
 const quickActions = [
-  { label: "New daily report", icon: FilePlus2, href: "/dailies/new", shortcut: "⌘N" },
+  { label: "Daily billing sheet", icon: FilePlus2, href: "/dailies/sheet", shortcut: "⌘N" },
   { label: "New project", icon: FolderPlus, href: "/projects/new" },
   { label: "Upload document", icon: Upload, href: "/documents/upload" },
   { label: "Create invoice", icon: ReceiptText, href: "/invoicing/new" },

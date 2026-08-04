@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FileText, Plus } from "lucide-react";
+import { FileText } from "lucide-react";
 
 import { getDailies, getSheetIndexByDaily } from "@/data/queries";
 import { getCurrentUser } from "@/lib/auth";
@@ -21,26 +21,22 @@ export default async function DailiesPage({
     searchParams,
   ]);
 
+  // The Globe billing sheet is the only way work gets filed — it is the form
+  // Globe pays against. The thin "New daily" alongside it collected a different,
+  // smaller set of fields and was a second answer to the same question, so the
+  // sheet takes the primary action.
   return (
     <PageShell
       eyebrow="Overview"
       title="Dailies"
       description="Every crew's daily production, digitized from the field. The AI reads each sheet, reconciles quantities and documentation, and stages it for your team's review."
       actions={
-        <>
-          <Link
-            href="/dailies/sheet"
-            className="focus-ring inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3.5 text-[12.5px] font-semibold text-foreground hover:bg-foreground/[0.04]"
-          >
-            <FileText className="size-4" /> Billing sheet
-          </Link>
-          <Link
-            href="/dailies/new"
-            className="brand-gradient focus-ring inline-flex h-9 items-center gap-1.5 rounded-lg px-3.5 text-[12.5px] font-semibold text-white"
-          >
-            <Plus className="size-4" /> New daily
-          </Link>
-        </>
+        <Link
+          href="/dailies/sheet"
+          className="brand-gradient focus-ring inline-flex h-9 items-center gap-1.5 rounded-lg px-3.5 text-[12.5px] font-semibold text-white"
+        >
+          <FileText className="size-4" /> Billing sheet
+        </Link>
       }
     >
       <DailiesView
