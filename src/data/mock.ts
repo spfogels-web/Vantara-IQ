@@ -73,7 +73,7 @@ export const kpis: Kpi[] = [
     trend: "up",
     tone: "warning",
     icon: "dollar",
-    href: "/billing",
+    href: "/invoicing",
     series: [310000, 322000, 355000, 348000, 372000, 391000, 402000, 418000, 436000, 451000, 466000, 482350],
   },
   {

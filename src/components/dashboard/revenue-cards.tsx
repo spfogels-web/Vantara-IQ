@@ -20,7 +20,7 @@ export function RevenueCards({ summary }: { summary: RevenueSummary }) {
         description={`${formatCompactCurrency(summary.total)} across the pipeline`}
         icon={<Wallet className="size-3.5 text-warning" />}
         action="Billing"
-        actionHref="/billing"
+        actionHref="/invoicing"
       />
 
       <PanelBody className="grid gap-3 sm:grid-cols-2">
@@ -31,7 +31,7 @@ export function RevenueCards({ summary }: { summary: RevenueSummary }) {
           return (
             <Link
               key={bucket.id}
-              href={`/billing?bucket=${bucket.id}`}
+              href={`/invoicing?bucket=${bucket.id}`}
               className={cn(
                 "group relative flex flex-col overflow-hidden rounded-xl border p-3.5 transition-all duration-200",
                 "border-foreground/[0.06] bg-foreground/[0.02] hover:-translate-y-px hover:border-foreground/[0.12] hover:bg-foreground/[0.04]",

@@ -21,7 +21,7 @@ export const navSections: NavSection[] = [
   {
     title: "Financials",
     items: [
-      { label: "Billing", href: "/billing", icon: "billing", badge: 4 },
+      { label: "Invoicing", href: "/invoicing", icon: "billing", badge: 4 },
       { label: "Pay applications", href: "/pay-applications", icon: "payapps" },
       { label: "Rate import", href: "/rate-import", icon: "scan" },
     ],

@@ -10,9 +10,9 @@ import { StatusPill } from "@/components/common/status-pill";
 import { Button } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Billing · Vantara IQ" };
+export const metadata = { title: "Invoicing · Vantara IQ" };
 
-export default async function BillingPage() {
+export default async function InvoicingPage() {
   const invoices = await getInvoices();
 
   const ready = invoices.filter((i) => i.status === "Ready to bill");
@@ -26,7 +26,7 @@ export default async function BillingPage() {
   return (
     <PageShell
       eyebrow="Financials"
-      title="Billing"
+      title="Invoicing"
       description="The billing engine. Approved dailies price themselves against each customer's rate sheet — the office reviews and sends, it doesn't calculate."
     >
       <div className="flex flex-col gap-3">

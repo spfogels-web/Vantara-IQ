@@ -321,7 +321,7 @@ export async function getKpis(): Promise<Kpi[]> {
       trend: "flat",
       tone: readyToBill > 0 ? "success" : "neutral",
       icon: "dollar",
-      href: "/billing",
+      href: "/invoicing",
       series: flat(readyToBill),
     },
     {
