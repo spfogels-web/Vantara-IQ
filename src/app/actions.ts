@@ -1525,8 +1525,17 @@ export async function submitDailySheet(input: SheetPayload) {
     });
   }
 
-  if (lineItems.length === 0) {
-    return { ok: false as const, error: "Nothing to submit — enter a unit code and a quantity first." };
+  // A zero-footage day is a real day. Runs bill ped to ped and a crew doesn't
+  // claim one until it closes, so a day spent on a run that didn't finish —
+  // rain, locates, a rock — goes in at zero with notes explaining it. Refusing
+  // that submission would mean the only way to file the day is to invent
+  // production, so the notes are what make it valid instead of the quantities.
+  if (lineItems.length === 0 && !(sheet.notes ?? "").trim()) {
+    return {
+      ok: false as const,
+      error:
+        "Nothing to submit. Enter the day's production, or — if the run didn't finish — leave it at zero and write in the notes what happened.",
+    };
   }
 
   const header = (sheet.header ?? {}) as Record<string, unknown>;
