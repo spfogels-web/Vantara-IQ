@@ -895,6 +895,9 @@ export const dailies: DailyReport[] = [
     tone: "warning",
     totalFt: 918,
     billableAmount: 11240,
+    subCost: null,
+    grossMargin: null,
+    unpricedCodes: 0,
     lineItems: [
       { location: "PED 1", code: "BDD", quantity: 100, unit: "ft" },
       { location: "PED 1", code: "BD4", quantity: 244, unit: "ft" },
@@ -923,6 +926,9 @@ export const dailies: DailyReport[] = [
     tone: "success",
     totalFt: 2240,
     billableAmount: 30240,
+    subCost: null,
+    grossMargin: null,
+    unpricedCodes: 0,
     lineItems: [
       { location: "STA 12+00", code: "GP-TR", quantity: 2240, unit: "ft" },
       { location: "STA 12+00", code: "GP-VLT", quantity: 1, unit: "ea" },
@@ -946,6 +952,9 @@ export const dailies: DailyReport[] = [
     tone: "critical",
     totalFt: 1180,
     billableAmount: 13570,
+    subCost: null,
+    grossMargin: null,
+    unpricedCodes: 0,
     lineItems: [
       { location: "STA 14+00", code: "F-BOR", quantity: 1180, unit: "ft" },
       { location: "STA 14+00", code: "F-HH", quantity: 2, unit: "ea" },
@@ -973,6 +982,9 @@ export const dailies: DailyReport[] = [
     tone: "info",
     totalFt: 1410,
     billableAmount: 20868,
+    subCost: null,
+    grossMargin: null,
+    unpricedCodes: 0,
     lineItems: [
       { location: "Circuit 4B", code: "PWR-TR", quantity: 1410, unit: "ft" },
       { location: "Circuit 4B", code: "PWR-GR", quantity: 4, unit: "ea" },
@@ -996,6 +1008,9 @@ export const dailies: DailyReport[] = [
     tone: "success",
     totalFt: 1910,
     billableAmount: 118420,
+    subCost: null,
+    grossMargin: null,
+    unpricedCodes: 0,
     lineItems: [
       { location: "Main St 4+00", code: "WM-8", quantity: 1910, unit: "ft" },
       { location: "Main St 4+00", code: "WM-VLV", quantity: 1, unit: "ea" },
@@ -1019,6 +1034,9 @@ export const dailies: DailyReport[] = [
     tone: "warning",
     totalFt: 2705,
     billableAmount: 8385,
+    subCost: null,
+    grossMargin: null,
+    unpricedCodes: 0,
     lineItems: [
       { location: "Node 12", code: "CX-OL", quantity: 2705, unit: "ft" },
       { location: "Node 12", code: "CX-NP", quantity: 1, unit: "ea" },

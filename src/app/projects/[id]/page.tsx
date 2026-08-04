@@ -8,6 +8,7 @@ import {
   getProject,
   getProjectMaterialImports,
   getProjectMaterials,
+  getProjectValuation,
 } from "@/data/queries";
 import { cn } from "@/lib/utils";
 import { toneStyles } from "@/lib/tone";
@@ -18,6 +19,7 @@ import {
   formatPercent,
 } from "@/lib/format";
 import { ProjectCover } from "@/components/projects/project-cover";
+import { ProjectValue } from "@/components/projects/project-value";
 import { getCurrentUser, isStaff } from "@/lib/auth";
 import { PageShell } from "@/components/common/page-shell";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
@@ -48,9 +50,10 @@ export default async function ProjectDetailPage({
   // subcontractor has no business reading the margin on their own work.
   const customers = staff ? await getCustomers() : [];
 
-  const [materialImports, trackedMaterials] = await Promise.all([
+  const [materialImports, trackedMaterials, valuation] = await Promise.all([
     getProjectMaterialImports(project.id, project.name),
     getProjectMaterials(project.id),
+    getProjectValuation(project.id),
   ]);
 
   const customer = customers.find((c) => c.name === project.client);
@@ -141,6 +144,15 @@ export default async function ProjectDetailPage({
 
       {/* Six numbers in one strip. They read fine side by side, and giving
           them a column of their own was costing the map the width it needs. */}
+      {/* What the job is worth, priced off the material list. This is the
+          number to look at first — it lands the day the list does, before any
+          production exists to measure. */}
+      {staff ? (
+        <div className="mb-3">
+          <ProjectValue v={valuation} />
+        </div>
+      ) : null}
+
       {staff ? (
         <div className="mb-3">
           <Panel>

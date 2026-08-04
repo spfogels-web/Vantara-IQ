@@ -331,7 +331,14 @@ export interface DailyReport {
   status: DailyStatus;
   tone: Tone;
   totalFt: number;
+  /** Gross at the customer's rate card — what this day is worth to us. */
   billableAmount: number;
+  /** The same day costed against the filing sub's own signed card. */
+  subCost: number | null;
+  /** Gross less sub cost. Null when the sub has no rate card loaded. */
+  grossMargin: number | null;
+  /** Codes on this daily with no rate — the totals above exclude them. */
+  unpricedCodes: number;
   lineItems: DailyLineItem[];
   photos: number;
   hasAsBuilt: boolean;

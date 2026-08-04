@@ -3,6 +3,13 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { assertProjectAccess, requireStaff, viewer, visibleProjectIds } from "@/lib/authz";
 import {
+  priceQuantities,
+  valueProject,
+  type PricingResult,
+  type QuantityRow,
+  type Valuation,
+} from "@/lib/pricing";
+import {
   codeGroupLabel,
   compareByPriority,
   isAerialCode,
@@ -187,7 +194,10 @@ const emptyScorecard: SubScorecard = {
 
 type DailyRow = Awaited<ReturnType<typeof prisma.daily.findMany>>[number];
 
-function toDaily(r: DailyRow): DailyReport {
+function toDaily(
+  r: DailyRow,
+  priced?: { billableAmount: number; subCost: number | null; grossMargin: number | null; unpricedCodes: number },
+): DailyReport {
   return {
     id: r.id,
     sheetNumber: r.sheetNumber,
@@ -201,7 +211,10 @@ function toDaily(r: DailyRow): DailyReport {
     status: r.status as DailyReport["status"],
     tone: r.tone as Tone,
     totalFt: r.totalFt,
-    billableAmount: r.billableAmount,
+    billableAmount: priced?.billableAmount ?? r.billableAmount,
+    subCost: priced?.subCost ?? null,
+    grossMargin: priced?.grossMargin ?? null,
+    unpricedCodes: priced?.unpricedCodes ?? 0,
     lineItems: (r.lineItems as unknown as DailyLineItem[]) ?? [],
     photos: r.photos,
     hasAsBuilt: r.hasAsBuilt,
@@ -483,6 +496,71 @@ export async function getSubcontractors(): Promise<Subcontractor[]> {
   return rows.map(toSubcontractor);
 }
 
+/**
+ * Price every daily on both cards.
+ *
+ * Each daily is its own invoice — gross at Fortitude's card (Exhibit A, what
+ * Globe pays us), cost at the filing sub's own signed card, and the margin
+ * between them. Rates are read once and matched in memory rather than queried
+ * per daily.
+ *
+ * Rates are picked as of the work date, so a daily is always valued at the
+ * rate that applied when the work was done.
+ */
+async function priceDailies(
+  rows: { customer: string; subcontractor: string; workDate: string; lineItems: unknown }[],
+) {
+  const customerNames = [...new Set(rows.map((r) => r.customer?.trim()).filter(Boolean))];
+  const subNames = [...new Set(rows.map((r) => r.subcontractor?.trim()).filter(Boolean))];
+
+  const rateSelect = {
+    code: true, description: true, unit: true,
+    rate: true, effectiveDate: true, expirationDate: true,
+  } as const;
+
+  const [customers, subs] = await Promise.all([
+    customerNames.length
+      ? prisma.customer.findMany({
+          where: { name: { in: customerNames } },
+          select: { name: true, rates: { select: rateSelect } },
+        })
+      : Promise.resolve([]),
+    subNames.length
+      ? prisma.subcontractor.findMany({
+          where: { company: { in: subNames } },
+          select: { company: true, rates: { select: rateSelect } },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  const customerRates = new Map(customers.map((c) => [c.name, c.rates]));
+  const subRates = new Map(subs.map((s) => [s.company, s.rates]));
+
+  return rows.map((r) => {
+    const items = Array.isArray(r.lineItems) ? (r.lineItems as unknown[]) : [];
+    const quantities: QuantityRow[] = items
+      .map((raw) => raw as { code?: unknown; quantity?: unknown })
+      .filter((li) => typeof li?.code === "string")
+      .map((li) => ({
+        code: (li.code as string).trim().toUpperCase(),
+        quantity: typeof li.quantity === "number" ? li.quantity : 0,
+      }));
+
+    const ours = customerRates.get(r.customer?.trim() ?? "") ?? [];
+    const theirs = subRates.get(r.subcontractor?.trim() ?? "") ?? [];
+
+    const revenue = priceQuantities(quantities, ours, r.workDate);
+    const cost = theirs.length > 0 ? priceQuantities(quantities, theirs, r.workDate) : null;
+
+    return {
+      billableAmount: revenue.total,
+      subCost: cost ? cost.total : null,
+      grossMargin: cost ? revenue.total - cost.total : null,
+      unpricedCodes: revenue.unpriced.length,
+    };
+  });
+}
+
 /** Dailies for the projects the viewer can see; a sub sees only their own. */
 export async function getDailies(): Promise<DailyReport[]> {
   const user = await viewer();
@@ -503,7 +581,11 @@ export async function getDailies(): Promise<DailyReport[]> {
           },
     orderBy: { createdAt: "desc" },
   });
-  return rows.map(toDaily);
+
+  // Every daily is its own invoice: gross at our card, cost at the filing
+  // sub's own card, margin between them.
+  const priced = await priceDailies(rows);
+  return rows.map((r, i) => toDaily(r, priced[i]));
 }
 
 /* -- Materials / billing / pay / reports (fixtures for now) ----------------- */
@@ -1007,4 +1089,235 @@ export async function getNavBadges(): Promise<Record<string, number>> {
   if (awaiting > 0) badges["/dailies"] = awaiting;
   if (subsPending > 0) badges["/subcontractors"] = subsPending;
   return badges;
+}
+
+/* ------------------------------------------------------------------ *
+ * Project valuation — what a job is worth before it starts.
+ * ------------------------------------------------------------------ */
+
+export interface ProjectValuation extends Valuation {
+  /** Codes on the material list with a planned quantity. */
+  plannedCodes: number;
+  hasCustomerRates: boolean;
+  hasSubRates: boolean;
+  /**
+   * The same two rate cards applied to what has actually been billed on
+   * dailies, rather than what the material list plans for. Both sides come
+   * from real rates — there is no percentage-of-revenue estimate anywhere.
+   */
+  billed: {
+    revenue: PricingResult;
+    subCost: PricingResult | null;
+    grossMargin: number | null;
+    grossMarginPct: number | null;
+    dailies: number;
+  };
+}
+
+/**
+ * Price a project's material list twice: once at what the customer pays us,
+ * once at what we pay the sub. The difference is the gross the job is worth
+ * before overhead, fuel, restoration and damages.
+ *
+ * This reads the *plan*, not production — it answers "is this job worth taking"
+ * on the day the material list lands, long before the first daily. Coverage is
+ * reported alongside the totals because a total priced from a third of the
+ * codes is not a smaller number, it is a wrong one.
+ */
+export async function getProjectValuation(projectId: string): Promise<ProjectValuation> {
+  await assertProjectAccess(projectId);
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: {
+      client: true,
+      customerId: true,
+      materials: { select: { code: true, item: true, unit: true, planned: true } },
+      crews: { select: { id: true, company: true } },
+    },
+  });
+
+  const empty: PricingResult = {
+    lines: [],
+    unpriced: [],
+    total: 0,
+    pricedCodes: 0,
+    totalCodes: 0,
+    complete: false,
+  };
+
+  if (!project) {
+    return {
+      revenue: empty,
+      subCost: null,
+      subName: null,
+      grossMargin: null,
+      grossMarginPct: null,
+      plannedCodes: 0,
+      hasCustomerRates: false,
+      hasSubRates: false,
+      billed: {
+        revenue: empty,
+        subCost: null,
+        grossMargin: null,
+        grossMarginPct: null,
+        dailies: 0,
+      },
+    };
+  }
+
+  const quantities: QuantityRow[] = project.materials
+    .filter((m) => m.code && m.planned > 0)
+    .map((m) => ({
+      code: m.code,
+      quantity: m.planned,
+      description: m.item,
+      unit: m.unit,
+    }));
+
+  // The customer link is by id where it exists; older projects only carry the
+  // client name, so fall back to that rather than silently pricing nothing.
+  const customer = project.customerId
+    ? await prisma.customer.findUnique({
+        where: { id: project.customerId },
+        select: { id: true },
+      })
+    : await prisma.customer.findFirst({
+        where: { name: project.client },
+        select: { id: true },
+      });
+
+  const customerRates = customer
+    ? await prisma.customerRate.findMany({
+        where: { customerId: customer.id },
+        select: { code: true, description: true, unit: true, rate: true, effectiveDate: true, expirationDate: true },
+      })
+    : [];
+
+  // One assigned crew means we can cost the job. Several means the split isn't
+  // known, so no sub figure is invented — a guess here would misstate margin.
+  const sub = project.crews.length === 1 ? project.crews[0] : null;
+  const subRates = sub
+    ? await prisma.subcontractorRate.findMany({
+        where: { subcontractorId: sub.id },
+        select: { code: true, description: true, unit: true, rate: true, effectiveDate: true, expirationDate: true },
+      })
+    : [];
+
+  const usableSubRates = sub && subRates.length > 0 ? subRates : null;
+  const valuation = valueProject(
+    quantities,
+    customerRates,
+    usableSubRates,
+    sub?.company ?? null,
+  );
+
+  // What has actually been billed, from the dailies' own line items. Priced
+  // with the same two rate cards — never a percentage of revenue, because a
+  // percentage is a guess dressed up as a figure you could invoice against.
+  const dailies = await prisma.daily.findMany({
+    where: { projectId },
+    select: { lineItems: true, subcontractor: true, workDate: true },
+  });
+
+  /** Roll a daily's line items up by unit code. */
+  const codesOf = (lineItems: unknown) => {
+    const out = new Map<string, number>();
+    const items = Array.isArray(lineItems) ? (lineItems as unknown[]) : [];
+    for (const raw of items) {
+      const li = raw as { code?: unknown; quantity?: unknown };
+      if (typeof li?.code !== "string") continue;
+      const code = li.code.trim().toUpperCase();
+      if (!code) continue;
+      out.set(code, (out.get(code) ?? 0) + (typeof li.quantity === "number" ? li.quantity : 0));
+    }
+    return out;
+  };
+
+  const billedByCode = new Map<string, number>();
+  /** Same quantities, kept apart by the company that filed them. */
+  const byCompany = new Map<string, Map<string, number>>();
+
+  for (const d of dailies) {
+    const codes = codesOf(d.lineItems);
+    const company = d.subcontractor?.trim() || "";
+    const bucket = byCompany.get(company) ?? new Map<string, number>();
+    for (const [code, qty] of codes) {
+      billedByCode.set(code, (billedByCode.get(code) ?? 0) + qty);
+      bucket.set(code, (bucket.get(code) ?? 0) + qty);
+    }
+    byCompany.set(company, bucket);
+  }
+
+  const asRows = (m: Map<string, number>): QuantityRow[] =>
+    [...m.entries()].map(([code, quantity]) => ({ code, quantity }));
+
+  const billedRevenue = priceQuantities(asRows(billedByCode), customerRates);
+
+  // Cost each company's own production against its own signed card. Two subs on
+  // one job are not on the same numbers, so a single blended card — or worse, a
+  // percentage — would misstate what each is actually owed.
+  let billedSubCost: PricingResult | null = null;
+  if (byCompany.size > 0) {
+    const cards = await prisma.subcontractor.findMany({
+      where: { company: { in: [...byCompany.keys()].filter(Boolean) } },
+      select: {
+        company: true,
+        rates: {
+          select: {
+            code: true, description: true, unit: true,
+            rate: true, effectiveDate: true, expirationDate: true,
+          },
+        },
+      },
+    });
+
+    const lines: PricingResult["lines"] = [];
+    const unpriced: PricingResult["unpriced"] = [];
+    let any = false;
+
+    for (const [company, codes] of byCompany) {
+      const card = cards.find((c) => c.company === company);
+      if (!card || card.rates.length === 0) {
+        // No signed card on file — report every code rather than costing at zero.
+        for (const [code, quantity] of codes) unpriced.push({ code, description: company, quantity });
+        continue;
+      }
+      any = true;
+      const priced = priceQuantities(asRows(codes), card.rates);
+      lines.push(...priced.lines);
+      unpriced.push(...priced.unpriced.map((u) => ({ ...u, description: u.description || company })));
+    }
+
+    const total = lines.reduce((s, l) => s + l.amount, 0);
+    billedSubCost = any
+      ? {
+          lines,
+          unpriced,
+          total,
+          pricedCodes: lines.length,
+          totalCodes: lines.length + unpriced.length,
+          complete: unpriced.length === 0 && lines.length > 0,
+        }
+      : null;
+  }
+
+  const billedMargin = billedSubCost ? billedRevenue.total - billedSubCost.total : null;
+
+  return {
+    ...valuation,
+    plannedCodes: quantities.length,
+    hasCustomerRates: customerRates.length > 0,
+    hasSubRates: subRates.length > 0,
+    billed: {
+      revenue: billedRevenue,
+      subCost: billedSubCost,
+      grossMargin: billedMargin,
+      grossMarginPct:
+        billedMargin !== null && billedRevenue.total > 0
+          ? billedMargin / billedRevenue.total
+          : null,
+      dailies: dailies.length,
+    },
+  };
 }

@@ -116,6 +116,31 @@ export function DailiesView({
                       <span className="num">{d.sheetNumber}</span>
                       <span>{formatWhen(d.submittedAt)}</span>
                     </div>
+                    {/* What this day is worth. Gross at our card; the margin
+                        only appears once the filing sub's card is loaded, so a
+                        missing rate reads as missing rather than as zero. */}
+                    {d.billableAmount > 0 || d.unpricedCodes > 0 ? (
+                      <div className="mt-1.5 flex items-center gap-2 border-t border-border/50 pt-1.5 text-[11px]">
+                        <span className="num font-semibold text-foreground">
+                          {formatCurrency(d.billableAmount)}
+                        </span>
+                        {d.grossMargin !== null ? (
+                          <span
+                            className={cn(
+                              "num",
+                              d.grossMargin > 0 ? "text-success" : "text-critical",
+                            )}
+                          >
+                            {formatCurrency(d.grossMargin)} margin
+                          </span>
+                        ) : null}
+                        {d.unpricedCodes > 0 ? (
+                          <span className="ml-auto text-[10px] text-warning">
+                            {d.unpricedCodes} unpriced
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </button>
                 </li>
               );
