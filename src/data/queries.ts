@@ -1,6 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
+import { assertProjectAccess, requireStaff, viewer, visibleProjectIds } from "@/lib/authz";
 import {
   codeGroupLabel,
   compareByPriority,
@@ -400,7 +401,12 @@ export async function getNotifications(): Promise<AppNotification[]> {
 
 /* -- Entities (Postgres) ---------------------------------------------------- */
 
+/**
+ * Customers are staff-only — this is the GC side of the business, and the
+ * record carries what Fortitude bills, which is not a subcontractor's to see.
+ */
 export async function getCustomers(): Promise<Customer[]> {
+  await requireStaff();
   const rows = await prisma.customer.findMany({
     include: { _count: { select: { projects: true } } },
     orderBy: { name: "asc" },
@@ -409,6 +415,7 @@ export async function getCustomers(): Promise<Customer[]> {
 }
 
 export async function getCustomer(id: string): Promise<Customer | undefined> {
+  await requireStaff();
   const r = await prisma.customer.findUnique({
     where: { id },
     include: { _count: { select: { projects: true } } },
@@ -416,9 +423,24 @@ export async function getCustomer(id: string): Promise<Customer | undefined> {
   return r ? toCustomer(r, r._count.projects) : undefined;
 }
 
-/** Every project, worst-health first — the directory doubles as a triage queue. */
+/**
+ * Every project the viewer is allowed to see, worst-health first — for staff
+ * the directory doubles as a triage queue.
+ *
+ * A subcontractor gets only the jobs assigned to their company. This is the
+ * choke point for that rule: the maps, redlines and material lists all hang off
+ * a project, so a crew that can't see the project can't see the map either.
+ */
 export async function getProjects(): Promise<Project[]> {
-  const rows = await prisma.project.findMany({ orderBy: { health: "asc" } });
+  const user = await viewer();
+  if (!user) return [];
+  const allowed = await visibleProjectIds(user);
+  if (allowed !== null && allowed.length === 0) return [];
+
+  const rows = await prisma.project.findMany({
+    where: allowed === null ? undefined : { id: { in: allowed } },
+    orderBy: { health: "asc" },
+  });
   return rows.map(toProject);
 }
 
@@ -427,18 +449,50 @@ export async function getProjectsRequiringAttention(): Promise<Project[]> {
   return getProjects();
 }
 
+/** Undefined rather than a throw — the page turns that into a 404. */
 export async function getProject(id: string): Promise<Project | undefined> {
+  const user = await viewer();
+  if (!user) return undefined;
+  const allowed = await visibleProjectIds(user);
+  if (allowed !== null && !allowed.includes(id)) return undefined;
+
   const r = await prisma.project.findUnique({ where: { id } });
   return r ? toProject(r) : undefined;
 }
 
+/**
+ * The whole crew roster — staff only.
+ *
+ * This carries every sub's contact details, compliance state and scorecard.
+ * One sub has no business reading another's file, so there is no scoped
+ * variant: a subcontractor login gets nothing here at all.
+ */
 export async function getSubcontractors(): Promise<Subcontractor[]> {
+  await requireStaff();
   const rows = await prisma.subcontractor.findMany({ orderBy: { createdAt: "asc" } });
   return rows.map(toSubcontractor);
 }
 
+/** Dailies for the projects the viewer can see; a sub sees only their own. */
 export async function getDailies(): Promise<DailyReport[]> {
-  const rows = await prisma.daily.findMany({ orderBy: { createdAt: "desc" } });
+  const user = await viewer();
+  if (!user) return [];
+  const allowed = await visibleProjectIds(user);
+
+  const rows = await prisma.daily.findMany({
+    where:
+      allowed === null
+        ? undefined
+        : {
+            // Assignment governs, but a daily filed by another company on a
+            // shared project still isn't this crew's to read.
+            AND: [
+              { projectId: { in: allowed } },
+              user.subcontractorName ? { subcontractor: user.subcontractorName } : { id: "" },
+            ],
+          },
+    orderBy: { createdAt: "desc" },
+  });
   return rows.map(toDaily);
 }
 
@@ -500,6 +554,9 @@ export async function getProjectMaterialImports(
   projectName: string,
 ): Promise<ProjectMaterialImport[]> {
   if (!projectId && !projectName) return [];
+  // The uploaded material list is the customer's plan for the job — it goes
+  // with the project, so it inherits the project's access rule.
+  await assertProjectAccess(projectId);
   const imports = await prisma.rateImport.findMany({
     // `projectId` is the real link; the name match keeps imports created before
     // the foreign key existed (or started from the rate-import screen) visible.
@@ -594,6 +651,7 @@ function materialTone(planned: number, completed: number): Tone {
 const normCode = (c: string) => c.trim().toUpperCase().replace(/\s+/g, "");
 
 export async function getProjectMaterials(projectId: string): Promise<TrackedMaterial[]> {
+  await assertProjectAccess(projectId);
   const [rows, dailies] = await Promise.all([
     prisma.projectMaterial.findMany({
       where: { projectId },
@@ -769,6 +827,7 @@ export async function getSheetForDaily(dailyId: string): Promise<SavedDailySheet
 
 /** Drafts and submitted sheets for a project, newest first. */
 export async function getProjectSheets(projectId: string): Promise<SavedDailySheet[]> {
+  await assertProjectAccess(projectId);
   const rows = await prisma.dailySheet.findMany({
     where: { projectId },
     orderBy: { updatedAt: "desc" },

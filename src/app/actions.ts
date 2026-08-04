@@ -13,6 +13,28 @@ import {
 } from "@/lib/extract";
 import { parseDelimitedMaterialList, pdfTextLayer } from "@/lib/parse-material-list";
 import { findJobProfile } from "@/lib/job-profiles";
+import {
+  assertOwnSubcontractor,
+  assertProjectAccess,
+  requireStaff,
+  requireUser,
+} from "@/lib/authz";
+
+/**
+ * Authorization note.
+ *
+ * Every action below that touches real data authorizes itself. Middleware gates
+ * page URLs, but a Server Action is a POST to whatever route the browser is
+ * already on — a subcontractor sitting on /projects, a page they may load,
+ * could otherwise invoke any export in this file and read another crew's rate
+ * card. The guard belongs next to the data access, not in front of the URL.
+ *
+ * The exceptions are the onboarding actions used by the public /invite flow
+ * (submitOnboarding, createSubcontractorDraft, updateSubcontractorCapabilities,
+ * uploadSubDocument). They run before an account exists, so they cannot require
+ * a session — they are write-only into a PENDING_REVIEW record that cannot
+ * receive work until Fortitude approves it.
+ */
 
 /** Pilot feedback -> Feedback table. */
 export async function submitFeedback(input: {
@@ -20,6 +42,7 @@ export async function submitFeedback(input: {
   message: string;
   page?: string;
 }) {
+  await requireUser();
   await prisma.feedback.create({
     data: { category: input.category, message: input.message, page: input.page },
   });
@@ -82,6 +105,7 @@ export async function submitOnboarding(input: {
 
 /** Fortitude approves a pending subcontractor -> becomes Active. */
 export async function approveSubcontractor(id: string) {
+  await requireStaff();
   await prisma.subcontractor.update({
     where: { id },
     data: { state: "ACTIVE", tone: "success" },
@@ -139,6 +163,7 @@ function subcontractorData(input: SubcontractorInput) {
 }
 
 export async function createSubcontractor(input: SubcontractorInput) {
+  await requireStaff();
   if (!input.company.trim()) return { ok: false as const, error: "Company name is required." };
   const sub = await prisma.subcontractor.create({ data: subcontractorData(input) });
   revalidatePath("/subcontractors");
@@ -146,6 +171,7 @@ export async function createSubcontractor(input: SubcontractorInput) {
 }
 
 export async function updateSubcontractor(id: string, input: SubcontractorInput) {
+  await requireStaff();
   if (!input.company.trim()) return { ok: false as const, error: "Company name is required." };
   await prisma.subcontractor.update({ where: { id }, data: subcontractorData(input) });
   revalidatePath("/subcontractors");
@@ -158,6 +184,7 @@ export async function updateSubcontractor(id: string, input: SubcontractorInput)
  * record for a crew that is actively working is not something to do quietly.
  */
 export async function deleteSubcontractor(id: string) {
+  await requireStaff();
   const sub = await prisma.subcontractor.findUnique({
     where: { id },
     select: { assignedProjects: true, company: true },
@@ -182,6 +209,7 @@ export async function deleteSubcontractor(id: string) {
  * which looked like it worked right up until you reloaded.
  */
 export async function saveOrganizationLogo(url: string) {
+  await requireStaff();
   if (!url) return { ok: false as const, error: "No image to save." };
   const org = await prisma.organization.findFirst();
   if (!org) return { ok: false as const, error: "No organization on this account." };
@@ -192,6 +220,7 @@ export async function saveOrganizationLogo(url: string) {
 
 /** Assign / unassign a project by name — the list drives what a sub can see. */
 export async function setSubcontractorProjects(id: string, projects: string[]) {
+  await requireStaff();
   await prisma.subcontractor.update({
     where: { id },
     data: { assignedProjects: projects.map((p) => p.trim()).filter(Boolean) },
@@ -214,6 +243,7 @@ export type SubRateInput = {
 };
 
 export async function listSubRates(subcontractorId: string) {
+  await assertOwnSubcontractor(subcontractorId);
   const rows = await prisma.subcontractorRate.findMany({
     where: { subcontractorId },
     orderBy: { code: "asc" },
@@ -233,6 +263,7 @@ export async function listSubRates(subcontractorId: string) {
 }
 
 export async function addSubRate(subcontractorId: string, input: SubRateInput) {
+  await requireStaff();
   const code = input.code.trim().toUpperCase();
   if (!code) return { ok: false as const, error: "Unit code is required." };
   if (!Number.isFinite(input.rate) || input.rate < 0) {
@@ -257,6 +288,7 @@ export async function addSubRate(subcontractorId: string, input: SubRateInput) {
 }
 
 export async function updateSubRate(id: string, patch: { rate?: number; description?: string }) {
+  await requireStaff();
   await prisma.subcontractorRate.update({
     where: { id },
     data: {
@@ -269,6 +301,7 @@ export async function updateSubRate(id: string, patch: { rate?: number; descript
 }
 
 export async function deleteSubRate(id: string) {
+  await requireStaff();
   await prisma.subcontractorRate.delete({ where: { id } });
   revalidatePath("/subcontractors");
   return { ok: true as const };
@@ -279,6 +312,7 @@ export async function deleteSubRate(id: string) {
  * rate sheet can be uploaded and extracted rather than typed line by line.
  */
 export async function pushImportToSubcontractor(importId: string, subcontractorId: string) {
+  await requireStaff();
   const rows = await prisma.extractedRow.findMany({
     where: { importId, status: "APPROVED" },
   });
@@ -395,6 +429,7 @@ export async function uploadSubDocument(formData: FormData) {
 }
 
 export async function deleteSubDocument(id: string) {
+  await requireStaff();
   await prisma.subDocument.delete({ where: { id } });
   revalidatePath("/subcontractors");
   return { ok: true as const };
@@ -402,6 +437,7 @@ export async function deleteSubDocument(id: string) {
 
 /** Load all documents for a subcontractor (contractor-side review). */
 export async function listSubDocuments(subcontractorId: string) {
+  await assertOwnSubcontractor(subcontractorId);
   const rows = await prisma.subDocument.findMany({
     where: { subcontractorId },
     orderBy: { createdAt: "asc" },
@@ -464,6 +500,7 @@ function customerData(input: CustomerInput) {
 }
 
 export async function createCustomer(input: CustomerInput) {
+  await requireStaff();
   if (!input.name.trim()) return { ok: false as const, error: "Company name is required." };
   const c = await prisma.customer.create({
     data: { ...customerData(input), status: "Active", since: "2026" },
@@ -473,12 +510,14 @@ export async function createCustomer(input: CustomerInput) {
 }
 
 export async function updateCustomer(id: string, input: CustomerInput) {
+  await requireStaff();
   await prisma.customer.update({ where: { id }, data: customerData(input) });
   revalidatePath("/customers");
   return { ok: true as const, id };
 }
 
 export async function deleteCustomer(id: string) {
+  await requireStaff();
   await prisma.customer.delete({ where: { id } });
   revalidatePath("/customers");
   return { ok: true as const };
@@ -487,6 +526,7 @@ export async function deleteCustomer(id: string) {
 /* ---- Customer contract documents + rate card ------------------------------ */
 
 export async function listCustomerDocuments(customerId: string) {
+  await requireStaff();
   const rows = await prisma.customerDocument.findMany({
     where: { customerId },
     orderBy: { createdAt: "asc" },
@@ -504,6 +544,7 @@ export async function listCustomerDocuments(customerId: string) {
 }
 
 export async function uploadCustomerDocument(formData: FormData) {
+  await requireStaff();
   const file = formData.get("file") as File | null;
   const customerId = String(formData.get("customerId") || "");
   const section = String(formData.get("section") || "");
@@ -534,6 +575,7 @@ export async function uploadCustomerDocument(formData: FormData) {
 }
 
 export async function deleteCustomerDocument(id: string) {
+  await requireStaff();
   await prisma.customerDocument.delete({ where: { id } });
   revalidatePath("/customers");
   return { ok: true as const };
@@ -551,6 +593,7 @@ export type CustomerRateInput = {
 };
 
 export async function listCustomerRates(customerId: string) {
+  await requireStaff();
   const rows = await prisma.customerRate.findMany({
     where: { customerId },
     orderBy: { code: "asc" },
@@ -570,6 +613,7 @@ export async function listCustomerRates(customerId: string) {
 }
 
 export async function addCustomerRate(customerId: string, input: CustomerRateInput) {
+  await requireStaff();
   if (!input.code.trim()) return { ok: false as const, error: "Unit code is required." };
   await prisma.customerRate.create({
     data: {
@@ -590,6 +634,7 @@ export async function addCustomerRate(customerId: string, input: CustomerRateInp
 }
 
 export async function deleteCustomerRate(id: string) {
+  await requireStaff();
   await prisma.customerRate.delete({ where: { id } });
   revalidatePath("/customers");
   return { ok: true as const };
@@ -597,6 +642,7 @@ export async function deleteCustomerRate(id: string) {
 
 /** Recent rate imports (for the push-to-customer picker). */
 export async function listRateImports() {
+  await requireStaff();
   const imps = await prisma.rateImport.findMany({
     orderBy: { createdAt: "desc" },
     take: 20,
@@ -607,6 +653,7 @@ export async function listRateImports() {
 
 /** Push approved rows from a Rate Import onto a customer's rate card. */
 export async function pushImportToCustomer(importId: string, customerId: string) {
+  await requireStaff();
   const rows = await prisma.extractedRow.findMany({
     where: { importId, status: "APPROVED" },
   });
@@ -673,6 +720,7 @@ function projectData(input: ProjectInput) {
 }
 
 export async function createProject(input: ProjectInput) {
+  await requireStaff();
   if (!input.name.trim() || !input.number.trim()) {
     return { ok: false as const, error: "Project number and name are required." };
   }
@@ -685,6 +733,7 @@ export async function createProject(input: ProjectInput) {
 }
 
 export async function updateProject(id: string, input: ProjectInput) {
+  await requireStaff();
   const customer = await prisma.customer.findFirst({ where: { name: input.client } });
   await prisma.project.update({
     where: { id },
@@ -696,6 +745,7 @@ export async function updateProject(id: string, input: ProjectInput) {
 }
 
 export async function deleteProject(id: string) {
+  await requireStaff();
   await prisma.project.delete({ where: { id } });
   revalidatePath("/projects");
   return { ok: true as const };
@@ -705,6 +755,7 @@ const MAX_MAP_BYTES = 15 * 1024 * 1024;
 
 /** Uploads a project map image (stored as a data URL; original preserved). */
 export async function uploadProjectMap(formData: FormData) {
+  await requireStaff();
   const file = formData.get("file") as File | null;
   const projectId = String(formData.get("projectId") || "");
   if (!file || !projectId) return { ok: false as const, error: "Missing map file." };
@@ -733,6 +784,7 @@ export async function uploadProjectMap(formData: FormData) {
  * we only persist the short https URL).
  */
 export async function saveProjectMapUrl(projectId: string, url: string) {
+  await requireStaff();
   if (!projectId || !url) return { ok: false as const, error: "Missing map." };
   await prisma.project.update({
     where: { id: projectId },
@@ -745,6 +797,7 @@ export async function saveProjectMapUrl(projectId: string, url: string) {
 
 /** Saves a jobsite cover photo (Blob URL) shown on the project card. */
 export async function saveProjectPhotoUrl(projectId: string, url: string) {
+  await assertProjectAccess(projectId);
   if (!projectId || !url) return { ok: false as const, error: "Missing photo." };
   await prisma.project.update({
     where: { id: projectId },
@@ -757,6 +810,7 @@ export async function saveProjectPhotoUrl(projectId: string, url: string) {
 
 /** Persists as-built redline markups (lines + dots) drawn over the map. */
 export async function saveProjectMarkups(projectId: string, markups: unknown) {
+  await assertProjectAccess(projectId);
   if (!projectId) return { ok: false as const, error: "Missing project." };
   await prisma.project.update({
     where: { id: projectId },
@@ -784,6 +838,7 @@ export async function createDaily(input: {
   hasAsBuilt?: boolean;
   hasBoreLog?: boolean;
 }) {
+  await assertProjectAccess(input.projectId);
   const project = await prisma.project.findUnique({ where: { id: input.projectId } });
   if (!project) return { ok: false as const, error: "Pick a project." };
 
@@ -887,6 +942,7 @@ async function readDocument(file: File) {
  * one shot; rows land as PENDING for review. Returns the import id (or an error).
  */
 export async function extractRateDocument(formData: FormData) {
+  await requireStaff();
   if (!isConfigured()) {
     return { ok: false as const, error: "Claude AI isn't connected yet — add an API key in Integrations." };
   }
@@ -930,6 +986,7 @@ export async function extractRateDocument(formData: FormData) {
  * numbers. Rows land PENDING: nothing is trusted until a human approves it.
  */
 export async function extractProjectMaterials(formData: FormData) {
+  await requireStaff();
   const file = formData.get("file") as File | null;
   const projectId = String(formData.get("projectId") || "");
   if (!file) return { ok: false as const, error: "Pick a file to upload." };
@@ -945,6 +1002,7 @@ export async function extractProjectMaterialsFromUrl(input: {
   url: string;
   fileName: string;
 }) {
+  await requireStaff();
   if (!input.url) return { ok: false as const, error: "Missing uploaded file." };
   const res = await fetch(input.url);
   if (!res.ok) return { ok: false as const, error: "Could not read the uploaded file back." };
@@ -1063,6 +1121,7 @@ async function runMaterialExtraction(projectId: string, file: File) {
 
 /** Removes a material import and its rows from a project. */
 export async function deleteProjectMaterialImport(importId: string, projectId: string) {
+  await requireStaff();
   await prisma.rateImport.delete({ where: { id: importId } });
   revalidatePath(`/projects/${projectId}`);
   return { ok: true as const };
@@ -1083,6 +1142,7 @@ function materialCategory(text: string): string {
  * the same import twice replaces its previous rows rather than doubling them.
  */
 export async function pushMaterialsToProject(importId: string, projectId: string) {
+  await requireStaff();
   const [imp, rows] = await Promise.all([
     prisma.rateImport.findUnique({ where: { id: importId } }),
     prisma.extractedRow.findMany({ where: { importId, status: "APPROVED" } }),
@@ -1133,6 +1193,7 @@ export async function approveAndTrackImport(
   projectId: string,
   minConfidence = 0.7,
 ) {
+  await requireStaff();
   const total = await prisma.extractedRow.count({ where: { importId } });
   await prisma.extractedRow.updateMany({
     where: { importId, status: "PENDING", confidence: { gte: minConfidence } },
@@ -1171,6 +1232,7 @@ export async function updateProjectMaterial(
     unit?: string;
   },
 ) {
+  await requireStaff();
   const row = await prisma.projectMaterial.update({
     where: { id },
     data: {
@@ -1187,6 +1249,7 @@ export async function updateProjectMaterial(
 }
 
 export async function deleteProjectMaterial(id: string) {
+  await requireStaff();
   const row = await prisma.projectMaterial.delete({ where: { id } });
   revalidatePath(`/projects/${row.projectId}`);
   revalidatePath("/materials");
@@ -1224,6 +1287,12 @@ const asJson = (v: unknown) => (v ?? null) as Prisma.InputJsonValue;
  * not a control — anyone can post to a server action.
  */
 export async function saveDailySheet(input: SheetPayload) {
+  // A sheet belongs to a project, so writing one requires access to that
+  // project. Without this a crew could file production against a job that was
+  // never theirs — which then flows into billing.
+  if (input.projectId) await assertProjectAccess(input.projectId);
+  else await requireUser();
+
   if (input.id) {
     const existing = await prisma.dailySheet.findUnique({
       where: { id: input.id },
@@ -1266,6 +1335,11 @@ export async function saveDailySheet(input: SheetPayload) {
  * draw-down and billing read.
  */
 export async function submitDailySheet(input: SheetPayload) {
+  // saveDailySheet below checks this too. Stated again here so the guard
+  // doesn't quietly depend on that call staying first.
+  if (input.projectId) await assertProjectAccess(input.projectId);
+  else await requireUser();
+
   const saved = await saveDailySheet(input);
   const sheet = await prisma.dailySheet.findUnique({ where: { id: saved.id } });
   if (!sheet) return { ok: false as const, error: "Sheet not found after save." };
@@ -1341,6 +1415,7 @@ export async function reviewDaily(input: {
   note: string;
   reviewedBy: string;
 }) {
+  await requireStaff();
   const note = input.note.trim();
   if (input.decision === "DENIED" && !note) {
     return { ok: false as const, error: "Say why it's being denied — the crew needs to know what to fix." };
@@ -1364,6 +1439,7 @@ export async function reviewDaily(input: {
 
 /** Put a decided daily back in review — a reviewer can change their mind. */
 export async function reopenDailyReview(dailyId: string) {
+  await requireStaff();
   const daily = await prisma.daily.update({
     where: { id: dailyId },
     data: { status: "In review", tone: "warning", reviewNote: "", reviewedBy: "", reviewedAt: "" },
@@ -1374,12 +1450,14 @@ export async function reopenDailyReview(dailyId: string) {
 }
 
 export async function deleteDailySheet(id: string) {
+  await requireStaff();
   await prisma.dailySheet.delete({ where: { id } });
   revalidatePath("/dailies");
   return { ok: true as const };
 }
 
 export async function setRowStatus(id: string, status: "APPROVED" | "REJECTED") {
+  await requireStaff();
   const row = await prisma.extractedRow.update({ where: { id }, data: { status } });
   revalidatePath(`/rate-import/${row.importId}`);
   return { ok: true as const };
@@ -1387,6 +1465,7 @@ export async function setRowStatus(id: string, status: "APPROVED" | "REJECTED") 
 
 /** Bulk-approve only rows that pass validation (a confidence floor, no blocking warning). */
 export async function bulkApproveRows(importId: string, minConfidence = 0.7) {
+  await requireStaff();
   await prisma.extractedRow.updateMany({
     where: { importId, status: "PENDING", confidence: { gte: minConfidence } },
     data: { status: "APPROVED" },

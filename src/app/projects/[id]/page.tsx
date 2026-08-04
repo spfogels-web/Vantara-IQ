@@ -18,6 +18,7 @@ import {
   formatNumber,
   formatPercent,
 } from "@/lib/format";
+import { getCurrentUser, isStaff } from "@/lib/auth";
 import { PageShell } from "@/components/common/page-shell";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { HealthRing } from "@/components/common/health-ring";
@@ -34,13 +35,18 @@ export default async function ProjectDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [project, customers, dailies] = await Promise.all([
-    getProject(id),
-    getCustomers(),
-    getDailies(),
-  ]);
+  const me = await getCurrentUser();
+  const staff = !!me && isStaff(me.role);
 
+  const [project, dailies] = await Promise.all([getProject(id), getDailies()]);
+
+  // getProject already returns undefined for a project this viewer isn't
+  // assigned to, so an unassigned crew gets a 404 rather than a map.
   if (!project) notFound();
+
+  // The customer record carries what Fortitude bills the GC. Staff only — a
+  // subcontractor has no business reading the margin on their own work.
+  const customers = staff ? await getCustomers() : [];
 
   const [materialImports, trackedMaterials] = await Promise.all([
     getProjectMaterialImports(project.id, project.name),
@@ -122,23 +128,25 @@ export default async function ProjectDetailPage({
 
       {/* Six numbers in one strip. They read fine side by side, and giving
           them a column of their own was costing the map the width it needs. */}
-      <div className="mb-3">
-        <Panel>
-          <PanelHeader
-            title="Project economics"
-            description="Derived from installed footage and the customer's blended unit rate"
-            icon={<TrendingUp className="size-3.5" />}
-          />
-          <PanelBody className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
-            <Economic label="Contract value" value={formatCompactCurrency(contractValue)} />
-            <Economic label="Customer billing" value={formatCompactCurrency(customerBilling)} hint="Installed to date" />
-            <Economic label="Subcontractor pay" value={formatCompactCurrency(subPay)} hint="~68% of billing" />
-            <Economic label="Gross profit" value={formatCompactCurrency(profit)} tone="text-success" />
-            <Economic label="Margin" value={formatPercent(margin)} tone={margin >= 0.25 ? "text-success" : "text-warning"} />
-            <Economic label="Blended rate" value={`${formatCurrency(avgRate)}/ft`} />
-          </PanelBody>
-        </Panel>
-      </div>
+      {staff ? (
+        <div className="mb-3">
+          <Panel>
+            <PanelHeader
+              title="Project economics"
+              description="Derived from installed footage and the customer's blended unit rate"
+              icon={<TrendingUp className="size-3.5" />}
+            />
+            <PanelBody className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+              <Economic label="Contract value" value={formatCompactCurrency(contractValue)} />
+              <Economic label="Customer billing" value={formatCompactCurrency(customerBilling)} hint="Installed to date" />
+              <Economic label="Subcontractor pay" value={formatCompactCurrency(subPay)} hint="~68% of billing" />
+              <Economic label="Gross profit" value={formatCompactCurrency(profit)} tone="text-success" />
+              <Economic label="Margin" value={formatPercent(margin)} tone={margin >= 0.25 ? "text-success" : "text-warning"} />
+              <Economic label="Blended rate" value={`${formatCurrency(avgRate)}/ft`} />
+            </PanelBody>
+          </Panel>
+        </div>
+      ) : null}
 
       {/* The map runs the full width — it's a plan drawing, and redlining it
           is the one thing on this page that genuinely needs the room. */}

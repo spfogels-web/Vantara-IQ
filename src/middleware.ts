@@ -16,11 +16,21 @@ import { jwtVerify } from "jose";
 
 const SESSION_COOKIE = "vq_session";
 
-/** Reachable without signing in. */
-const PUBLIC_PREFIXES = ["/login", "/invite", "/api/blob"];
+/**
+ * Reachable without signing in. `/api/blob` is deliberately NOT here — it mints
+ * write credentials for the file store and checks the session itself.
+ */
+const PUBLIC_PREFIXES = ["/login", "/invite"];
 
 /** What a subcontractor login is allowed to reach. */
 const SUB_ALLOWED_PREFIXES = ["/dailies", "/projects", "/support", "/settings"];
+
+/**
+ * Carved back out of the allowed prefixes above. Creating and editing projects
+ * lives under /projects, so the prefix match would otherwise hand a crew the
+ * customer picker and the contract fields on the way past.
+ */
+const SUB_DENIED_PATTERNS = [/^\/projects\/new$/, /^\/projects\/[^/]+\/edit$/];
 
 function isPublic(pathname: string) {
   return PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
@@ -48,9 +58,9 @@ export async function middleware(request: NextRequest) {
   }
 
   if (role === "SUBCONTRACTOR") {
-    const allowed = SUB_ALLOWED_PREFIXES.some(
-      (p) => pathname === p || pathname.startsWith(`${p}/`),
-    );
+    const allowed =
+      SUB_ALLOWED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`)) &&
+      !SUB_DENIED_PATTERNS.some((re) => re.test(pathname));
     if (!allowed) {
       const url = request.nextUrl.clone();
       url.pathname = "/dailies";
