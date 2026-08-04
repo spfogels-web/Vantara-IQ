@@ -66,7 +66,7 @@ const whenFmt = new Intl.DateTimeFormat("en-US", {
 });
 
 /**
- * Render a submission timestamp. Real ISO timestamps (from `createDaily`) become
+ * Render a submission timestamp. Real ISO timestamps become
  * "Aug 3, 1:24 PM ET" — pinned to Eastern so the server and client agree (no
  * hydration mismatch). Non-date strings (mock "10 min ago") pass through as-is.
  */
