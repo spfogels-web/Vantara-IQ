@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Boxes, Calendar, ClipboardList, TrendingUp } from "lucide-react";
+import { ArrowLeft, Boxes, Calendar, ClipboardList } from "lucide-react";
 
 import {
   getCustomers,
@@ -13,7 +13,6 @@ import {
 import { cn } from "@/lib/utils";
 import { toneStyles } from "@/lib/tone";
 import {
-  formatCompactCurrency,
   formatFeet,
   formatNumber,
   formatPercent,
@@ -56,21 +55,13 @@ export default async function ProjectDetailPage({
     getProjectValuation(project.id),
   ]);
 
-  const customer = customers.find((c) => c.name === project.client);
-  const rateItems = customer?.rateSheet.filter((r) => r.unit === "ft") ?? [];
-  const avgRate = rateItems.length
-    ? rateItems.reduce((s, r) => s + r.rate, 0) / rateItems.length
-    : 12;
+  const daysToFinish = Math.ceil(project.remainingFt / Math.max(project.actualFtPerDay, 1));
 
-  // Derived project economics from footage + the customer's blended unit rate.
+  // Kept for the payment-terms panel; the money now comes from real rate cards.
+  const customer = customers.find((c) => c.name === project.client);
+
   const totalFt = Math.round(project.remainingFt / (1 - project.pctComplete / 100));
   const installedFt = totalFt - project.remainingFt;
-  const contractValue = Math.round(totalFt * avgRate);
-  const customerBilling = Math.round(installedFt * avgRate);
-  const subPay = Math.round(customerBilling * 0.68);
-  const profit = customerBilling - subPay;
-  const margin = customerBilling > 0 ? profit / customerBilling : 0;
-  const daysToFinish = Math.ceil(project.remainingFt / Math.max(project.actualFtPerDay, 1));
 
   const projectDailies = dailies.filter((d) => d.projectId === project.id);
 
@@ -150,28 +141,6 @@ export default async function ProjectDetailPage({
       {staff ? (
         <div className="mb-3">
           <ProjectValue v={valuation} />
-        </div>
-      ) : null}
-
-      {staff ? (
-        <div className="mb-3">
-          <Panel>
-            <PanelHeader
-              title="Project economics"
-              description="Derived from installed footage and the customer's blended unit rate"
-              icon={<TrendingUp className="size-3.5" />}
-            />
-            {/* No blended rate. Averaging a rate card across unit codes invents
-                a number nobody bills against — plow, bore and ribbon all price
-                differently, and a single $/ft hides that. */}
-            <PanelBody className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
-              <Economic label="Contract value" value={formatCompactCurrency(contractValue)} />
-              <Economic label="Customer billing" value={formatCompactCurrency(customerBilling)} hint="Installed to date" />
-              <Economic label="Subcontractor pay" value={formatCompactCurrency(subPay)} hint="~68% of billing" />
-              <Economic label="Gross profit" value={formatCompactCurrency(profit)} tone="text-success" />
-              <Economic label="Margin" value={formatPercent(margin)} tone={margin >= 0.25 ? "text-success" : "text-warning"} />
-            </PanelBody>
-          </Panel>
         </div>
       ) : null}
 
@@ -281,15 +250,6 @@ function KeyStat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Economic({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: string }) {
-  return (
-    <div className="rounded-lg border border-border/60 bg-foreground/[0.02] px-3.5 py-3">
-      <p className="eyebrow">{label}</p>
-      <p className={cn("num mt-1 text-[18px] font-semibold tracking-[-0.02em] text-foreground", tone)}>{value}</p>
-      {hint ? <p className="mt-0.5 text-[11px] text-muted-foreground">{hint}</p> : null}
-    </div>
-  );
-}
 
 function Row({ label, value }: { label: string; value: string }) {
   return (

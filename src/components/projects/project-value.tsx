@@ -95,6 +95,55 @@ export function ProjectValue({ v }: { v: ProjectValuation }) {
             />
           </PanelBody>
 
+          {/* Billed to date, on the same two rate cards. Separated from the
+              plan because they answer different questions: what the job is
+              worth, and how much of it we have earned. */}
+          <div className="border-t border-border/70 px-4 py-3 sm:px-5">
+            <p className="eyebrow mb-2.5">Billed to date</p>
+            {v.billed.dailies === 0 ? (
+              <p className="text-[12px] text-muted-foreground">
+                No dailies filed on this project yet — nothing has been earned against the plan.
+              </p>
+            ) : (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <Tile
+                  label="Customer billing"
+                  value={formatCompactCurrency(v.billed.revenue.total)}
+                  hint={`From ${v.billed.dailies} ${v.billed.dailies === 1 ? "daily" : "dailies"}`}
+                />
+                <Tile
+                  label="Subcontractor pay"
+                  value={v.billed.subCost ? formatCompactCurrency(v.billed.subCost.total) : "—"}
+                  hint={v.billed.subCost ? "At their own rates" : "No sub rate card loaded"}
+                />
+                <Tile
+                  label="Gross profit"
+                  value={
+                    v.billed.grossMargin !== null
+                      ? formatCompactCurrency(v.billed.grossMargin)
+                      : "—"
+                  }
+                  tone={
+                    v.billed.grossMargin === null
+                      ? undefined
+                      : v.billed.grossMargin > 0
+                        ? "text-success"
+                        : "text-critical"
+                  }
+                />
+                <Tile
+                  label="Earned of plan"
+                  value={
+                    v.revenue.total > 0
+                      ? formatPercent(v.billed.revenue.total / v.revenue.total)
+                      : "—"
+                  }
+                  hint="Billing ÷ contract value"
+                />
+              </div>
+            )}
+          </div>
+
           <Coverage result={v.revenue} label="customer rate card" />
           {v.subCost ? <Coverage result={v.subCost} label={`${v.subName}'s rate card`} /> : null}
         </>

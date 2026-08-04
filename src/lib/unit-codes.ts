@@ -30,7 +30,18 @@ export const PRIORITY_UNDERGROUND_CODES = [
 
 /** Uppercase, strip whitespace — "bm61(2)f " and "BM61(2)F" are the same code. */
 export function normalizeCode(code: string): string {
-  return code.trim().toUpperCase().replace(/\s+/g, "");
+  return (
+    code
+      .trim()
+      .toUpperCase()
+      // An inch mark is written both ways across the paperwork the same job
+      // produces: the material list says BFOV(12.7)(2W)12IN DEPTH, Exhibit A
+      // says BFOV(12.7)(2W)12"DEPTH. They are one code. Without this they
+      // never match, and the microduct lines — the bulk of a fibre job — price
+      // at nothing and read as unpriced forever.
+      .replace(/["″]/g, "IN")
+      .replace(/\s+/g, "")
+  );
 }
 
 /**
