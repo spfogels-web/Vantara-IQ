@@ -68,23 +68,6 @@ import type {
  * reports) still read fixtures — they'll move to computed queries as those
  * features are built out. Either way, components never touch a fixture directly.
  */
-const LATENCY: Record<string, number> = {
-  kpis: 180,
-  health: 320,
-  brief: 520,
-  production: 620,
-  revenue: 480,
-  crews: 560,
-  deadlines: 300,
-  documents: 380,
-  notifications: 240,
-};
-
-function delay(ms: number) {
-  if (ms <= 0) return Promise.resolve();
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 /* -- Mappers: DB row -> the plain TS types the components already expect ---- */
 
 type CustomerRow = Awaited<ReturnType<typeof prisma.customer.findMany>>[number] & {
@@ -380,42 +363,34 @@ export async function getKpis(): Promise<Kpi[]> {
 }
 
 export async function getHealthSummary(): Promise<HealthSummary> {
-  await delay(LATENCY.health);
   return healthSummary;
 }
 
 export async function getBrief(): Promise<BriefItem[]> {
-  await delay(LATENCY.brief);
   return brief;
 }
 
 export async function getProductionSummary(): Promise<ProductionSummary> {
-  await delay(LATENCY.production);
   return productionSummary;
 }
 
 export async function getRevenueSummary(): Promise<RevenueSummary> {
-  await delay(LATENCY.revenue);
   return revenueSummary;
 }
 
 export async function getCrews(): Promise<Crew[]> {
-  await delay(LATENCY.crews);
   return crews;
 }
 
 export async function getDeadlines(): Promise<Deadline[]> {
-  await delay(LATENCY.deadlines);
   return deadlines;
 }
 
 export async function getMissingDocuments(): Promise<MissingDocument[]> {
-  await delay(LATENCY.documents);
   return missingDocuments;
 }
 
 export async function getNotifications(): Promise<AppNotification[]> {
-  await delay(LATENCY.notifications);
   return notifications;
 }
 
@@ -585,28 +560,41 @@ export async function getDailies(): Promise<DailyReport[]> {
   // Every daily is its own invoice: gross at our card, cost at the filing
   // sub's own card, margin between them.
   const priced = await priceDailies(rows);
+
+  // A crew sees what they earned, never what we billed for it. Handing a sub
+  // the customer figure hands them our margin on their own work, which is the
+  // one number they must not have — and it would arrive on the very page they
+  // use every day. So the customer-rate total is replaced by their own, and the
+  // spread is dropped rather than nulled at the component.
+  if (allowed !== null) {
+    return rows.map((r, i) =>
+      toDaily(r, {
+        billableAmount: priced[i].subCost ?? 0,
+        subCost: priced[i].subCost,
+        grossMargin: null,
+        unpricedCodes: 0,
+      }),
+    );
+  }
+
   return rows.map((r, i) => toDaily(r, priced[i]));
 }
 
 /* -- Materials / billing / pay / reports (fixtures for now) ----------------- */
 
 export async function getMaterials(): Promise<Material[]> {
-  await delay(LATENCY.production);
   return materials;
 }
 
 export async function getInvoices(): Promise<Invoice[]> {
-  await delay(LATENCY.revenue);
   return invoices;
 }
 
 export async function getPayApplications(): Promise<PayApplication[]> {
-  await delay(LATENCY.revenue);
   return payApplications;
 }
 
 export async function getReportDefinitions(): Promise<ReportDefinition[]> {
-  await delay(LATENCY.brief);
   return reportDefinitions;
 }
 
@@ -1125,6 +1113,12 @@ export interface ProjectValuation extends Valuation {
  * codes is not a smaller number, it is a wrong one.
  */
 export async function getProjectValuation(projectId: string): Promise<ProjectValuation> {
+  // Staff only, and not merely hidden in the page. This reads what Globe pays
+  // us, what the sub is paid, and the spread between them — the three things a
+  // subcontractor must never see about their own work. Hiding the panel would
+  // leave the query running for them; refusing here means there is no path to
+  // the numbers at all.
+  await requireStaff();
   await assertProjectAccess(projectId);
 
   const project = await prisma.project.findUnique({

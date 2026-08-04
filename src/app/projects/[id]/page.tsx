@@ -49,10 +49,11 @@ export default async function ProjectDetailPage({
   // subcontractor has no business reading the margin on their own work.
   const customers = staff ? await getCustomers() : [];
 
+  // The valuation is staff-only and throws for a crew by design, so don't ask.
   const [materialImports, trackedMaterials, valuation] = await Promise.all([
     getProjectMaterialImports(project.id, project.name),
     getProjectMaterials(project.id),
-    getProjectValuation(project.id),
+    staff ? getProjectValuation(project.id) : Promise.resolve(null),
   ]);
 
   const daysToFinish = Math.ceil(project.remainingFt / Math.max(project.actualFtPerDay, 1));
@@ -138,7 +139,7 @@ export default async function ProjectDetailPage({
       {/* What the job is worth, priced off the material list. This is the
           number to look at first — it lands the day the list does, before any
           production exists to measure. */}
-      {staff ? (
+      {staff && valuation ? (
         <div className="mb-3">
           <ProjectValue v={valuation} />
         </div>
