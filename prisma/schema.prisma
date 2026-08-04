@@ -235,28 +235,80 @@ model SubcontractorRate {
 }
 
 model Subcontractor {
-  id             String              @id @default(cuid())
+  id             String    @id @default(cuid())
   company        String
-  lead           String              @default("")
-  email          String              @default("")
-  phone          String              @default("")
-  location       String              @default("")
-  trades         String[]            @default([])
-  state          SubState            @default(PENDING_REVIEW)
-  tone           String              @default("neutral")
+  lead           String    @default("")
+  email          String    @default("")
+  phone          String    @default("")
+  location       String    @default("")
+  trades         String[]  @default([])
+  state          SubState  @default(PENDING_REVIEW)
+  tone           String    @default("neutral")
   /// Jobs this crew is assigned to — the authority on what they can see.
-  projects       Project[]           @relation("ProjectCrews")
-  compliance     Json                @default("[]")
-  complianceTone String              @default("neutral")
-  scorecard      Json                @default("{}")
-  crewSize       Int                 @default(0)
-  equipment      String[]            @default([])
+  projects       Project[] @relation("ProjectCrews")
+  compliance     Json      @default("[]")
+  complianceTone String    @default("neutral")
+  scorecard      Json      @default("{}")
+  crewSize       Int       @default(0)
+  equipment      String[]  @default([])
   logoUrl        String?
-  since          String              @default("")
-  users          User[]
-  documents      SubDocument[]
-  rates          SubcontractorRate[]
-  createdAt      DateTime            @default(now())
+  since          String    @default("")
+
+  // ---- Vendor packet -------------------------------------------------------
+  // What any contractor asks for before letting a crew on site. The sub fills
+  // this in from their own portal; Fortitude reviews it.
+
+  /// Legal entity name as it appears on the W-9 — often not the trading name.
+  legalName            String @default("")
+  dba                  String @default("")
+  /// LLC / S-Corp / C-Corp / Partnership / Sole proprietor.
+  entityType           String @default("")
+  stateOfIncorporation String @default("")
+  /// Federal EIN. Sensitive: it is on the W-9 we already hold, and it is the
+  /// one field here that is worth stealing on its own.
+  ein                  String @default("")
+  website              String @default("")
+
+  addressLine1 String @default("")
+  addressLine2 String @default("")
+  city         String @default("")
+  stateRegion  String @default("")
+  postalCode   String @default("")
+
+  /// Who signs contracts, and who chases payment — rarely the same person.
+  signatoryName  String @default("")
+  signatoryTitle String @default("")
+  apContactName  String @default("")
+  apEmail        String @default("")
+  apPhone        String @default("")
+
+  /// ACH or Check. Bank details are deliberately NOT stored as numbers — the
+  /// sub uploads a voided check or signed ACH form as a document instead, and
+  /// only enough is kept here for AP to recognise a payment. Holding a full
+  /// routing and account number means holding data that moves money, which
+  /// needs encrypted columns and a private file store first.
+  paymentMethod   String @default("")
+  bankName        String @default("")
+  accountLastFour String @default("")
+  remittanceEmail String @default("")
+  paymentTerms    String @default("")
+
+  contractorLicense String @default("")
+  dotNumber         String @default("")
+  locateCert        String @default("")
+
+  /// Experience modification rate — the number a GC's insurer asks for first.
+  emr             Float?
+  oshaRecordables Int?
+  safetyContact   String @default("")
+
+  /// Two or three GCs they've worked for, as [{company, contact, phone, email}].
+  references Json @default("[]")
+
+  users     User[]
+  documents SubDocument[]
+  rates     SubcontractorRate[]
+  createdAt DateTime            @default(now())
 }
 
 /// A file a subcontractor uploads to an onboarding/compliance section. Stored as

@@ -1593,3 +1593,115 @@ export async function bulkApproveRows(importId: string, minConfidence = 0.7) {
   revalidatePath(`/rate-import/${importId}`);
   return { ok: true as const };
 }
+
+/* ------------------------------------------------------------------ *
+ * Vendor packet — what a sub must supply before they can be given work.
+ * ------------------------------------------------------------------ */
+
+export type VendorPacketInput = {
+  legalName: string;
+  dba: string;
+  entityType: string;
+  stateOfIncorporation: string;
+  ein: string;
+  website: string;
+  addressLine1: string;
+  addressLine2: string;
+  city: string;
+  stateRegion: string;
+  postalCode: string;
+  phone: string;
+  signatoryName: string;
+  signatoryTitle: string;
+  apContactName: string;
+  apEmail: string;
+  apPhone: string;
+  paymentMethod: string;
+  bankName: string;
+  accountLastFour: string;
+  remittanceEmail: string;
+  paymentTerms: string;
+  contractorLicense: string;
+  dotNumber: string;
+  locateCert: string;
+  emr: string;
+  oshaRecordables: string;
+  safetyContact: string;
+  references: { company: string; contact: string; phone: string; email: string }[];
+};
+
+const clean = (v: string | undefined) => (v ?? "").trim();
+
+/** "12-3456789" or "123456789" -> "12-3456789". Blank stays blank. */
+function normalizeEin(raw: string): string {
+  const digits = clean(raw).replace(/\D/g, "");
+  if (digits.length !== 9) return clean(raw);
+  return `${digits.slice(0, 2)}-${digits.slice(2)}`;
+}
+
+/**
+ * A subcontractor filling in their own packet, or staff completing it for them.
+ *
+ * Only the last four of a bank account are accepted. Anything longer is
+ * truncated rather than rejected, because a sub who pastes a full account
+ * number should not have it stored while they work out what went wrong —
+ * dropping it quietly is the safe failure here, and the voided-check upload is
+ * what AP actually uses.
+ */
+export async function saveVendorPacket(subcontractorId: string, input: VendorPacketInput) {
+  await assertOwnSubcontractor(subcontractorId);
+
+  if (!clean(input.legalName)) {
+    return { ok: false as const, error: "Legal business name is required — it has to match your W-9." };
+  }
+
+  const digitsOnly = clean(input.accountLastFour).replace(/\D/g, "");
+  const emr = Number.parseFloat(clean(input.emr));
+  const osha = Number.parseInt(clean(input.oshaRecordables), 10);
+
+  await prisma.subcontractor.update({
+    where: { id: subcontractorId },
+    data: {
+      legalName: clean(input.legalName),
+      dba: clean(input.dba),
+      entityType: clean(input.entityType),
+      stateOfIncorporation: clean(input.stateOfIncorporation),
+      ein: normalizeEin(input.ein),
+      website: clean(input.website),
+      addressLine1: clean(input.addressLine1),
+      addressLine2: clean(input.addressLine2),
+      city: clean(input.city),
+      stateRegion: clean(input.stateRegion),
+      postalCode: clean(input.postalCode),
+      phone: clean(input.phone),
+      signatoryName: clean(input.signatoryName),
+      signatoryTitle: clean(input.signatoryTitle),
+      apContactName: clean(input.apContactName),
+      apEmail: clean(input.apEmail),
+      apPhone: clean(input.apPhone),
+      paymentMethod: clean(input.paymentMethod),
+      bankName: clean(input.bankName),
+      accountLastFour: digitsOnly.slice(-4),
+      remittanceEmail: clean(input.remittanceEmail),
+      paymentTerms: clean(input.paymentTerms),
+      contractorLicense: clean(input.contractorLicense),
+      dotNumber: clean(input.dotNumber),
+      locateCert: clean(input.locateCert),
+      emr: Number.isFinite(emr) ? emr : null,
+      oshaRecordables: Number.isFinite(osha) ? osha : null,
+      safetyContact: clean(input.safetyContact),
+      references: (input.references ?? [])
+        .filter((r) => clean(r.company))
+        .map((r) => ({
+          company: clean(r.company),
+          contact: clean(r.contact),
+          phone: clean(r.phone),
+          email: clean(r.email),
+        })) as unknown as Prisma.InputJsonValue,
+    },
+  });
+
+  revalidatePath("/subcontractors");
+  revalidatePath("/settings");
+  return { ok: true as const };
+}
