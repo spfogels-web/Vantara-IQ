@@ -17,10 +17,15 @@ import { jwtVerify } from "jose";
 const SESSION_COOKIE = "vq_session";
 
 /**
- * Reachable without signing in. `/api/blob` is deliberately NOT here — it mints
- * write credentials for the file store and checks the session itself.
+ * Reachable without a session cookie.
+ *
+ * `/api/blob` is here because Vercel calls it back server-to-server when an
+ * upload completes, and that request has no cookie to carry — redirecting it to
+ * /login would strand every finished upload. The route is not unprotected: it
+ * requires a session for the one operation that matters (minting an upload
+ * token) and verifies the callback's signature for the other.
  */
-const PUBLIC_PREFIXES = ["/login", "/invite"];
+const PUBLIC_PREFIXES = ["/login", "/invite", "/api/blob"];
 
 /** What a subcontractor login is allowed to reach. */
 const SUB_ALLOWED_PREFIXES = ["/dailies", "/projects", "/support", "/settings"];

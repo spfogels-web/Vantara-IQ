@@ -9,17 +9,20 @@ export const runtime = "nodejs";
 // Vercel Blob (bypassing the ~4.5 MB serverless request-body limit), and this
 // route only mints the short-lived upload token. Requires BLOB_READ_WRITE_TOKEN.
 //
-// The token is minted only for a signed-in user. Without that check this route
-// hands anyone on the internet a 500 MB write credential for the store — and
-// because the store is public-read, whatever they put there is served from a
-// fortitude-infra URL. Every caller is behind login, so nothing legitimate is
-// lost by requiring one.
+// Two different callers hit this endpoint, and they authenticate differently:
+//
+//   1. The browser, asking for an upload token. That must be a signed-in user —
+//      otherwise this route hands anyone on the internet a 500 MB write
+//      credential for a public-read store, served from our own domain.
+//
+//   2. Vercel itself, calling back server-to-server once an upload finishes.
+//      That request carries no session cookie and never can. It is authenticated
+//      instead by a signature over the body, which handleUpload verifies against
+//      BLOB_READ_WRITE_TOKEN — so requiring a session here would reject a
+//      legitimate callback and strand every completed upload.
+//
+// Hence the session check is scoped to the token request rather than the route.
 export async function POST(request: Request): Promise<NextResponse> {
-  const session = await getSession();
-  if (!session) {
-    return NextResponse.json({ error: "Sign in to upload files." }, { status: 401 });
-  }
-
   // Say which thing is missing. The generic "upload failed" that this used to
   // produce sends you looking at the file, the size, the network — anywhere
   // but the one env var that is actually absent.
@@ -34,6 +37,14 @@ export async function POST(request: Request): Promise<NextResponse> {
   }
 
   const body = (await request.json()) as HandleUploadBody;
+
+  if (body.type === "blob.generate-client-token") {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: "Sign in to upload files." }, { status: 401 });
+    }
+  }
+
   try {
     const json = await handleUpload({
       body,
