@@ -11,7 +11,12 @@ import {
   type ExtractedRowData,
   type RateDocType,
 } from "@/lib/extract";
-import { parseDelimitedMaterialList, pdfTextLayer, pdfTextPages } from "@/lib/parse-material-list";
+import {
+  parseDelimitedMaterialList,
+  parseRateSheet,
+  pdfTextLayer,
+  pdfTextPages,
+} from "@/lib/parse-material-list";
 import { findJobProfile } from "@/lib/job-profiles";
 import {
   assertOwnSubcontractor,
@@ -1010,7 +1015,33 @@ async function extractLongDocument(input: {
 
   if (input.mediaType !== "application/pdf") return single();
 
-  const pages = await pdfTextPages(Buffer.from(await input.file.arrayBuffer()));
+  const buffer = Buffer.from(await input.file.arrayBuffer());
+
+  // A unit rate sheet is a code and a price and nothing else, so read it
+  // exactly rather than asking a model to retype two thousand rows. This is
+  // free, instant, complete, and cannot truncate — which the model path did,
+  // silently, on this very document.
+  const isRateSheet = input.docType === "GC_RATE_SHEET" || input.docType === "SUB_RATE_CARD";
+  if (isRateSheet) {
+    const layer = await pdfTextLayer(buffer);
+    const parsed = layer ? parseRateSheet(layer) : [];
+    // A handful of matches means we found stray dollar figures in prose, not a
+    // rate table — fall through to the model rather than import noise.
+    if (parsed.length >= 25) {
+      return {
+        summary: `Read ${parsed.length} unit rates directly from the sheet — no AI, no truncation.`,
+        rows: parsed.map((r) => ({
+          code: r.code,
+          description: "",
+          unit: "",
+          rate: r.rate,
+          confidence: 1,
+        })),
+      };
+    }
+  }
+
+  const pages = await pdfTextPages(buffer);
   // No text layer (a scan), or short enough to read in one go.
   if (!pages || pages.length <= PAGES_PER_BATCH) return single();
 

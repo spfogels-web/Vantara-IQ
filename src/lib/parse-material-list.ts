@@ -294,3 +294,52 @@ export async function pdfTextLayer(data: Buffer): Promise<string | null> {
     return null; // Malformed or encrypted — let the model try.
   }
 }
+
+/* ------------------------------------------------------------------ *
+ * Rate sheets — a code and a price, nothing else.
+ * ------------------------------------------------------------------ */
+
+export interface ParsedRate {
+  code: string;
+  rate: number;
+}
+
+/**
+ * Pull code/rate pairs off a unit rate sheet.
+ *
+ * Globe's Exhibit A is 29 pages of exactly one shape: a work-item code, then a
+ * dollar figure. No AI is needed to read that, and using one is actively worse
+ * — a model has to hold hundreds of rows in a single reply and gets truncated,
+ * which is how the first import of this document came back with zero rows. A
+ * regex reads all 29 pages exactly, instantly, for nothing, and cannot lose the
+ * second half of the card.
+ *
+ * Codes are matched greedily up to the price because they are full of the
+ * characters a naive pattern would stop at: BFOV(12.7)(2W)12"DEPTH(D),
+ * BM60(1)(1 1/4)P>100, 1/2 TON TRUCK W/TOOLS (A)F, HC3-5 (B)>300<=600.
+ */
+export function parseRateSheet(text: string): ParsedRate[] {
+  const out = new Map<string, number>();
+
+  // pdf.js joins positioned runs with commas, and a two-column page puts two
+  // pairs on one line — so scan for every occurrence rather than per line.
+  const pair = /([^,\n$]{2,60}?)\s*,?\s*\$\s*([\d,]+\.\d{2})/g;
+
+  for (const m of text.matchAll(pair)) {
+    const code = m[1]
+      .replace(/^[\s,]+|[\s,]+$/g, "")
+      // Strip a leading page/header fragment that ran into the first code.
+      .replace(/^.*?(?:CWI|SUB RATES|Page \d+ of \d+)\s*/i, "")
+      .trim();
+    const rate = Number.parseFloat(m[2].replace(/,/g, ""));
+
+    if (!code || !Number.isFinite(rate)) continue;
+    // A code always carries a letter or digit and is never a sentence.
+    if (!/[A-Z0-9]/i.test(code) || code.length > 60) continue;
+    // Later pages repeat nothing; a duplicate means the same code twice, so
+    // keep the first and don't let a stray re-read change a live rate.
+    if (!out.has(code)) out.set(code, rate);
+  }
+
+  return [...out.entries()].map(([code, rate]) => ({ code, rate }));
+}
