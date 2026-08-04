@@ -1,11 +1,12 @@
 ﻿import Link from "next/link";
-import { AlertTriangle, ChevronRight, Map as MapIcon, Plus } from "lucide-react";
+import { AlertTriangle, ChevronRight, Plus } from "lucide-react";
 
 import { getProjects } from "@/data/queries";
 import { cn } from "@/lib/utils";
 import { toneStyles } from "@/lib/tone";
 import { formatFeet, formatNumber } from "@/lib/format";
 import { PageShell, StatStrip } from "@/components/common/page-shell";
+import { ProjectCover } from "@/components/projects/project-cover";
 import { Panel } from "@/components/common/panel";
 import { HealthRing } from "@/components/common/health-ring";
 import { StatusPill } from "@/components/common/status-pill";
@@ -54,22 +55,13 @@ export default async function ProjectsPage() {
             return (
               <Link key={p.id} href={`/projects/${p.id}`} className="focus-ring group block rounded-2xl">
                 <Panel className="overflow-hidden p-0 transition-colors group-hover:bg-foreground/[0.04]">
-                  {/* Map banner — the project's map leads the card */}
-                  <div className="relative h-28 w-full overflow-hidden border-b border-border/60 bg-foreground/[0.03]">
-                    {p.mapUrl && !p.mapUrl.startsWith("data:application/pdf") ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={p.mapUrl} alt="" className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" />
-                    ) : (
-                      <div className="grid size-full place-items-center bg-[radial-gradient(60%_120%_at_50%_-10%,color-mix(in_oklab,var(--vq-blue)_14%,transparent),transparent)]">
-                        <span className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground/70">
-                          <MapIcon className="size-3.5" /> {p.mapUrl ? "PDF map attached" : "No map uploaded"}
-                        </span>
-                      </div>
-                    )}
-                    <span className="num absolute left-2 top-2 rounded bg-black/45 px-1.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm">
-                      {p.number}
-                    </span>
-                  </div>
+                  {/* Cover photo — drop an image on it or click to add one. */}
+                  <ProjectCover
+                    projectId={p.id}
+                    projectNumber={p.number}
+                    photoUrl={p.photoUrl}
+                    mapUrl={p.mapUrl}
+                  />
 
                   <div className="p-4">
                   <div className="flex items-start gap-3">
