@@ -139,7 +139,6 @@ export function packetStatus(s: PacketSubject): PacketStatus {
   const blocking = required.flatMap((s) => s.missing);
   const optional = sections.filter((s) => !s.required).flatMap((s) => s.missing);
 
-  const requiredTotal = required.reduce((n, s) => n + s.missing.length, 0);
   const done = required.filter((s) => s.complete).length;
 
   return {
