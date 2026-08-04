@@ -1,7 +1,13 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
-import { assertProjectAccess, requireStaff, viewer, visibleProjectIds } from "@/lib/authz";
+import {
+  assertOwnSubcontractor,
+  assertProjectAccess,
+  requireStaff,
+  viewer,
+  visibleProjectIds,
+} from "@/lib/authz";
 import {
   priceQuantities,
   valueProject,
@@ -1313,5 +1319,82 @@ export async function getProjectValuation(projectId: string): Promise<ProjectVal
           : null,
       dailies: dailies.length,
     },
+  };
+}
+
+/* ------------------------------------------------------------------ *
+ * Vendor packet.
+ * ------------------------------------------------------------------ */
+
+export interface VendorPacketView {
+  id: string;
+  company: string;
+  legalName: string; dba: string; entityType: string;
+  stateOfIncorporation: string; ein: string; website: string;
+  addressLine1: string; addressLine2: string; city: string;
+  stateRegion: string; postalCode: string;
+  phone: string; mobilePhone: string;
+  emergencyContactName: string; emergencyContactPhone: string;
+  signatoryName: string; signatoryTitle: string;
+  apContactName: string; apEmail: string; apPhone: string;
+  billingContactName: string; billingContactTitle: string; billingEmail: string;
+  billingMobile: string; billingOfficePhone: string; billingMailingAddress: string;
+  paymentMethod: string; paymentTerms: string; remittanceEmail: string;
+  bankName: string; bankBranchAddress: string; bankContactName: string; bankPhone: string;
+  accountType: string; nameOnAccount: string;
+  accountSignerName: string; accountSignerTitle: string;
+  /** Masked. The real numbers never leave the server. */
+  routingMasked: string; accountMasked: string; hasWireRouting: boolean;
+  contractorLicense: string; dotNumber: string; locateCert: string;
+  emr: string; oshaRecordables: string; safetyContact: string;
+  references: { company: string; contact: string; phone: string; email: string }[];
+}
+
+/**
+ * The packet for one crew, for them to edit or for staff to review.
+ *
+ * Routing and account numbers come back masked — the browser is never sent the
+ * real value, so a form round trip cannot leak one and a saved-page cache
+ * cannot hold one.
+ */
+export async function getVendorPacket(subcontractorId: string): Promise<VendorPacketView | null> {
+  await assertOwnSubcontractor(subcontractorId);
+  const s = await prisma.subcontractor.findUnique({ where: { id: subcontractorId } });
+  if (!s) return null;
+
+  const str = (v: unknown) => (typeof v === "string" ? v : "");
+  return {
+    id: s.id,
+    company: s.company,
+    legalName: s.legalName, dba: s.dba, entityType: s.entityType,
+    stateOfIncorporation: s.stateOfIncorporation, ein: s.ein, website: s.website,
+    addressLine1: s.addressLine1, addressLine2: s.addressLine2, city: s.city,
+    stateRegion: s.stateRegion, postalCode: s.postalCode,
+    phone: s.phone, mobilePhone: s.mobilePhone,
+    emergencyContactName: s.emergencyContactName, emergencyContactPhone: s.emergencyContactPhone,
+    signatoryName: s.signatoryName, signatoryTitle: s.signatoryTitle,
+    apContactName: s.apContactName, apEmail: s.apEmail, apPhone: s.apPhone,
+    billingContactName: s.billingContactName, billingContactTitle: s.billingContactTitle,
+    billingEmail: s.billingEmail, billingMobile: s.billingMobile,
+    billingOfficePhone: s.billingOfficePhone, billingMailingAddress: s.billingMailingAddress,
+    paymentMethod: s.paymentMethod, paymentTerms: s.paymentTerms, remittanceEmail: s.remittanceEmail,
+    bankName: s.bankName, bankBranchAddress: s.bankBranchAddress,
+    bankContactName: s.bankContactName, bankPhone: s.bankPhone,
+    accountType: s.accountType, nameOnAccount: s.nameOnAccount,
+    accountSignerName: s.accountSignerName, accountSignerTitle: s.accountSignerTitle,
+    routingMasked: s.routingLastFour ? `••••${s.routingLastFour}` : "",
+    accountMasked: s.accountLastFour ? `••••${s.accountLastFour}` : "",
+    hasWireRouting: !!s.wireRoutingEnc,
+    contractorLicense: s.contractorLicense, dotNumber: s.dotNumber, locateCert: s.locateCert,
+    emr: s.emr === null ? "" : String(s.emr),
+    oshaRecordables: s.oshaRecordables === null ? "" : String(s.oshaRecordables),
+    safetyContact: s.safetyContact,
+    references: (Array.isArray(s.references) ? s.references : []).map((r) => {
+      const o = (r ?? {}) as Record<string, unknown>;
+      return {
+        company: str(o.company), contact: str(o.contact),
+        phone: str(o.phone), email: str(o.email),
+      };
+    }),
   };
 }

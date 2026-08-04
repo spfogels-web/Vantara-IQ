@@ -28,7 +28,7 @@ const SESSION_COOKIE = "vq_session";
 const PUBLIC_PREFIXES = ["/login", "/invite", "/api/blob"];
 
 /** What a subcontractor login is allowed to reach. */
-const SUB_ALLOWED_PREFIXES = ["/dailies", "/projects", "/support", "/settings"];
+const SUB_ALLOWED_PREFIXES = ["/dailies", "/projects", "/company", "/support", "/settings"];
 
 /**
  * Carved back out of the allowed prefixes above. Creating and editing projects

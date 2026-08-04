@@ -62,6 +62,7 @@ export const subNavSections: NavSection[] = [
     items: [
       { label: "Dailies", href: "/dailies", icon: "clipboard", shortcut: "D" },
       { label: "My projects", href: "/projects", icon: "projects", shortcut: "P" },
+      { label: "Company profile", href: "/company", icon: "users" },
     ],
   },
 ];

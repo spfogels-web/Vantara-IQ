@@ -32,6 +32,7 @@ import { StatusPill } from "@/components/common/status-pill";
 import { LogoUpload } from "@/components/common/logo-upload";
 import { Button } from "@/components/ui/button";
 import { AssignProjects } from "@/components/subcontractors/assign-projects";
+import { PacketSummary } from "@/components/subcontractors/packet-summary";
 import { InviteDialog } from "@/components/subcontractors/invite-dialog";
 import { SubcontractorForm } from "@/components/subcontractors/subcontractor-form";
 import { SubRateCard } from "@/components/subcontractors/sub-rate-card";
@@ -505,6 +506,9 @@ function SubDetail({
           </PanelBody>
         </Panel>
       </div>
+
+      {/* The vendor packet the sub filled in from their own portal */}
+      <PacketSummary key={`packet-${s.id}`} subcontractorId={s.id} />
 
       {/* What we pay them, per code — drives pay applications and real margin */}
       <SubRateCard key={s.id} subcontractorId={s.id} />

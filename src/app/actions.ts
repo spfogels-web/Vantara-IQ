@@ -20,6 +20,7 @@ import {
 import { findJobProfile } from "@/lib/job-profiles";
 import { isLabourOrEquipmentCode } from "@/lib/unit-codes";
 import { canStoreSecrets, encryptField } from "@/lib/secure-field";
+import { getVendorPacket } from "@/data/queries";
 import {
   assertOwnSubcontractor,
   assertProjectAccess,
@@ -1772,4 +1773,15 @@ export async function saveVendorPacket(subcontractorId: string, input: VendorPac
   revalidatePath("/subcontractors");
   revalidatePath("/settings");
   return { ok: true as const };
+}
+
+/**
+ * Read a crew's packet for the review panel. Staff, or that crew themselves —
+ * the same authorisation the page uses, applied again here because this is
+ * reachable independently of the page that renders it.
+ */
+export async function getVendorPacketFor(subcontractorId: string) {
+  await assertOwnSubcontractor(subcontractorId);
+  const packet = await getVendorPacket(subcontractorId);
+  return packet ? { ok: true as const, packet } : { ok: false as const, packet: null };
 }
