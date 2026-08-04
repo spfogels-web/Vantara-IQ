@@ -19,6 +19,7 @@ import {
 } from "@/lib/parse-material-list";
 import { findJobProfile } from "@/lib/job-profiles";
 import { isLabourOrEquipmentCode } from "@/lib/unit-codes";
+import { canStoreSecrets, encryptField } from "@/lib/secure-field";
 import {
   assertOwnSubcontractor,
   assertProjectAccess,
@@ -1616,11 +1617,30 @@ export type VendorPacketInput = {
   apContactName: string;
   apEmail: string;
   apPhone: string;
+  mobilePhone: string;
+  emergencyContactName: string;
+  emergencyContactPhone: string;
+  billingContactName: string;
+  billingContactTitle: string;
+  billingEmail: string;
+  billingMobile: string;
+  billingOfficePhone: string;
+  billingMailingAddress: string;
   paymentMethod: string;
-  bankName: string;
-  accountLastFour: string;
-  remittanceEmail: string;
   paymentTerms: string;
+  remittanceEmail: string;
+  bankName: string;
+  bankBranchAddress: string;
+  bankContactName: string;
+  bankPhone: string;
+  /** Plaintext inbound only — encrypted before it reaches the database. */
+  routingNumber: string;
+  wireRouting: string;
+  accountNumber: string;
+  accountType: string;
+  nameOnAccount: string;
+  accountSignerName: string;
+  accountSignerTitle: string;
   contractorLicense: string;
   dotNumber: string;
   locateCert: string;
@@ -1655,9 +1675,41 @@ export async function saveVendorPacket(subcontractorId: string, input: VendorPac
     return { ok: false as const, error: "Legal business name is required — it has to match your W-9." };
   }
 
-  const digitsOnly = clean(input.accountLastFour).replace(/\D/g, "");
   const emr = Number.parseFloat(clean(input.emr));
   const osha = Number.parseInt(clean(input.oshaRecordables), 10);
+
+  /**
+   * Banking, encrypted on the way in.
+   *
+   * A blank field means "leave what's stored alone", not "erase it". The form
+   * never sends the real number back — it shows a mask — so treating blank as
+   * a delete would wipe a sub's account the first time they corrected a typo
+   * in their address.
+   */
+  const bankingField = (raw: string, encColumn: string, tailColumn?: string) => {
+    const digits = clean(raw).replace(/\D/g, "");
+    if (!digits) return {};
+    return {
+      [encColumn]: encryptField(digits),
+      ...(tailColumn ? { [tailColumn]: digits.slice(-4) } : {}),
+    };
+  };
+
+  const wantsBanking =
+    clean(input.routingNumber) || clean(input.wireRouting) || clean(input.accountNumber);
+  if (wantsBanking && !canStoreSecrets()) {
+    return {
+      ok: false as const,
+      error:
+        "Banking details can't be saved — VQ_FIELD_KEY isn't set on this deployment, and we won't store a routing or account number unencrypted.",
+    };
+  }
+
+  const banking = {
+    ...bankingField(input.routingNumber, "routingNumberEnc", "routingLastFour"),
+    ...bankingField(input.wireRouting, "wireRoutingEnc"),
+    ...bankingField(input.accountNumber, "accountNumberEnc", "accountLastFour"),
+  };
 
   await prisma.subcontractor.update({
     where: { id: subcontractorId },
@@ -1679,11 +1731,27 @@ export async function saveVendorPacket(subcontractorId: string, input: VendorPac
       apContactName: clean(input.apContactName),
       apEmail: clean(input.apEmail),
       apPhone: clean(input.apPhone),
+      mobilePhone: clean(input.mobilePhone),
+      emergencyContactName: clean(input.emergencyContactName),
+      emergencyContactPhone: clean(input.emergencyContactPhone),
+      billingContactName: clean(input.billingContactName),
+      billingContactTitle: clean(input.billingContactTitle),
+      billingEmail: clean(input.billingEmail),
+      billingMobile: clean(input.billingMobile),
+      billingOfficePhone: clean(input.billingOfficePhone),
+      billingMailingAddress: clean(input.billingMailingAddress),
       paymentMethod: clean(input.paymentMethod),
-      bankName: clean(input.bankName),
-      accountLastFour: digitsOnly.slice(-4),
+      paymentTerms: clean(input.paymentTerms) || 'Net 21',
       remittanceEmail: clean(input.remittanceEmail),
-      paymentTerms: clean(input.paymentTerms),
+      bankName: clean(input.bankName),
+      bankBranchAddress: clean(input.bankBranchAddress),
+      bankContactName: clean(input.bankContactName),
+      bankPhone: clean(input.bankPhone),
+      accountType: clean(input.accountType),
+      nameOnAccount: clean(input.nameOnAccount),
+      accountSignerName: clean(input.accountSignerName),
+      accountSignerTitle: clean(input.accountSignerTitle),
+      ...banking,
       contractorLicense: clean(input.contractorLicense),
       dotNumber: clean(input.dotNumber),
       locateCert: clean(input.locateCert),

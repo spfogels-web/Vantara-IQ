@@ -282,16 +282,40 @@ model Subcontractor {
   apEmail        String @default("")
   apPhone        String @default("")
 
-  /// ACH or Check. Bank details are deliberately NOT stored as numbers — the
-  /// sub uploads a voided check or signed ACH form as a document instead, and
-  /// only enough is kept here for AP to recognise a payment. Holding a full
-  /// routing and account number means holding data that moves money, which
-  /// needs encrypted columns and a private file store first.
+  mobilePhone           String @default("")
+  emergencyContactName  String @default("")
+  emergencyContactPhone String @default("")
+
+  /// The billing representative the agreement requires — every invoice, daily,
+  /// as-built and payment query goes through this person.
+  billingContactName    String @default("")
+  billingContactTitle   String @default("")
+  billingEmail          String @default("")
+  billingMobile         String @default("")
+  billingOfficePhone    String @default("")
+  billingMailingAddress String @default("")
+
   paymentMethod   String @default("")
-  bankName        String @default("")
-  accountLastFour String @default("")
+  paymentTerms    String @default("Net 21")
   remittanceEmail String @default("")
-  paymentTerms    String @default("")
+
+  /// Banking. Routing and account numbers are AES-256-GCM ciphertext — see
+  /// lib/secure-field.ts. They are never stored in the clear and never sent to
+  /// a browser; screens read the masked tails below instead.
+  bankName           String @default("")
+  bankBranchAddress  String @default("")
+  bankContactName    String @default("")
+  bankPhone          String @default("")
+  routingNumberEnc   String @default("")
+  wireRoutingEnc     String @default("")
+  accountNumberEnc   String @default("")
+  /// Last four only, so AP can match a payment without decrypting anything.
+  accountLastFour    String @default("")
+  routingLastFour    String @default("")
+  accountType        String @default("")
+  nameOnAccount      String @default("")
+  accountSignerName  String @default("")
+  accountSignerTitle String @default("")
 
   contractorLicense String @default("")
   dotNumber         String @default("")
