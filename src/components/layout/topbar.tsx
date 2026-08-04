@@ -310,9 +310,11 @@ function UserMenu({ user: current }: { user: CurrentUser | null }) {
 function MobileNav({
   logoUrl,
   badges,
+  role,
 }: {
   logoUrl?: string | null;
   badges?: Record<string, number>;
+  role?: string | null;
 }) {
   const { mobileOpen, setMobileOpen } = useSidebar();
 
@@ -332,6 +334,7 @@ function MobileNav({
         <SidebarContent
           logoUrl={logoUrl}
           badges={badges}
+          role={role}
           collapsed={false}
           showCollapseButton={false}
           onNavigate={() => setMobileOpen(false)}
@@ -354,13 +357,15 @@ export function Topbar({
 
   return (
     <header className="glass sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-border px-3 sm:gap-3 sm:px-5">
-      <MobileNav logoUrl={logoUrl} badges={badges} />
+      <MobileNav logoUrl={logoUrl} badges={badges} role={user?.role} />
 
       {/* shrink-0 so the search field absorbs the squeeze at tablet widths
           instead of the page title collapsing to an ellipsis. */}
       <div className="flex shrink-0 items-center gap-2.5">
         <h1 className="whitespace-nowrap text-[14px] font-semibold tracking-[-0.01em] text-foreground">
-          Operations Center
+          {user?.role === "SUBCONTRACTOR"
+            ? (user.subcontractorName ?? "Crew portal")
+            : "Operations Center"}
         </h1>
         <Tooltip>
           <TooltipTrigger asChild>

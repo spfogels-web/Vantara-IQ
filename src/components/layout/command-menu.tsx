@@ -21,7 +21,7 @@ import {
   CommandShortcut,
 } from "@/components/ui/command";
 import { getIcon } from "@/lib/icons";
-import { allNavItems } from "@/lib/nav";
+import { navItemsFor } from "@/lib/nav";
 import { projects } from "@/data/mock";
 import { healthTone } from "@/lib/tone";
 import { toneStyles } from "@/lib/tone";
@@ -49,7 +49,14 @@ const quickActions = [
   { label: "Create invoice", icon: ReceiptText, href: "/billing/new" },
 ];
 
-export function CommandMenuProvider({ children }: { children: React.ReactNode }) {
+export function CommandMenuProvider({
+  children,
+  role,
+}: {
+  children: React.ReactNode;
+  /** The palette must not offer a crew a page they cannot open. */
+  role?: string | null;
+}) {
   const [open, setOpen] = React.useState(false);
   const router = useRouter();
 
@@ -112,7 +119,7 @@ export function CommandMenuProvider({ children }: { children: React.ReactNode })
           <CommandSeparator />
 
           <CommandGroup heading="Navigation">
-            {allNavItems.map((item) => {
+            {navItemsFor(role).map((item) => {
               const Icon = getIcon(item.icon);
               return (
                 <CommandItem

@@ -7,7 +7,7 @@ import { ChevronsLeft, MessageSquarePlus, PanelLeft, Settings, UserRound } from 
 
 import { cn } from "@/lib/utils";
 import { getIcon } from "@/lib/icons";
-import { footerNav, navSections } from "@/lib/nav";
+import { footerNav, homeHrefFor, navSectionsFor } from "@/lib/nav";
 import { organization } from "@/data/mock";
 import { initials } from "@/lib/format";
 import type { NavItem } from "@/lib/types";
@@ -114,6 +114,7 @@ export function SidebarContent({
   showCollapseButton = true,
   logoUrl,
   badges,
+  role,
 }: {
   collapsed: boolean;
   onNavigate?: () => void;
@@ -122,6 +123,8 @@ export function SidebarContent({
   logoUrl?: string | null;
   /** Live counts by href, overriding the static nav config. */
   badges?: Record<string, number>;
+  /** Drives which rail is built — staff get the full one, crews get theirs. */
+  role?: string | null;
 }) {
   const { toggle } = useSidebar();
   const [feedbackOpen, setFeedbackOpen] = React.useState(false);
@@ -136,9 +139,9 @@ export function SidebarContent({
         )}
       >
         <Link
-          href="/"
+          href={homeHrefFor(role)}
           onClick={onNavigate}
-          aria-label="Vantara IQ — Operations Center"
+          aria-label="Vantara IQ"
           className="focus-ring flex min-w-0 items-center gap-2.5 rounded-lg"
         >
           <VantaraMark size={collapsed ? 30 : 32} />
@@ -158,7 +161,7 @@ export function SidebarContent({
 
       {/* Sections */}
       <nav className="no-scrollbar flex-1 space-y-5 overflow-y-auto px-4 py-4">
-        {navSections.map((section) => (
+        {navSectionsFor(role).map((section) => (
           <div key={section.title} className="space-y-1">
             {!collapsed ? (
               <p className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/70">
@@ -277,9 +280,11 @@ export function SidebarContent({
 export function DesktopSidebar({
   logoUrl,
   badges,
+  role,
 }: {
   logoUrl?: string | null;
   badges?: Record<string, number>;
+  role?: string | null;
 }) {
   const { collapsed, toggle } = useSidebar();
 
@@ -292,7 +297,7 @@ export function DesktopSidebar({
         transition: "width 260ms cubic-bezier(0.16, 1, 0.3, 1)",
       }}
     >
-      <SidebarContent collapsed={collapsed} logoUrl={logoUrl} badges={badges} />
+      <SidebarContent collapsed={collapsed} logoUrl={logoUrl} badges={badges} role={role} />
 
       {/* Expand affordance, only visible while collapsed */}
       {collapsed ? (

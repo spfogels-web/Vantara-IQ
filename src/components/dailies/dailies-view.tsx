@@ -109,7 +109,7 @@ export function DailiesView({
                       <StatusPill label={d.status} tone={d.tone} className="shrink-0 text-[10px]" dot={false} />
                     </div>
                     <div className="mt-1 flex items-center justify-between text-[11px] text-muted-foreground">
-                      <span className="truncate">{d.subcontractor} · {d.crew}</span>
+                      <span className="truncate">{[d.subcontractor, d.crew].filter(Boolean).join(" · ")}</span>
                       <span className="num shrink-0">{formatFeet(d.totalFt)}</span>
                     </div>
                     <div className="mt-0.5 flex items-center justify-between text-[10.5px] text-muted-foreground/70">
@@ -206,7 +206,7 @@ function DailyDetail({
                 <StatusPill label={d.status} tone={d.tone} />
               </div>
               <p className="mt-1 text-[12px] text-muted-foreground">
-                {d.customer} · {d.subcontractor} · {d.crew}
+                {[d.customer, d.subcontractor, d.crew].filter(Boolean).join(" · ")}
               </p>
               <p className="mt-0.5 text-[11.5px] text-muted-foreground/80">
                 Sheet <span className="num">{d.sheetNumber}</span> · Work date {d.workDate} · submitted {formatWhen(d.submittedAt)}

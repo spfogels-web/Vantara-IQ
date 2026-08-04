@@ -38,7 +38,7 @@ function ShellFrame({
 
   return (
     <div className="aurora relative min-h-svh">
-      <DesktopSidebar logoUrl={logoUrl} badges={badges} />
+      <DesktopSidebar logoUrl={logoUrl} badges={badges} role={user?.role} />
 
       <div
         className="relative z-10 flex min-h-svh flex-col"
@@ -80,7 +80,7 @@ export function AppShell({
   return (
     <TooltipProvider delayDuration={300} skipDelayDuration={200}>
       <SidebarProvider>
-        <CommandMenuProvider>
+        <CommandMenuProvider role={user?.role}>
           <ShellFrame user={user} logoUrl={logoUrl} badges={badges}>{children}</ShellFrame>
         </CommandMenuProvider>
       </SidebarProvider>

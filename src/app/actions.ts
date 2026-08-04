@@ -1412,11 +1412,19 @@ export async function submitDailySheet(input: SheetPayload) {
   const header = (sheet.header ?? {}) as Record<string, unknown>;
   const str = (k: string) => (typeof header[k] === "string" ? (header[k] as string) : "");
 
+  // Record which company filed this. The paper sheet has no company field, so
+  // the submitting account is the only authority — and without it a daily can
+  // neither be shown back to the crew that filed it nor turned into their pay
+  // application. Staff submitting a sheet are filing self-perform work.
+  const submitter = await requireUser();
+  const filedBy = submitter.subcontractorName ?? "Fortitude Self-Perform";
+
   const daily = await prisma.daily.create({
     data: {
       sheetNumber: str("exchange") || str("projectNumber"),
       projectId: sheet.projectId,
       projectName: sheet.projectName,
+      subcontractor: filedBy,
       customer: str("customer"),
       crew: sheet.crewNumber,
       workDate: sheet.workDate,
