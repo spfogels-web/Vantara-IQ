@@ -8,6 +8,7 @@ import {
   viewer,
   visibleProjectIds,
 } from "@/lib/authz";
+import { packetStatus } from "@/lib/vendor-packet";
 import {
   priceQuantities,
   valueProject,
@@ -146,7 +147,16 @@ type SubRow = Awaited<ReturnType<typeof prisma.subcontractor.findMany>>[number] 
 };
 
 function toSubcontractor(r: SubRow): Subcontractor {
+  const packet = packetStatus(r);
+  // "Started" separates a crew who has not opened the form from one who is
+  // part-way through — chasing those two is a different conversation.
+  const started = [
+    r.legalName, r.ein, r.addressLine1, r.signatoryName,
+    r.paymentMethod, r.billingContactName,
+  ].some((v) => typeof v === "string" && v.trim().length > 0);
+
   return {
+    packet: { complete: packet.complete, started, blocking: packet.blocking },
     id: r.id,
     company: r.company,
     lead: r.lead,

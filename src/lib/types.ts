@@ -283,6 +283,8 @@ export interface Subcontractor {
   trades: string[];
   state: "Active" | "Onboarding" | "Pending review" | "Invited" | "Inactive";
   tone: Tone;
+  /** Vendor-packet verdict, computed server-side so the roster can count it. */
+  packet: { complete: boolean; started: boolean; blocking: string[] };
   /** Real project records, not typed names — this is what gates their access. */
   assignedProjects: AssignedProject[];
   compliance: ComplianceDoc[];

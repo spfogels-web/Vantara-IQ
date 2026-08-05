@@ -106,8 +106,46 @@ export function SubcontractorsView({
 
   const selected = subs.find((s) => s.id === selectedId) ?? filtered[0] ?? null;
 
+  /**
+   * Where every crew sits in onboarding.
+   *
+   * Buckets are mutually exclusive and read in the order work actually
+   * progresses, so the counts add up to the roster and nobody is counted twice.
+   * "Not started" is separated from "in progress" on purpose — chasing a crew
+   * who has never opened the form is a different conversation from chasing one
+   * stuck on a single field.
+   */
+  const onboarding = React.useMemo(() => {
+    const ready: Subcontractor[] = [];
+    const packetDone: Subcontractor[] = [];
+    const inProgress: Subcontractor[] = [];
+    const notStarted: Subcontractor[] = [];
+
+    for (const s of subs) {
+      const gate = workReadiness(s);
+      if (!s.packet.started) notStarted.push(s);
+      else if (!s.packet.complete) inProgress.push(s);
+      else if (!gate.eligible) packetDone.push(s);
+      else ready.push(s);
+    }
+
+    // What is holding people up, most common first — the office's call list.
+    const tally = new Map<string, number>();
+    for (const s of subs) {
+      if (s.packet.complete && workReadiness(s).eligible) continue;
+      for (const b of s.packet.blocking) tally.set(b, (tally.get(b) ?? 0) + 1);
+      for (const o of workReadiness(s).outstanding) tally.set(o.label, (tally.get(o.label) ?? 0) + 1);
+    }
+    const topMissing = [...tally.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+    return { ready, packetDone, inProgress, notStarted, topMissing };
+  }, [subs]);
+
   return (
-    <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">
+    <div className="flex flex-col gap-3">
+      <OnboardingTiles data={onboarding} total={subs.length} />
+
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">
       <div className="lg:col-span-5 xl:col-span-4">
         <Panel>
           <PanelHeader title="Subcontractors" count={filtered.length} icon={<ShieldCheck className="size-3.5" />}>
@@ -178,7 +216,9 @@ export function SubcontractorsView({
                         {s.lead}
                       </span>
                     </span>
-                    <span className={cn("size-2 shrink-0 rounded-full", toneStyles[s.complianceTone].dot)} title="Compliance" />
+                    {/* Onboarding state, so the queue is visible without
+                        opening every crew in turn. */}
+                    <PacketChip sub={s} />
                   </button>
                 </li>
               );
@@ -236,6 +276,7 @@ export function SubcontractorsView({
             </div>
           </Panel>
         )}
+      </div>
       </div>
 
       <InviteDialog
@@ -632,6 +673,138 @@ function Stars({ rating }: { rating: number }) {
           className={cn("size-3", i < rating ? "fill-warning text-warning" : "text-muted-foreground/30")}
         />
       ))}
+    </span>
+  );
+}
+
+/* ------------------------------------------------------------------ *
+ * Onboarding at a glance.
+ * ------------------------------------------------------------------ */
+
+interface OnboardingData {
+  ready: Subcontractor[];
+  packetDone: Subcontractor[];
+  inProgress: Subcontractor[];
+  notStarted: Subcontractor[];
+  topMissing: [string, number][];
+}
+
+/**
+ * Where the crew list stands, as four counts that add up to the roster.
+ *
+ * The point of this strip is the call list underneath it. A count tells you
+ * how many are stuck; the tally tells you what to chase, and chasing "eight
+ * crews need a COI" is one email rather than eight.
+ */
+function OnboardingTiles({ data, total }: { data: OnboardingData; total: number }) {
+  if (total === 0) return null;
+
+  const tiles = [
+    {
+      label: "Ready to work",
+      count: data.ready.length,
+      hint: "Packet complete, compliant, approved",
+      tone: "text-success",
+      ring: "ring-success/25 bg-success/[0.06]",
+    },
+    {
+      label: "Packet done, not cleared",
+      count: data.packetDone.length,
+      hint: "Waiting on docs or approval",
+      tone: "text-info",
+      ring: "ring-info/25 bg-info/[0.06]",
+    },
+    {
+      label: "In progress",
+      count: data.inProgress.length,
+      hint: "Started their packet, not finished",
+      tone: "text-warning",
+      ring: "ring-warning/25 bg-warning/[0.06]",
+    },
+    {
+      label: "Not started",
+      count: data.notStarted.length,
+      hint: "Nothing filled in yet",
+      tone: "text-muted-foreground",
+      ring: "ring-foreground/[0.08] bg-foreground/[0.03]",
+    },
+  ];
+
+  return (
+    <Panel>
+      <PanelBody className="flex flex-col gap-3">
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+          {tiles.map((t) => (
+            <div
+              key={t.label}
+              className={cn("rounded-xl px-3.5 py-3 ring-1 ring-inset", t.ring)}
+            >
+              <p className={cn("num text-[22px] font-semibold tracking-tight", t.tone)}>
+                {t.count}
+              </p>
+              <p className="mt-0.5 text-[12px] font-medium text-foreground">{t.label}</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">{t.hint}</p>
+            </div>
+          ))}
+        </div>
+
+        {data.topMissing.length > 0 ? (
+          <div className="border-t border-border/60 pt-2.5">
+            <p className="eyebrow mb-1.5">Most common gaps</p>
+            <ul className="flex flex-wrap gap-1.5">
+              {data.topMissing.map(([label, count]) => (
+                <li
+                  key={label}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-background/60 px-2 py-0.5 text-[11.5px] text-muted-foreground"
+                >
+                  {label}
+                  <span className="num rounded-full bg-foreground/10 px-1.5 text-[10.5px] font-semibold text-foreground">
+                    {count}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <p className="border-t border-border/60 pt-2.5 text-[12px] text-muted-foreground">
+            Every crew on the roster is cleared to work.
+          </p>
+        )}
+      </PanelBody>
+    </Panel>
+  );
+}
+
+/** One word on where a crew stands, on the roster row itself. */
+function PacketChip({ sub }: { sub: Subcontractor }) {
+  const gate = workReadiness(sub);
+  const { complete, started, blocking } = sub.packet;
+
+  const state = !started
+    ? { label: "Not started", cls: "border-border/70 text-muted-foreground", title: "Vendor packet not begun" }
+    : !complete
+      ? {
+          label: "In progress",
+          cls: "border-warning/30 bg-warning/10 text-warning",
+          title: `Vendor packet outstanding: ${blocking.join(", ")}`,
+        }
+      : !gate.eligible
+        ? {
+            label: "Review",
+            cls: "border-info/30 bg-info/10 text-info",
+            title: `Packet complete. Still outstanding: ${gate.outstanding.map((o) => o.label).join(", ")}`,
+          }
+        : { label: "Ready", cls: "border-success/30 bg-success/10 text-success", title: "Cleared to work" };
+
+  return (
+    <span
+      title={state.title}
+      className={cn(
+        "shrink-0 rounded-full border px-1.5 py-0.5 text-[10px] font-medium",
+        state.cls,
+      )}
+    >
+      {state.label}
     </span>
   );
 }
