@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { AlertTriangle, Check, FileText, Lock } from "lucide-react";
+import { AlertTriangle, Check, FileText } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { packetStatus } from "@/lib/vendor-packet";
@@ -99,22 +99,6 @@ export function PacketSummary({ subcontractorId }: { subcontractorId: string }) 
               <Row label="DOT" value={packet.dotNumber} />
               <Row label="EMR" value={packet.emr} />
             </dl>
-
-            {packet.bankName || packet.accountMasked ? (
-              <div className="rounded-lg border border-border/70 bg-foreground/[0.02] px-3 py-2.5">
-                <p className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
-                  <Lock className="size-3" /> Banking — encrypted at rest
-                </p>
-                <p className="num mt-1 text-[12.5px] text-foreground">
-                  {[packet.bankName, packet.accountType].filter(Boolean).join(" · ")}
-                  {packet.accountMasked ? ` · acct ${packet.accountMasked}` : ""}
-                  {packet.routingMasked ? ` · routing ${packet.routingMasked}` : ""}
-                </p>
-                {packet.nameOnAccount ? (
-                  <p className="mt-0.5 text-[11.5px] text-muted-foreground">{packet.nameOnAccount}</p>
-                ) : null}
-              </div>
-            ) : null}
 
             {packet.references.filter((r) => r.company).length > 0 ? (
               <div>

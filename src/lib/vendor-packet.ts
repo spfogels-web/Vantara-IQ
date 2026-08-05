@@ -45,8 +45,8 @@ export interface PacketSubject {
   apEmail?: string | null;
   paymentMethod?: string | null;
   remittanceEmail?: string | null;
-  bankName?: string | null;
-  accountLastFour?: string | null;
+  billingContactName?: string | null;
+  billingEmail?: string | null;
   contractorLicense?: string | null;
   dotNumber?: string | null;
   locateCert?: string | null;
@@ -94,14 +94,13 @@ export function packetStatus(s: PacketSubject): PacketStatus {
     },
     {
       key: "payment",
-      label: "How you get paid",
+      label: "Billing contact & payment",
       required: true,
       missing: [
         !filled(s.paymentMethod) && "Payment method",
         !filled(s.remittanceEmail) && "Remittance email",
-        // Only chase bank identification once they've said ACH.
-        s.paymentMethod === "ACH" && !filled(s.bankName) && "Bank name",
-        s.paymentMethod === "ACH" && !filled(s.accountLastFour) && "Account last 4",
+        !filled(s.billingContactName) && "Billing contact",
+        !filled(s.billingEmail) && "Billing contact email",
       ].filter(Boolean) as string[],
       complete: false,
     },

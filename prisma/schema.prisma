@@ -299,24 +299,6 @@ model Subcontractor {
   paymentTerms    String @default("Net 21")
   remittanceEmail String @default("")
 
-  /// Banking. Routing and account numbers are AES-256-GCM ciphertext — see
-  /// lib/secure-field.ts. They are never stored in the clear and never sent to
-  /// a browser; screens read the masked tails below instead.
-  bankName           String @default("")
-  bankBranchAddress  String @default("")
-  bankContactName    String @default("")
-  bankPhone          String @default("")
-  routingNumberEnc   String @default("")
-  wireRoutingEnc     String @default("")
-  accountNumberEnc   String @default("")
-  /// Last four only, so AP can match a payment without decrypting anything.
-  accountLastFour    String @default("")
-  routingLastFour    String @default("")
-  accountType        String @default("")
-  nameOnAccount      String @default("")
-  accountSignerName  String @default("")
-  accountSignerTitle String @default("")
-
   contractorLicense String @default("")
   dotNumber         String @default("")
   locateCert        String @default("")

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Check, Loader2, Lock, Save } from "lucide-react";
+import { AlertTriangle, Check, Loader2, Save } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { ENTITY_TYPES, PAYMENT_METHODS, packetStatus } from "@/lib/vendor-packet";
@@ -34,9 +34,6 @@ export function VendorPacketForm({
 }) {
   const router = useRouter();
   const [f, setF] = React.useState(() => ({ ...packet }));
-  const [routingNumber, setRoutingNumber] = React.useState("");
-  const [wireRouting, setWireRouting] = React.useState("");
-  const [accountNumber, setAccountNumber] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [saved, setSaved] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -57,15 +54,9 @@ export function VendorPacketForm({
     try {
       const res = await saveVendorPacket(packet.id, {
         ...f,
-        routingNumber,
-        wireRouting,
-        accountNumber,
       });
       if (res.ok) {
         setSaved(true);
-        setRoutingNumber("");
-        setWireRouting("");
-        setAccountNumber("");
         router.refresh();
       } else {
         setError(res.error ?? "Could not save.");
@@ -163,48 +154,6 @@ export function VendorPacketForm({
         <Field label="Payment terms" value={f.paymentTerms} onChange={(v) => set("paymentTerms", v)} placeholder="Net 21" />
         <Field label="Remittance email" required value={f.remittanceEmail} onChange={(v) => set("remittanceEmail", v)} />
       </Section>
-
-      <Panel>
-        <PanelHeader
-          title="Banking"
-          description="Encrypted at rest. Numbers already on file are shown masked and stay unless you type a new one."
-          icon={<Lock className="size-3.5" />}
-        />
-        <PanelBody className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <Field label="Bank name" value={f.bankName} onChange={(v) => set("bankName", v)} />
-          <Field label="Bank phone" value={f.bankPhone} onChange={(v) => set("bankPhone", v)} />
-          <Field label="Branch address" value={f.bankBranchAddress} onChange={(v) => set("bankBranchAddress", v)} className="sm:col-span-2" />
-          <Field label="Bank contact" value={f.bankContactName} onChange={(v) => set("bankContactName", v)} />
-          <Field label="Account type" value={f.accountType} onChange={(v) => set("accountType", v)} placeholder="Checking or Savings" />
-
-          <Secret
-            label="Routing number (ACH)"
-            onFile={packet.routingMasked}
-            value={routingNumber}
-            onChange={setRoutingNumber}
-          />
-          <Secret
-            label="Wire routing (if different)"
-            onFile={packet.hasWireRouting ? "on file" : ""}
-            value={wireRouting}
-            onChange={setWireRouting}
-          />
-          <Secret
-            label="Account number"
-            onFile={packet.accountMasked}
-            value={accountNumber}
-            onChange={setAccountNumber}
-          />
-
-          <Field label="Name on account" value={f.nameOnAccount} onChange={(v) => set("nameOnAccount", v)} />
-          <Field label="Authorised signer" value={f.accountSignerName} onChange={(v) => set("accountSignerName", v)} />
-          <Field label="Signer title" value={f.accountSignerTitle} onChange={(v) => set("accountSignerTitle", v)} />
-        </PanelBody>
-        <p className="border-t border-border/70 px-4 py-2.5 text-[11.5px] text-muted-foreground sm:px-5">
-          Upload a voided check or bank letter under Documents so we can verify these against
-          the account before the first payment.
-        </p>
-      </Panel>
 
       <Section title="Licensing" hint="Leave blank anything that doesn't apply to your operation">
         <Field label="Contractor licence" value={f.contractorLicense} onChange={(v) => set("contractorLicense", v)} />
@@ -309,43 +258,6 @@ function Select({
           </option>
         ))}
       </select>
-    </label>
-  );
-}
-
-/**
- * A number we hold but never show. The input starts empty even when a value is
- * stored — what's on file is stated beside the label instead.
- */
-function Secret({
-  label,
-  onFile,
-  value,
-  onChange,
-}: {
-  label: string;
-  onFile: string;
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <label className="block min-w-0">
-      <span className="mb-1 flex items-center justify-between gap-2 text-[11px] font-medium text-muted-foreground">
-        {label}
-        {onFile ? (
-          <span className="num inline-flex items-center gap-1 text-[10.5px] text-success">
-            <Lock className="size-3" /> {onFile}
-          </span>
-        ) : null}
-      </span>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        inputMode="numeric"
-        autoComplete="off"
-        placeholder={onFile ? "Type a new number to replace" : "Not on file"}
-        className={inputClass}
-      />
     </label>
   );
 }

@@ -1340,11 +1340,6 @@ export interface VendorPacketView {
   billingContactName: string; billingContactTitle: string; billingEmail: string;
   billingMobile: string; billingOfficePhone: string; billingMailingAddress: string;
   paymentMethod: string; paymentTerms: string; remittanceEmail: string;
-  bankName: string; bankBranchAddress: string; bankContactName: string; bankPhone: string;
-  accountType: string; nameOnAccount: string;
-  accountSignerName: string; accountSignerTitle: string;
-  /** Masked. The real numbers never leave the server. */
-  routingMasked: string; accountMasked: string; hasWireRouting: boolean;
   contractorLicense: string; dotNumber: string; locateCert: string;
   emr: string; oshaRecordables: string; safetyContact: string;
   references: { company: string; contact: string; phone: string; email: string }[];
@@ -1378,13 +1373,6 @@ export async function getVendorPacket(subcontractorId: string): Promise<VendorPa
     billingEmail: s.billingEmail, billingMobile: s.billingMobile,
     billingOfficePhone: s.billingOfficePhone, billingMailingAddress: s.billingMailingAddress,
     paymentMethod: s.paymentMethod, paymentTerms: s.paymentTerms, remittanceEmail: s.remittanceEmail,
-    bankName: s.bankName, bankBranchAddress: s.bankBranchAddress,
-    bankContactName: s.bankContactName, bankPhone: s.bankPhone,
-    accountType: s.accountType, nameOnAccount: s.nameOnAccount,
-    accountSignerName: s.accountSignerName, accountSignerTitle: s.accountSignerTitle,
-    routingMasked: s.routingLastFour ? `••••${s.routingLastFour}` : "",
-    accountMasked: s.accountLastFour ? `••••${s.accountLastFour}` : "",
-    hasWireRouting: !!s.wireRoutingEnc,
     contractorLicense: s.contractorLicense, dotNumber: s.dotNumber, locateCert: s.locateCert,
     emr: s.emr === null ? "" : String(s.emr),
     oshaRecordables: s.oshaRecordables === null ? "" : String(s.oshaRecordables),

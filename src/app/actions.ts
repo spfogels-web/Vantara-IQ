@@ -19,7 +19,6 @@ import {
 } from "@/lib/parse-material-list";
 import { findJobProfile } from "@/lib/job-profiles";
 import { isLabourOrEquipmentCode } from "@/lib/unit-codes";
-import { canStoreSecrets, encryptField } from "@/lib/secure-field";
 import { getVendorPacket } from "@/data/queries";
 import {
   assertOwnSubcontractor,
@@ -1630,18 +1629,6 @@ export type VendorPacketInput = {
   paymentMethod: string;
   paymentTerms: string;
   remittanceEmail: string;
-  bankName: string;
-  bankBranchAddress: string;
-  bankContactName: string;
-  bankPhone: string;
-  /** Plaintext inbound only — encrypted before it reaches the database. */
-  routingNumber: string;
-  wireRouting: string;
-  accountNumber: string;
-  accountType: string;
-  nameOnAccount: string;
-  accountSignerName: string;
-  accountSignerTitle: string;
   contractorLicense: string;
   dotNumber: string;
   locateCert: string;
@@ -1679,39 +1666,6 @@ export async function saveVendorPacket(subcontractorId: string, input: VendorPac
   const emr = Number.parseFloat(clean(input.emr));
   const osha = Number.parseInt(clean(input.oshaRecordables), 10);
 
-  /**
-   * Banking, encrypted on the way in.
-   *
-   * A blank field means "leave what's stored alone", not "erase it". The form
-   * never sends the real number back — it shows a mask — so treating blank as
-   * a delete would wipe a sub's account the first time they corrected a typo
-   * in their address.
-   */
-  const bankingField = (raw: string, encColumn: string, tailColumn?: string) => {
-    const digits = clean(raw).replace(/\D/g, "");
-    if (!digits) return {};
-    return {
-      [encColumn]: encryptField(digits),
-      ...(tailColumn ? { [tailColumn]: digits.slice(-4) } : {}),
-    };
-  };
-
-  const wantsBanking =
-    clean(input.routingNumber) || clean(input.wireRouting) || clean(input.accountNumber);
-  if (wantsBanking && !canStoreSecrets()) {
-    return {
-      ok: false as const,
-      error:
-        "Banking details can't be saved — VQ_FIELD_KEY isn't set on this deployment, and we won't store a routing or account number unencrypted.",
-    };
-  }
-
-  const banking = {
-    ...bankingField(input.routingNumber, "routingNumberEnc", "routingLastFour"),
-    ...bankingField(input.wireRouting, "wireRoutingEnc"),
-    ...bankingField(input.accountNumber, "accountNumberEnc", "accountLastFour"),
-  };
-
   await prisma.subcontractor.update({
     where: { id: subcontractorId },
     data: {
@@ -1744,15 +1698,6 @@ export async function saveVendorPacket(subcontractorId: string, input: VendorPac
       paymentMethod: clean(input.paymentMethod),
       paymentTerms: clean(input.paymentTerms) || 'Net 21',
       remittanceEmail: clean(input.remittanceEmail),
-      bankName: clean(input.bankName),
-      bankBranchAddress: clean(input.bankBranchAddress),
-      bankContactName: clean(input.bankContactName),
-      bankPhone: clean(input.bankPhone),
-      accountType: clean(input.accountType),
-      nameOnAccount: clean(input.nameOnAccount),
-      accountSignerName: clean(input.accountSignerName),
-      accountSignerTitle: clean(input.accountSignerTitle),
-      ...banking,
       contractorLicense: clean(input.contractorLicense),
       dotNumber: clean(input.dotNumber),
       locateCert: clean(input.locateCert),
