@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getCurrentUser, isStaff, type CurrentUser } from "@/lib/auth";
+import { canManagePhotos, getCurrentUser, isStaff, type CurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 /**
@@ -102,4 +102,30 @@ export async function assertOwnSubcontractor(subcontractorId: string): Promise<C
 /** True when this viewer is a subcontractor login rather than Fortitude staff. */
 export function isSubViewer(user: CurrentUser | null): boolean {
   return !!user && !isStaff(user.role);
+}
+
+/**
+ * Throws unless this user may publish into a project's photo record: assigned
+ * to the project (or staff, who are assigned to all of them) *and* holding one
+ * of the three roles trusted with it.
+ *
+ * Both halves matter. Project access alone would let office staff and crews
+ * upload; the role alone would let a supervisor post into a job they're not on.
+ */
+export async function assertCanManagePhotos(projectId: string): Promise<CurrentUser> {
+  const user = await assertProjectAccess(projectId);
+  if (!canManagePhotos(user.role)) {
+    throw new NotAuthorizedError("Only supervisors, PMs and admins can change project photos.");
+  }
+  return user;
+}
+
+/**
+ * Whether this viewer sees the whole photo record or only what was shared.
+ *
+ * A subcontractor is shown a photo only when somebody explicitly shared it —
+ * so this returns false for a crew, and the queries narrow to SHARED.
+ */
+export function seesInternalPhotos(user: CurrentUser | null): boolean {
+  return !!user && isStaff(user.role);
 }

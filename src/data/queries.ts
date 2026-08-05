@@ -5,9 +5,12 @@ import {
   assertOwnSubcontractor,
   assertProjectAccess,
   requireStaff,
+  seesInternalPhotos,
   viewer,
   visibleProjectIds,
 } from "@/lib/authz";
+import type { CurrentUser } from "@/lib/auth";
+import { resolveProjectCover } from "@/lib/photos";
 import {
   priceQuantities,
   valueProject,
@@ -55,8 +58,12 @@ import type {
   MissingDocument,
   Organization,
   PayApplication,
+  PhotoCategory,
   ProductionSummary,
   Project,
+  ProjectCover,
+  ProjectMapRef,
+  ProjectPhoto,
   RateSheetItem,
   ReportDefinition,
   RevenueSummary,
@@ -108,7 +115,7 @@ function toCustomer(r: CustomerRow, activeProjects: number): Customer {
 
 type ProjectRow = Awaited<ReturnType<typeof prisma.project.findMany>>[number];
 
-function toProject(r: ProjectRow): Project {
+function toProject(r: ProjectRow, cover: ProjectCover | null = null, photoCount = 0): Project {
   return {
     id: r.id,
     number: r.number,
@@ -129,8 +136,74 @@ function toProject(r: ProjectRow): Project {
     mapUrl: r.mapUrl,
     photoUrl: r.photoUrl,
     markups: r.markups,
+    cover,
+    photoCount,
   };
 }
+
+/* -- Project photos --------------------------------------------------------- */
+
+/** Prisma's SCREAMING_SNAKE enum ↔ the lower-case union the UI works in. */
+const CATEGORY_FROM_DB: Record<string, PhotoCategory> = {
+  OVERVIEW: "overview",
+  STARTING_LOCATION: "starting_location",
+  GROUND_CONDITIONS: "ground_conditions",
+  PAINT_AND_LOCATES: "paint_and_locates",
+  CONSTRUCTION_PROGRESS: "construction_progress",
+  ROAD_CROSSING: "road_crossing",
+  EQUIPMENT: "equipment",
+  MATERIALS: "materials",
+  ISSUE: "issue",
+  RESTORATION: "restoration",
+  CLOSEOUT: "closeout",
+  OTHER: "other",
+};
+
+type PhotoRow = Awaited<ReturnType<typeof prisma.projectPhoto.findMany>>[number];
+
+function toPhoto(r: PhotoRow): ProjectPhoto {
+  return {
+    id: r.id,
+    projectId: r.projectId,
+    storagePath: r.storagePath,
+    thumbnailPath: r.thumbnailPath,
+    caption: r.caption,
+    photoCategory: CATEGORY_FROM_DB[r.photoCategory] ?? "other",
+    workOrderId: r.workOrderId,
+    projectMapId: r.projectMapId,
+    locationText: r.locationText,
+    latitude: r.latitude,
+    longitude: r.longitude,
+    takenAt: r.takenAt ? r.takenAt.toISOString() : null,
+    uploadedAt: r.uploadedAt.toISOString(),
+    uploadedBy: r.uploadedBy,
+    uploadedByName: r.uploadedByName,
+    uploadedByRole: r.uploadedByRole,
+    isCoverImage: r.isCoverImage,
+    visibility: r.visibility === "SHARED" ? "shared" : "internal",
+    fileName: r.fileName,
+    mediaType: r.mediaType,
+    sizeBytes: r.sizeBytes,
+    width: r.width,
+    height: r.height,
+  };
+}
+
+/**
+ * The visibility gate, in one place: a crew sees only what was shared with
+ * them, staff see the whole record. Project access is enforced separately —
+ * this narrows *within* a project the viewer already reached.
+ */
+function photoVisibilityWhere(user: CurrentUser | null) {
+  return seesInternalPhotos(user) ? {} : { visibility: "SHARED" as const };
+}
+
+/** Newest capture first, with the chosen cover pulled to the front. */
+const PHOTO_ORDER = [
+  { isCoverImage: "desc" as const },
+  { takenAt: "desc" as const },
+  { uploadedAt: "desc" as const },
+];
 
 const SUBSTATE_LABEL: Record<string, Subcontractor["state"]> = {
   ACTIVE: "Active",
@@ -442,7 +515,28 @@ export async function getProjects(): Promise<Project[]> {
     where: allowed === null ? undefined : { id: { in: allowed } },
     orderBy: { health: "asc" },
   });
-  return rows.map(toProject);
+  if (rows.length === 0) return [];
+
+  // One query for every card's cover rather than one per card. The rows are
+  // narrow and a project's photo set is small; if this table ever grows past
+  // what that assumption carries, it becomes a per-project lateral join.
+  const photos = await prisma.projectPhoto.findMany({
+    where: { projectId: { in: rows.map((r) => r.id) }, ...photoVisibilityWhere(user) },
+    orderBy: PHOTO_ORDER,
+  });
+
+  const byProject = new Map<string, ProjectPhoto[]>();
+  for (const row of photos) {
+    const p = toPhoto(row);
+    const list = byProject.get(p.projectId);
+    if (list) list.push(p);
+    else byProject.set(p.projectId, [p]);
+  }
+
+  return rows.map((r) => {
+    const own = byProject.get(r.id) ?? [];
+    return toProject(r, resolveProjectCover(r, own), own.length);
+  });
 }
 
 /** Sorted worst-first — the dashboard table is an attention queue. */
@@ -458,7 +552,65 @@ export async function getProject(id: string): Promise<Project | undefined> {
   if (allowed !== null && !allowed.includes(id)) return undefined;
 
   const r = await prisma.project.findUnique({ where: { id } });
-  return r ? toProject(r) : undefined;
+  if (!r) return undefined;
+
+  const photos = (
+    await prisma.projectPhoto.findMany({
+      where: { projectId: id, ...photoVisibilityWhere(user) },
+      orderBy: PHOTO_ORDER,
+    })
+  ).map(toPhoto);
+
+  return toProject(r, resolveProjectCover(r, photos), photos.length);
+}
+
+/**
+ * Every photo on a project this viewer may see, newest capture first.
+ *
+ * Filtering by category, date, uploader, map and work order happens in the
+ * gallery rather than here: a project's photo set is small enough to ship once,
+ * and filtering client-side keeps five filter controls from being five round
+ * trips.
+ */
+export async function getProjectPhotos(projectId: string): Promise<ProjectPhoto[]> {
+  const user = await assertProjectAccess(projectId);
+  const rows = await prisma.projectPhoto.findMany({
+    where: { projectId, ...photoVisibilityWhere(user) },
+    orderBy: [{ takenAt: "desc" }, { uploadedAt: "desc" }],
+  });
+  return rows.map(toPhoto);
+}
+
+/** Map sheets on a project, newest first — what a photo can be pinned to. */
+export async function getProjectMaps(projectId: string): Promise<ProjectMapRef[]> {
+  await assertProjectAccess(projectId);
+  const rows = await prisma.projectMap.findMany({
+    where: { projectId },
+    orderBy: { createdAt: "desc" },
+  });
+  return rows.map((m) => ({
+    id: m.id,
+    label: m.label || m.fileName || "Project map",
+    fileName: m.fileName,
+    url: m.url,
+    isPrimary: m.isPrimary,
+    createdAt: m.createdAt.toISOString(),
+  }));
+}
+
+/**
+ * Work-order numbers already used on this project's photos. Feeds the uploader's
+ * suggestions and the gallery's filter, so the same WO isn't typed three ways.
+ */
+export async function getProjectWorkOrders(projectId: string): Promise<string[]> {
+  const user = await assertProjectAccess(projectId);
+  const rows = await prisma.projectPhoto.findMany({
+    where: { projectId, workOrderId: { not: "" }, ...photoVisibilityWhere(user) },
+    select: { workOrderId: true },
+    distinct: ["workOrderId"],
+    orderBy: { workOrderId: "asc" },
+  });
+  return rows.map((r) => r.workOrderId);
 }
 
 /**

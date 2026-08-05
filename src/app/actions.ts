@@ -22,10 +22,12 @@ import { isLabourOrEquipmentCode } from "@/lib/unit-codes";
 import { canStoreSecrets, encryptField } from "@/lib/secure-field";
 import { getVendorPacket } from "@/data/queries";
 import {
+  assertCanManagePhotos,
   assertOwnSubcontractor,
   assertProjectAccess,
   requireStaff,
   requireUser,
+  viewer,
 } from "@/lib/authz";
 
 /**
@@ -818,9 +820,38 @@ export async function uploadProjectMap(formData: FormData) {
     where: { id: projectId },
     data: { mapUrl: dataUrl, mapOriginalUrl: dataUrl },
   });
+  await recordProjectMap(projectId, dataUrl, file.name);
   revalidatePath("/projects");
   revalidatePath(`/projects/${projectId}`);
   return { ok: true as const, dataUrl };
+}
+
+/**
+ * Files the uploaded sheet in ProjectMap so a photo can point at the map it
+ * belongs to and the gallery can filter by it. The active sheet is still
+ * `Project.mapUrl`; this is the record of what came in, so re-uploading the
+ * same URL updates the existing row rather than stacking duplicates.
+ */
+async function recordProjectMap(projectId: string, url: string, fileName: string) {
+  const existing = await prisma.projectMap.findFirst({ where: { projectId, url } });
+  if (existing) {
+    await prisma.projectMap.update({ where: { id: existing.id }, data: { isPrimary: true } });
+    return existing.id;
+  }
+  // Only one sheet is the active one — the newest upload takes it.
+  await prisma.projectMap.updateMany({ where: { projectId }, data: { isPrimary: false } });
+  const user = await viewer();
+  const created = await prisma.projectMap.create({
+    data: {
+      projectId,
+      url,
+      fileName,
+      label: fileName || "Project map",
+      isPrimary: true,
+      uploadedBy: user?.id ?? "",
+    },
+  });
+  return created.id;
 }
 
 /**
@@ -828,13 +859,14 @@ export async function uploadProjectMap(formData: FormData) {
  * This path has no practical size limit (large map PDFs go straight to storage;
  * we only persist the short https URL).
  */
-export async function saveProjectMapUrl(projectId: string, url: string) {
+export async function saveProjectMapUrl(projectId: string, url: string, fileName = "") {
   await requireStaff();
   if (!projectId || !url) return { ok: false as const, error: "Missing map." };
   await prisma.project.update({
     where: { id: projectId },
     data: { mapUrl: url, mapOriginalUrl: url },
   });
+  await recordProjectMap(projectId, url, fileName);
   revalidatePath("/projects");
   revalidatePath(`/projects/${projectId}`);
   return { ok: true as const, url };
@@ -851,6 +883,331 @@ export async function saveProjectPhotoUrl(projectId: string, url: string) {
   revalidatePath("/projects");
   revalidatePath(`/projects/${projectId}`);
   return { ok: true as const, url };
+}
+
+/* ---- Project photos ------------------------------------------------------- *
+ *
+ * The satellite overview plus the physical record of the job. Every write here
+ * goes through assertCanManagePhotos, which checks both halves of the rule: the
+ * user is on this project, and holds one of the three roles trusted to publish
+ * into it (supervisor, PM, admin). Reads live in queries.ts and narrow to
+ * SHARED for a crew.
+ *
+ * The browser uploads the original to Blob and generates the thumbnail there,
+ * so these actions only ever persist metadata plus two URLs — no image bytes
+ * pass through a serverless function on the normal path.
+ * ------------------------------------------------------------------------- */
+
+const PHOTO_CATEGORIES = new Set([
+  "OVERVIEW",
+  "STARTING_LOCATION",
+  "GROUND_CONDITIONS",
+  "PAINT_AND_LOCATES",
+  "CONSTRUCTION_PROGRESS",
+  "ROAD_CROSSING",
+  "EQUIPMENT",
+  "MATERIALS",
+  "ISSUE",
+  "RESTORATION",
+  "CLOSEOUT",
+  "OTHER",
+]);
+
+type DbCategory =
+  | "OVERVIEW"
+  | "STARTING_LOCATION"
+  | "GROUND_CONDITIONS"
+  | "PAINT_AND_LOCATES"
+  | "CONSTRUCTION_PROGRESS"
+  | "ROAD_CROSSING"
+  | "EQUIPMENT"
+  | "MATERIALS"
+  | "ISSUE"
+  | "RESTORATION"
+  | "CLOSEOUT"
+  | "OTHER";
+
+/** Category arrives from the client, so it is checked rather than trusted. */
+function toDbCategory(c: string | undefined): DbCategory {
+  const up = (c ?? "").toUpperCase();
+  return (PHOTO_CATEGORIES.has(up) ? up : "OTHER") as DbCategory;
+}
+
+function toDbVisibility(v: string | undefined) {
+  return v === "shared" ? ("SHARED" as const) : ("INTERNAL" as const);
+}
+
+/** Rejects a nonsense fix rather than storing a pin in the Atlantic. */
+function cleanCoord(lat: unknown, lon: unknown) {
+  const la = typeof lat === "number" && Number.isFinite(lat) ? lat : null;
+  const lo = typeof lon === "number" && Number.isFinite(lon) ? lon : null;
+  if (la === null || lo === null) return { latitude: null, longitude: null };
+  if (Math.abs(la) > 90 || Math.abs(lo) > 180) return { latitude: null, longitude: null };
+  if (la === 0 && lo === 0) return { latitude: null, longitude: null };
+  return { latitude: la, longitude: lo };
+}
+
+function cleanDate(iso: unknown): Date | null {
+  if (typeof iso !== "string" || !iso) return null;
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return null;
+  // A camera with a dead clock reports 1970 or 2098; neither is a work date.
+  const year = new Date(t).getFullYear();
+  if (year < 2000 || year > new Date().getFullYear() + 1) return null;
+  return new Date(t);
+}
+
+export type ProjectPhotoInput = {
+  /** Blob (or data) URL of the untouched original. */
+  storagePath: string;
+  /** Optimized derivative; empty when the browser couldn't decode the format. */
+  thumbnailPath?: string;
+  caption?: string;
+  photoCategory?: string;
+  workOrderId?: string;
+  projectMapId?: string | null;
+  locationText?: string;
+  latitude?: number | null;
+  longitude?: number | null;
+  takenAt?: string | null;
+  visibility?: string;
+  fileName?: string;
+  mediaType?: string;
+  sizeBytes?: number;
+  width?: number | null;
+  height?: number | null;
+  /** Make this the project's cover once it's stored. */
+  makeCover?: boolean;
+};
+
+/**
+ * Files a batch of uploaded photos. Returns how many landed, so the uploader can
+ * report "6 of 7 added" rather than failing the whole set for one bad file.
+ */
+export async function createProjectPhotos(projectId: string, photos: ProjectPhotoInput[]) {
+  const user = await assertCanManagePhotos(projectId);
+  const usable = (photos ?? []).filter((p) => p && typeof p.storagePath === "string" && p.storagePath);
+  if (usable.length === 0) return { ok: false as const, error: "No photos to save." };
+
+  // A map id from the client is only honoured if it belongs to this project.
+  const mapIds = new Set(
+    (
+      await prisma.projectMap.findMany({ where: { projectId }, select: { id: true } })
+    ).map((m) => m.id),
+  );
+
+  const created = await prisma.$transaction(
+    usable.map((p) => {
+      const coords = cleanCoord(p.latitude, p.longitude);
+      return prisma.projectPhoto.create({
+        data: {
+          projectId,
+          uploadedBy: user.id,
+          uploadedByName: user.name,
+          uploadedByRole: user.role,
+          caption: (p.caption ?? "").trim().slice(0, 500),
+          photoCategory: toDbCategory(p.photoCategory),
+          workOrderId: (p.workOrderId ?? "").trim().slice(0, 60),
+          projectMapId: p.projectMapId && mapIds.has(p.projectMapId) ? p.projectMapId : null,
+          locationText: (p.locationText ?? "").trim().slice(0, 200),
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          takenAt: cleanDate(p.takenAt),
+          visibility: toDbVisibility(p.visibility),
+          storagePath: p.storagePath,
+          thumbnailPath: p.thumbnailPath ?? "",
+          fileName: (p.fileName ?? "").slice(0, 200),
+          mediaType: p.mediaType ?? "",
+          sizeBytes: Number.isFinite(p.sizeBytes) ? Number(p.sizeBytes) : 0,
+          width: typeof p.width === "number" ? p.width : null,
+          height: typeof p.height === "number" ? p.height : null,
+        },
+        select: { id: true },
+      });
+    }),
+  );
+
+  // If the batch nominated a cover, apply it after the rows exist so the
+  // "exactly one cover" rule is enforced in one place.
+  const coverIndex = usable.findIndex((p) => p.makeCover);
+  if (coverIndex >= 0) await applyCover(projectId, created[coverIndex].id);
+
+  revalidatePath("/projects");
+  revalidatePath(`/projects/${projectId}`);
+  return { ok: true as const, count: created.length, ids: created.map((c) => c.id) };
+}
+
+/**
+ * Fallback for when no Blob store is connected: the bytes come through the
+ * server action and are stored as data URLs. Capped well under the serverless
+ * body limit — anything larger genuinely needs BLOB_READ_WRITE_TOKEN, and
+ * saying so beats a truncated upload.
+ */
+const MAX_INLINE_PHOTO_BYTES = 4 * 1024 * 1024;
+
+export async function uploadProjectPhotoInline(formData: FormData) {
+  const projectId = String(formData.get("projectId") || "");
+  if (!projectId) return { ok: false as const, error: "Missing project." };
+  await assertCanManagePhotos(projectId);
+
+  const file = formData.get("file") as File | null;
+  if (!file) return { ok: false as const, error: "Missing photo." };
+  if (!file.type.startsWith("image/")) return { ok: false as const, error: "That's not an image." };
+  if (file.size > MAX_INLINE_PHOTO_BYTES) {
+    return {
+      ok: false as const,
+      error:
+        "Photos over 4 MB need Blob storage. Set BLOB_READ_WRITE_TOKEN in .env (Vercel → Storage → Blob), then restart the dev server.",
+    };
+  }
+
+  const buf = Buffer.from(await file.arrayBuffer());
+  const dataUrl = `data:${file.type};base64,${buf.toString("base64")}`;
+
+  // The thumbnail was generated in the browser and posted alongside; if it
+  // didn't come through, the original doubles as its own thumbnail.
+  const thumb = formData.get("thumbnail") as File | null;
+  let thumbUrl = "";
+  if (thumb && thumb.size > 0 && thumb.size <= MAX_INLINE_PHOTO_BYTES) {
+    const tbuf = Buffer.from(await thumb.arrayBuffer());
+    thumbUrl = `data:${thumb.type || "image/webp"};base64,${tbuf.toString("base64")}`;
+  }
+
+  return { ok: true as const, storagePath: dataUrl, thumbnailPath: thumbUrl };
+}
+
+/** Exactly one photo per project carries the cover flag. */
+async function applyCover(projectId: string, photoId: string) {
+  await prisma.$transaction([
+    prisma.projectPhoto.updateMany({
+      where: { projectId, isCoverImage: true },
+      data: { isCoverImage: false },
+    }),
+    prisma.projectPhoto.update({
+      where: { id: photoId },
+      data: { isCoverImage: true },
+    }),
+  ]);
+}
+
+/**
+ * Chooses the image shown on the Projects page.
+ *
+ * An internal photo is a legitimate cover: covers are resolved per viewer
+ * against the photos that viewer may see, so staff get the chosen shot while a
+ * crew's card falls back to the newest photo shared with them. Nobody is ever
+ * handed a cover they can't load, and choosing one leaks nothing.
+ */
+export async function setProjectCoverPhoto(projectId: string, photoId: string) {
+  await assertCanManagePhotos(projectId);
+  const photo = await prisma.projectPhoto.findUnique({
+    where: { id: photoId },
+    select: { projectId: true },
+  });
+  if (!photo || photo.projectId !== projectId) {
+    return { ok: false as const, error: "That photo isn't on this project." };
+  }
+
+  await applyCover(projectId, photoId);
+  revalidatePath("/projects");
+  revalidatePath(`/projects/${projectId}`);
+  return { ok: true as const };
+}
+
+/** Clears the chosen cover; the card falls back to the newest jobsite photo. */
+export async function clearProjectCoverPhoto(projectId: string) {
+  await assertCanManagePhotos(projectId);
+  await prisma.projectPhoto.updateMany({
+    where: { projectId, isCoverImage: true },
+    data: { isCoverImage: false },
+  });
+  revalidatePath("/projects");
+  revalidatePath(`/projects/${projectId}`);
+  return { ok: true as const };
+}
+
+export type PhotoMetaInput = {
+  caption?: string;
+  photoCategory?: string;
+  workOrderId?: string;
+  projectMapId?: string | null;
+  locationText?: string;
+  visibility?: string;
+};
+
+/** Edits one photo's metadata. Nothing here can move it to another project. */
+export async function updateProjectPhoto(photoId: string, input: PhotoMetaInput) {
+  const photo = await prisma.projectPhoto.findUnique({
+    where: { id: photoId },
+    select: { projectId: true },
+  });
+  if (!photo) return { ok: false as const, error: "That photo no longer exists." };
+  await assertCanManagePhotos(photo.projectId);
+
+  const mapOk =
+    input.projectMapId
+      ? !!(await prisma.projectMap.findFirst({
+          where: { id: input.projectMapId, projectId: photo.projectId },
+          select: { id: true },
+        }))
+      : false;
+
+  await prisma.projectPhoto.update({
+    where: { id: photoId },
+    data: {
+      caption: (input.caption ?? "").trim().slice(0, 500),
+      photoCategory: toDbCategory(input.photoCategory),
+      workOrderId: (input.workOrderId ?? "").trim().slice(0, 60),
+      projectMapId: mapOk ? input.projectMapId : null,
+      locationText: (input.locationText ?? "").trim().slice(0, 200),
+      visibility: toDbVisibility(input.visibility),
+    },
+  });
+
+  revalidatePath("/projects");
+  revalidatePath(`/projects/${photo.projectId}`);
+  return { ok: true as const };
+}
+
+/** Shares a set of photos with the project's crews, or pulls them back. */
+export async function setProjectPhotosVisibility(
+  projectId: string,
+  photoIds: string[],
+  visibility: string,
+) {
+  await assertCanManagePhotos(projectId);
+  const ids = (photoIds ?? []).filter((id) => typeof id === "string" && id);
+  if (ids.length === 0) return { ok: false as const, error: "Nothing selected." };
+
+  const next = toDbVisibility(visibility);
+  await prisma.projectPhoto.updateMany({
+    // Scoped to the project so an id from another job can't be swept in.
+    where: { id: { in: ids }, projectId },
+    data: { visibility: next },
+  });
+
+  revalidatePath("/projects");
+  revalidatePath(`/projects/${projectId}`);
+  return { ok: true as const, count: ids.length };
+}
+
+/**
+ * Removes a photo's record. The blob itself is left in storage: deleting it
+ * would break any closeout package or export that already references the URL,
+ * and orphaned blobs are a storage-cost problem rather than a correctness one.
+ */
+export async function deleteProjectPhoto(photoId: string) {
+  const photo = await prisma.projectPhoto.findUnique({
+    where: { id: photoId },
+    select: { projectId: true },
+  });
+  if (!photo) return { ok: true as const };
+  await assertCanManagePhotos(photo.projectId);
+
+  await prisma.projectPhoto.delete({ where: { id: photoId } });
+  revalidatePath("/projects");
+  revalidatePath(`/projects/${photo.projectId}`);
+  return { ok: true as const };
 }
 
 /** Persists as-built redline markups (lines + dots) drawn over the map. */

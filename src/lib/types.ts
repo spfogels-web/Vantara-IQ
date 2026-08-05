@@ -49,10 +49,92 @@ export interface Project {
   updatedAt: string;
   /** Uploaded project map (Blob or data URL); may carry redline markup. */
   mapUrl?: string | null;
-  /** Jobsite cover photo shown on the project card. */
+  /** Legacy single cover photo. Superseded by the photo gallery, and still read
+   *  as the last fallback when resolving what a card should paint. */
   photoUrl?: string | null;
   /** As-built redline markups (lines + dots) drawn over the map. */
   markups?: unknown;
+  /** What the card paints above the details, already filtered to what this
+   *  viewer may see. Null means the card draws its placeholder. */
+  cover?: ProjectCover | null;
+  /** How many photos this viewer is allowed to see on the project. */
+  photoCount?: number;
+}
+
+/* ------------------------------------------------------------------ *
+ * Project photos — the satellite/map overview plus the physical record
+ * of the job: ground conditions, locates, crossings, staging, active
+ * work, restoration and closeout.
+ * ------------------------------------------------------------------ */
+
+export type PhotoCategory =
+  | "overview"
+  | "starting_location"
+  | "ground_conditions"
+  | "paint_and_locates"
+  | "construction_progress"
+  | "road_crossing"
+  | "equipment"
+  | "materials"
+  | "issue"
+  | "restoration"
+  | "closeout"
+  | "other";
+
+/** `internal` is staff-only; `shared` is the explicit opt-in that exposes a
+ *  photo to the crews assigned to the project. */
+export type PhotoVisibility = "internal" | "shared";
+
+export interface ProjectPhoto {
+  id: string;
+  projectId: string;
+  /** The original file, exactly as uploaded — never re-encoded. */
+  storagePath: string;
+  /** Optimized derivative for grids and covers; empty means use the original. */
+  thumbnailPath: string;
+  caption: string;
+  photoCategory: PhotoCategory;
+  workOrderId: string;
+  projectMapId: string | null;
+  locationText: string;
+  latitude: number | null;
+  longitude: number | null;
+  /** ISO string — EXIF capture time when the camera recorded one. */
+  takenAt: string | null;
+  uploadedAt: string;
+  uploadedBy: string;
+  uploadedByName: string;
+  uploadedByRole: string | null;
+  isCoverImage: boolean;
+  visibility: PhotoVisibility;
+  fileName: string;
+  mediaType: string;
+  sizeBytes: number;
+  width: number | null;
+  height: number | null;
+}
+
+/** The image a project leads with, and where it came from. */
+export interface ProjectCover {
+  /** Full-resolution source, for the detail hero and the lightbox. */
+  url: string;
+  /** Optimized source, for cards and grids. */
+  thumbUrl: string;
+  source: "cover" | "photo" | "overview" | "map" | "legacy";
+  photoId?: string;
+  caption?: string;
+  photoCategory?: PhotoCategory;
+  takenAt?: string | null;
+}
+
+/** One map sheet a photo can be pinned to. */
+export interface ProjectMapRef {
+  id: string;
+  label: string;
+  fileName: string;
+  url: string;
+  isPrimary: boolean;
+  createdAt: string;
 }
 
 export interface HealthBucket {

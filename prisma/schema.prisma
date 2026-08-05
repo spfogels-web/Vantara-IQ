@@ -18,6 +18,9 @@ datasource db {
 enum Role {
   ADMIN
   PM
+  /// Field supervision. Staff — sees every project — and one of the three roles
+  /// trusted to add jobsite photos and choose a project's cover.
+  SUPERVISOR
   OFFICE
   SUBCONTRACTOR
 }
@@ -143,7 +146,101 @@ model Project {
   /// typed names — renaming a project can no longer revoke a crew's access,
   /// and deleting one cannot leave an assignment pointing at nothing.
   crews            Subcontractor[]   @relation("ProjectCrews")
+  maps             ProjectMap[]
+  photos           ProjectPhoto[]
   createdAt        DateTime          @default(now())
+}
+
+/// A map sheet uploaded to a project.
+///
+/// `Project.mapUrl` stays the active sheet the detail page renders and redlines;
+/// this table is the record of what was uploaded, which is what lets a photo be
+/// pinned to the map it belongs to and the gallery filter by map.
+model ProjectMap {
+  id         String         @id @default(cuid())
+  project    Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId  String
+  label      String         @default("")
+  fileName   String         @default("")
+  url        String
+  isPrimary  Boolean        @default(true)
+  uploadedBy String         @default("")
+  photos     ProjectPhoto[]
+  createdAt  DateTime       @default(now())
+
+  @@index([projectId])
+}
+
+/// What a photo shows. `OVERVIEW` is the satellite/map view of the job; every
+/// other value is a physical photo taken standing on the site.
+enum PhotoCategory {
+  OVERVIEW
+  STARTING_LOCATION
+  GROUND_CONDITIONS
+  PAINT_AND_LOCATES
+  CONSTRUCTION_PROGRESS
+  ROAD_CROSSING
+  EQUIPMENT
+  MATERIALS
+  ISSUE
+  RESTORATION
+  CLOSEOUT
+  OTHER
+}
+
+/// INTERNAL is Fortitude staff only. SHARED is the explicit opt-in that lets the
+/// crews assigned to the project see a photo — a subcontractor is shown nothing
+/// else, which is why this defaults to INTERNAL rather than the other way round.
+enum PhotoVisibility {
+  INTERNAL
+  SHARED
+}
+
+/// One jobsite or overview photo on a project.
+///
+/// `storagePath` is the original file exactly as it was uploaded — it is the
+/// evidence, so it is never re-encoded. `thumbnailPath` is the optimized
+/// derivative the galleries and card covers draw, generated on the device that
+/// took the photo. Both are Blob URLs, or data URLs on the small-file fallback
+/// path used when no Blob store is connected.
+model ProjectPhoto {
+  id             String          @id @default(cuid())
+  project        Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId      String
+  /// Uploading user's id, plus their name and role captured at upload time so
+  /// the credit on a photo survives staffing changes.
+  uploadedBy     String          @default("")
+  uploadedByName String          @default("")
+  uploadedByRole Role?
+  uploadedAt     DateTime        @default(now())
+  caption        String          @default("")
+  photoCategory  PhotoCategory   @default(OTHER)
+  /// Utility-issued work order. Free text, not an FK — these come off the
+  /// customer's paperwork and exist nowhere in this database.
+  workOrderId    String          @default("")
+  projectMap     ProjectMap?     @relation(fields: [projectMapId], references: [id], onDelete: SetNull)
+  projectMapId   String?
+  /// Where on the job, in the words a crew would use: "Sta 12+50, N side".
+  locationText   String          @default("")
+  latitude       Float?
+  longitude      Float?
+  /// When the shot was taken — EXIF capture time, falling back to the file's
+  /// modified time. Distinct from uploadedAt: photos are filed hours later.
+  takenAt        DateTime?
+  isCoverImage   Boolean         @default(false)
+  visibility     PhotoVisibility @default(INTERNAL)
+  storagePath    String
+  thumbnailPath  String          @default("")
+  fileName       String          @default("")
+  mediaType      String          @default("")
+  sizeBytes      Int             @default(0)
+  width          Int?
+  height         Int?
+  createdAt      DateTime        @default(now())
+
+  @@index([projectId, photoCategory])
+  @@index([projectId, isCoverImage])
+  @@index([projectId, takenAt])
 }
 
 /// A saved Globe-style subcontractor daily billing sheet. The grids are stored

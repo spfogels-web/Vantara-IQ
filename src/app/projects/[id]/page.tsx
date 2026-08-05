@@ -8,7 +8,10 @@ import {
   getProject,
   getProjectMaterialImports,
   getProjectMaterials,
+  getProjectMaps,
+  getProjectPhotos,
   getProjectValuation,
+  getProjectWorkOrders,
 } from "@/data/queries";
 import { cn } from "@/lib/utils";
 import { toneStyles } from "@/lib/tone";
@@ -18,8 +21,10 @@ import {
   formatPercent,
 } from "@/lib/format";
 import { ProjectCover } from "@/components/projects/project-cover";
+import { ProjectPhotos } from "@/components/projects/project-photos";
 import { ProjectValue } from "@/components/projects/project-value";
-import { getCurrentUser, isStaff } from "@/lib/auth";
+import { canManagePhotos, getCurrentUser, isStaff } from "@/lib/auth";
+import type { ProjectMapRef, ProjectPhoto } from "@/lib/types";
 import { PageShell } from "@/components/common/page-shell";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { HealthRing } from "@/components/common/health-ring";
@@ -32,12 +37,20 @@ export const dynamic = "force-dynamic";
 
 export default async function ProjectDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string; upload?: string }>;
 }) {
   const { id } = await params;
+  const { tab: rawTab, upload } = await searchParams;
   const me = await getCurrentUser();
   const staff = !!me && isStaff(me.role);
+  const canPhotos = !!me && canManagePhotos(me.role);
+
+  // The tab lives in the URL rather than in client state, so "Photos" on a card
+  // is a link straight to it and the back button does what it should.
+  const tab = rawTab === "photos" ? "photos" : "overview";
 
   const [project, dailies] = await Promise.all([getProject(id), getDailies()]);
 
@@ -45,16 +58,35 @@ export default async function ProjectDetailPage({
   // assigned to, so an unassigned crew gets a 404 rather than a map.
   if (!project) notFound();
 
+  const onPhotos = tab === "photos";
+
   // The customer record carries what Fortitude bills the GC. Staff only — a
   // subcontractor has no business reading the margin on their own work.
-  const customers = staff ? await getCustomers() : [];
+  const customers = staff && !onPhotos ? await getCustomers() : [];
 
-  // The valuation is staff-only and throws for a crew by design, so don't ask.
-  const [materialImports, trackedMaterials, valuation] = await Promise.all([
-    getProjectMaterialImports(project.id, project.name),
-    getProjectMaterials(project.id),
-    staff ? getProjectValuation(project.id) : Promise.resolve(null),
-  ]);
+  // Each tab pays only for its own data. The valuation is staff-only and throws
+  // for a crew by design, so don't ask.
+  let materialImports: Awaited<ReturnType<typeof getProjectMaterialImports>> = [];
+  let trackedMaterials: Awaited<ReturnType<typeof getProjectMaterials>> = [];
+  let valuation: Awaited<ReturnType<typeof getProjectValuation>> | null = null;
+  if (!onPhotos) {
+    [materialImports, trackedMaterials, valuation] = await Promise.all([
+      getProjectMaterialImports(project.id, project.name),
+      getProjectMaterials(project.id),
+      staff ? getProjectValuation(project.id) : Promise.resolve(null),
+    ]);
+  }
+
+  let photos: ProjectPhoto[] = [];
+  let maps: ProjectMapRef[] = [];
+  let workOrders: string[] = [];
+  if (onPhotos) {
+    [photos, maps, workOrders] = await Promise.all([
+      getProjectPhotos(project.id),
+      getProjectMaps(project.id),
+      getProjectWorkOrders(project.id),
+    ]);
+  }
 
   const daysToFinish = Math.ceil(project.remainingFt / Math.max(project.actualFtPerDay, 1));
 
@@ -89,12 +121,37 @@ export default async function ProjectDetailPage({
         <ProjectCover
           projectId={project.id}
           projectNumber={project.number}
-          photoUrl={project.photoUrl}
-          mapUrl={project.mapUrl}
-          className="h-56 rounded-2xl border border-border/60 sm:h-72"
+          cover={project.cover ?? null}
+          photoCount={project.photoCount ?? 0}
+          hasMap={!!project.mapUrl}
+          canManage={canPhotos}
+          variant="hero"
         />
       </div>
 
+      {/* Tabs. Overview is everything that was already here; Photos is the
+          project's visual record. */}
+      <nav className="mb-3 flex items-center gap-1 border-b border-border/60">
+        <TabLink href={`/projects/${project.id}`} active={tab === "overview"} label="Overview" />
+        <TabLink
+          href={`/projects/${project.id}?tab=photos`}
+          active={onPhotos}
+          label="Photos"
+          count={project.photoCount ?? 0}
+        />
+      </nav>
+
+      {onPhotos ? (
+        <ProjectPhotos
+          projectId={project.id}
+          photos={photos}
+          maps={maps}
+          workOrders={workOrders}
+          canManage={canPhotos}
+          initialUploadOpen={upload === "1"}
+        />
+      ) : (
+      <>
       {/* Status first: health, pace and progress read in one line before
           anything else on the page. */}
       <div className="mb-3">
@@ -146,8 +203,9 @@ export default async function ProjectDetailPage({
       ) : null}
 
       {/* The map runs the full width — it's a plan drawing, and redlining it
-          is the one thing on this page that genuinely needs the room. */}
-      <div className="mb-3">
+          is the one thing on this page that genuinely needs the room. The id is
+          what a card's "View map" action scrolls to. */}
+      <div id="project-map" className="mb-3 scroll-mt-20">
         <ProjectMapPanel
           projectId={project.id}
           initialMapUrl={project.mapUrl}
@@ -238,7 +296,42 @@ export default async function ProjectDetailPage({
           </Panel>
         </div>
       </div>
+      </>
+      )}
     </PageShell>
+  );
+}
+
+/** One tab in the project's tab strip. A link, so the URL is the state. */
+function TabLink({
+  href,
+  active,
+  label,
+  count,
+}: {
+  href: string;
+  active: boolean;
+  label: string;
+  count?: number;
+}) {
+  return (
+    <Link
+      href={href}
+      aria-current={active ? "page" : undefined}
+      className={cn(
+        "focus-ring -mb-px inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-[12.5px] font-medium transition-colors",
+        active
+          ? "border-brand text-foreground"
+          : "border-transparent text-muted-foreground hover:text-foreground",
+      )}
+    >
+      {label}
+      {typeof count === "number" && count > 0 ? (
+        <span className="num rounded-full bg-foreground/[0.07] px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground ring-1 ring-inset ring-foreground/[0.06]">
+          {count}
+        </span>
+      ) : null}
+    </Link>
   );
 }
 

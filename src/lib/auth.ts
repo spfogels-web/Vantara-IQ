@@ -22,7 +22,7 @@ import { prisma } from "@/lib/prisma";
 export const SESSION_COOKIE = "vq_session";
 const SESSION_DAYS = 7;
 
-export type SessionRole = "ADMIN" | "PM" | "OFFICE" | "SUBCONTRACTOR";
+export type SessionRole = "ADMIN" | "PM" | "SUPERVISOR" | "OFFICE" | "SUBCONTRACTOR";
 
 export interface SessionPayload {
   userId: string;
@@ -109,7 +109,17 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
 
 /** Staff see the whole operation; subcontractors see only their own work. */
 export function isStaff(role: SessionRole) {
-  return role === "ADMIN" || role === "PM" || role === "OFFICE";
+  return role === "ADMIN" || role === "PM" || role === "SUPERVISOR" || role === "OFFICE";
+}
+
+/**
+ * Who may add jobsite photos, edit their metadata, share them out and choose
+ * the cover shown on the Projects page: supervisors, project managers and
+ * administrators. Office staff read the full internal record but don't publish
+ * into it, and a subcontractor does neither.
+ */
+export function canManagePhotos(role: SessionRole) {
+  return role === "ADMIN" || role === "PM" || role === "SUPERVISOR";
 }
 
 export async function setSessionCookie(token: string) {

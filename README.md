@@ -33,6 +33,48 @@ Shell: collapsible sidebar (⌘/Ctrl+B, persisted), sticky glass topbar, ⌘/Ctr
 command palette, notifications popover, quick-actions and profile menus, and a
 mobile drawer.
 
+## Project photos
+
+Every project carries a satellite/map overview plus the physical record of the
+job — ground conditions, paint and locate flags, the starting location, road and
+driveway crossings, material and equipment staging, active construction, issues,
+restoration and closeout. Photos live in `ProjectPhoto`; `ProjectMap` records the
+map sheets so a photo can be pinned to the one it belongs to.
+
+| Piece | Where |
+| --- | --- |
+| Card / hero cover, gradient overlay, quick actions | `projects/project-cover.tsx` |
+| Project card (cover + numbers) | `projects/project-card.tsx` |
+| Photos tab — filters, grid, lightbox, sharing | `projects/project-photos.tsx` |
+| Multi-upload, phone capture, per-photo captions | `projects/photo-uploader.tsx` |
+| Category vocabulary + cover precedence | `lib/photos.ts` |
+| EXIF capture time and GPS, no dependency | `lib/exif.ts` |
+| On-device thumbnails | `lib/image.ts` |
+| Upload path (Blob, with a small-file fallback) | `lib/photo-upload.ts` |
+
+**Cover precedence.** `resolveProjectCover()` decides what a project leads with,
+once, for every screen: the photo somebody chose as cover → the newest physical
+jobsite photo → the satellite overview → a raster map → the polished placeholder
+with an *Upload cover* button. It runs against the photos the *viewer* may see,
+so a crew's card falls back to the newest photo shared with them rather than
+showing an internal shot. Covers sit in a fixed 16:9 (21:9 for the detail hero)
+and are always `object-cover`, so nothing stretches and the grid stays aligned.
+
+**Who can add photos.** Supervisors, project managers and admins — enforced in
+`assertCanManagePhotos()`, which requires both project access and the role.
+Office staff read the full internal record without publishing into it.
+
+**What a subcontractor sees.** Only photos explicitly set to `SHARED`, narrowed
+in the query rather than the component, so there is no client-side filter to
+bypass. Visibility defaults to `INTERNAL`.
+
+**Originals and thumbnails.** The original file is uploaded untouched — it is the
+evidence. The optimized derivative is generated on the device that took the photo
+(canvas, long edge 1400px, WebP), which keeps a twenty-card Projects page off
+twenty full-resolution phone photos without an image binary on the server.
+Capture time and GPS are read from the file's own EXIF before upload, falling
+back to the file's modified time and an optional device fix.
+
 ## Architecture
 
 ```

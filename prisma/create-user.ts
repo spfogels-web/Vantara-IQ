@@ -49,13 +49,13 @@ async function main() {
       email,
       name,
       passwordHash,
-      role: role as "ADMIN" | "PM" | "OFFICE" | "SUBCONTRACTOR",
+      role: role as "ADMIN" | "PM" | "SUPERVISOR" | "OFFICE" | "SUBCONTRACTOR",
       organizationId: org.id,
     },
     update: {
       name,
       passwordHash,
-      role: role as "ADMIN" | "PM" | "OFFICE" | "SUBCONTRACTOR",
+      role: role as "ADMIN" | "PM" | "SUPERVISOR" | "OFFICE" | "SUBCONTRACTOR",
       organizationId: org.id,
     },
   });
