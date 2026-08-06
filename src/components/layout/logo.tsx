@@ -153,3 +153,58 @@ export function VantaraLockup({
     </span>
   );
 }
+
+/* ------------------------------------------------------------------ *
+ * NEXGEN BUILD AI brand lockup.
+ * ------------------------------------------------------------------ */
+
+const BANNER_SRC = "/nexgen-banner.png";
+
+/**
+ * The full NEXGEN BUILD AI banner, for the expanded rail.
+ *
+ * The source art is a 1536x1024 canvas with the lockup as a wide band through
+ * the middle, so `object-contain` alone would shrink it to a stamp and leave
+ * most of the row empty. It is scaled up and cropped to the band instead, which
+ * is why the wrapper clips rather than letterboxes.
+ *
+ * The artwork carries an alpha channel and its letterforms are light with dark
+ * outlines, so it reads on the near-black rail without a plate behind it.
+ */
+export function NexgenBanner({ className }: { className?: string }) {
+  return (
+    <span className={cn("relative block h-8 w-[150px] overflow-hidden", className)}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={BANNER_SRC}
+        alt="NEXGEN BUILD AI"
+        className="absolute left-1/2 top-1/2 w-[150px] max-w-none -translate-x-1/2 -translate-y-1/2 object-contain"
+        style={{ height: 150 * (1024 / 1536) }}
+      />
+    </span>
+  );
+}
+
+/**
+ * Just the N mark, for the collapsed rail.
+ *
+ * Cropped from the left of the same banner rather than shipped as a second
+ * asset — one file to replace when the brand changes, and no risk of the two
+ * drifting apart.
+ */
+export function NexgenMark({ size = 30, className }: { size?: number; className?: string }) {
+  return (
+    <span
+      className={cn("relative block shrink-0 overflow-hidden", className)}
+      style={{ width: size, height: size }}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={BANNER_SRC}
+        alt="NEXGEN BUILD AI"
+        className="absolute left-0 top-1/2 max-w-none -translate-y-1/2 object-contain"
+        style={{ width: size * 3.4, height: size * 3.4 * (1024 / 1536) }}
+      />
+    </span>
+  );
+}

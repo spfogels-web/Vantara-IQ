@@ -20,7 +20,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { VantaraMark, Wordmark } from "@/components/layout/logo";
+import { NexgenBanner, NexgenMark } from "@/components/layout/logo";
 import { FeedbackDialog } from "@/components/layout/feedback-dialog";
 import { useSidebar } from "@/components/layout/sidebar-context";
 
@@ -141,11 +141,10 @@ export function SidebarContent({
         <Link
           href={homeHrefFor(role)}
           onClick={onNavigate}
-          aria-label="Vantara IQ"
+          aria-label="NEXGEN BUILD AI"
           className="focus-ring flex min-w-0 items-center gap-2.5 rounded-lg"
         >
-          <VantaraMark size={collapsed ? 30 : 32} />
-          {!collapsed && <Wordmark />}
+          {collapsed ? <NexgenMark size={30} /> : <NexgenBanner />}
         </Link>
         {!collapsed && showCollapseButton ? (
           <button
