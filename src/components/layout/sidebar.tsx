@@ -138,13 +138,27 @@ export function SidebarContent({
           collapsed ? "justify-center px-0" : "gap-2.5 px-4",
         )}
       >
+        {/* The company using the software owns this space, not the software.
+            Their logo when they have uploaded one; the platform mark only as a
+            fallback so a fresh account isn't blank. */}
         <Link
           href={homeHrefFor(role)}
           onClick={onNavigate}
-          aria-label="NEXGEN BUILD AI"
+          aria-label="Home"
           className="focus-ring flex min-w-0 items-center gap-2.5 rounded-lg"
         >
-          {collapsed ? <NexgenMark size={30} /> : <NexgenBanner />}
+          {logoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={logoUrl}
+              alt=""
+              className={cn("object-contain", collapsed ? "size-8" : "h-9 max-w-[168px]")}
+            />
+          ) : collapsed ? (
+            <NexgenMark size={30} />
+          ) : (
+            <NexgenBanner />
+          )}
         </Link>
         {!collapsed && showCollapseButton ? (
           <button

@@ -1,0 +1,89 @@
+import { NextResponse } from "next/server";
+
+import { prisma } from "@/lib/prisma";
+import { requireStaff } from "@/lib/authz";
+import { buildRateSheetPdf } from "@/lib/rate-sheet-pdf";
+
+export const runtime = "nodejs";
+
+/**
+ * Download a subcontractor's rate sheet as a PDF.
+ *
+ * Built from the rates as they stand right now, so editing a rate in the app
+ * and downloading again produces a correct sheet — there is no second copy to
+ * keep in step. Staff only: a sheet carries what every code pays, and a crew
+ * has no business downloading another's.
+ */
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ subcontractorId: string }> },
+) {
+  const { subcontractorId } = await params;
+  await requireStaff();
+
+  const [sub, org] = await Promise.all([
+    prisma.subcontractor.findUnique({
+      where: { id: subcontractorId },
+      select: {
+        company: true,
+        legalName: true,
+        rates: {
+          orderBy: { code: "asc" },
+          select: { code: true, description: true, unit: true, rate: true },
+        },
+      },
+    }),
+    prisma.organization.findFirst({ select: { name: true, logoUrl: true } }),
+  ]);
+
+  if (!sub) return NextResponse.json({ error: "Subcontractor not found." }, { status: 404 });
+  if (sub.rates.length === 0) {
+    return NextResponse.json(
+      { error: "This crew has no rates yet — add them before generating a sheet." },
+      { status: 400 },
+    );
+  }
+
+  // The company's own mark, not the platform's. Fetched rather than embedded so
+  // replacing the logo in Settings changes every future sheet.
+  let logo: { bytes: Uint8Array; mime: string } | null = null;
+  if (org?.logoUrl) {
+    try {
+      const res = await fetch(org.logoUrl);
+      if (res.ok) {
+        const mime = res.headers.get("content-type") ?? "image/png";
+        if (/png|jpe?g/i.test(mime)) {
+          logo = { bytes: new Uint8Array(await res.arrayBuffer()), mime };
+        }
+      }
+    } catch {
+      // A missing logo is not a reason to withhold the rate sheet.
+    }
+  }
+
+  const generatedOn = new Date().toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+
+  const pdf = await buildRateSheetPdf({
+    companyName: org?.name ?? "Fortitude Infrastructure",
+    subcontractorName: sub.legalName?.trim() || sub.company,
+    title: "Subcontractor rates",
+    subtitle: "Rates below apply to approved daily production on assigned projects.",
+    terms: "NET 21 · Fast pay options available",
+    lines: sub.rates,
+    logo,
+    generatedOn,
+  });
+
+  const safe = sub.company.replace(/[^\w.\-]+/g, "-").slice(0, 60);
+  return new NextResponse(Buffer.from(pdf), {
+    headers: {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="rate-sheet-${safe}.pdf"`,
+      "Cache-Control": "private, no-store",
+    },
+  });
+}

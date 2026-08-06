@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Loader2, Plus, Trash2 } from "lucide-react";
+import { Download, Loader2, Plus, Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/format";
@@ -147,6 +147,18 @@ export function SubRateCard({ subcontractorId }: { subcontractorId: string }) {
         >
           <Plus className="size-3.5" /> Add rate
         </button>
+        {/* Generated from the rates as they stand, so an edited rate is
+            already correct on the sheet you send — no second copy to keep in
+            step with the app. */}
+        <a
+          href={`/api/rate-sheet/${subcontractorId}`}
+          className={cn(
+            "focus-ring inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand px-2.5 text-[12px] font-semibold text-white hover:bg-brand-bright",
+            !rates?.length && "pointer-events-none opacity-40",
+          )}
+        >
+          <Download className="size-3.5" /> Rate sheet PDF
+        </a>
       </PanelHeader>
 
       {adding ? (
