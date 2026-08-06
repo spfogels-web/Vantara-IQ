@@ -19,6 +19,7 @@ import {
 } from "@/lib/parse-material-list";
 import { findJobProfile } from "@/lib/job-profiles";
 import { isLabourOrEquipmentCode } from "@/lib/unit-codes";
+import { describeFileRejection } from "@/lib/document-storage";
 import { getVendorPacket } from "@/data/queries";
 import {
   assertOwnSubcontractor,
@@ -1729,4 +1730,131 @@ export async function getVendorPacketFor(subcontractorId: string) {
   await assertOwnSubcontractor(subcontractorId);
   const packet = await getVendorPacket(subcontractorId);
   return packet ? { ok: true as const, packet } : { ok: false as const, packet: null };
+}
+
+/* ------------------------------------------------------------------ *
+ * Document centre — upload and file access.
+ * ------------------------------------------------------------------ */
+
+const DOC_TYPES = new Set([
+  "NDA", "MASTER_SUBCONTRACTOR_AGREEMENT", "PROJECT_SUBCONTRACTOR_AGREEMENT",
+  "SUBCONTRACTOR_RATE_CARD", "CHANGE_ORDER", "PURCHASE_ORDER", "CUSTOMER_CONTRACT",
+  "WORK_AUTHORIZATION", "INSURANCE_REQUEST", "W9_REQUEST", "LIEN_WAIVER",
+  "SAFETY_FORM", "EMPLOYMENT_DOCUMENT", "VENDOR_AGREEMENT", "CLOSEOUT", "CUSTOM",
+]);
+
+/**
+ * Record a file the browser has already put in storage.
+ *
+ * The upload itself goes straight from the browser to the store so a 40 MB
+ * scanned agreement isn't squeezed through a serverless request body. This
+ * action is what makes it a *document*: it creates the record, its first
+ * version, the file row and the opening audit entry, in one transaction so a
+ * half-made document can't exist.
+ */
+export async function registerUploadedDocument(input: {
+  storageKey: string;
+  fileName: string;
+  mime: string;
+  sizeBytes: number;
+  title?: string;
+  type?: string;
+  projectId?: string;
+  subcontractorId?: string;
+  customerId?: string;
+}) {
+  const user = await requireStaff();
+
+  const key = (input.storageKey ?? "").trim();
+  if (!key) return { ok: false as const, error: "Nothing was uploaded." };
+
+  const rejection = describeFileRejection(input.mime ?? "", input.sizeBytes ?? 0);
+  if (rejection) return { ok: false as const, error: rejection };
+
+  const type = DOC_TYPES.has(input.type ?? "") ? (input.type as string) : "CUSTOM";
+  const title =
+    (input.title ?? "").trim() ||
+    (input.fileName ?? "Untitled").replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim() ||
+    "Untitled document";
+
+  const doc = await prisma.$transaction(async (tx) => {
+    const created = await tx.document.create({
+      data: {
+        title,
+        type: type as never,
+        status: "DRAFT",
+        createdBy: user.id,
+        ownerId: user.id,
+        projectId: input.projectId || null,
+        subcontractorId: input.subcontractorId || null,
+        customerId: input.customerId || null,
+      },
+    });
+
+    // An uploaded file is version 1. Its body is empty because the content is
+    // the file itself until somebody converts it into an editable template.
+    const version = await tx.documentVersion.create({
+      data: {
+        documentId: created.id,
+        versionNo: 1,
+        changeReason: "Uploaded",
+        createdBy: user.id,
+      },
+    });
+
+    const file = await tx.documentFile.create({
+      data: {
+        documentId: created.id,
+        versionId: version.id,
+        kind: "original_upload",
+        storageKey: key,
+        fileName: input.fileName ?? "",
+        mime: input.mime ?? "",
+        sizeBytes: input.sizeBytes ?? 0,
+        uploadedBy: user.id,
+        scanStatus: "not_scanned",
+      },
+    });
+
+    await tx.document.update({
+      where: { id: created.id },
+      data: { currentVersionId: version.id },
+    });
+
+    await tx.documentAuditEvent.create({
+      data: {
+        documentId: created.id,
+        versionId: version.id,
+        action: "document.uploaded",
+        actorUserId: user.id,
+        actorEmail: user.email,
+        detail: { fileName: input.fileName, sizeBytes: input.sizeBytes, fileId: file.id },
+      },
+    });
+
+    return created;
+  });
+
+  revalidatePath("/documents");
+  return { ok: true as const, id: doc.id };
+}
+
+/** Soft-delete. Legal records are never removed outright. */
+export async function archiveDocument(id: string) {
+  const user = await requireStaff();
+  const doc = await prisma.document.findUnique({ where: { id }, select: { status: true } });
+  if (!doc) return { ok: false as const, error: "Document not found." };
+  if (doc.status === "EXECUTED") {
+    return {
+      ok: false as const,
+      error: "An executed document can't be archived — supersede it with a new version instead.",
+    };
+  }
+
+  await prisma.document.update({ where: { id }, data: { archivedAt: new Date(), status: "ARCHIVED" } });
+  await prisma.documentAuditEvent.create({
+    data: { documentId: id, action: "document.archived", actorUserId: user.id, actorEmail: user.email },
+  });
+  revalidatePath("/documents");
+  return { ok: true as const };
 }

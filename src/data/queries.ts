@@ -1485,6 +1485,7 @@ export async function getDocumentDashboard(): Promise<DocumentDashboard> {
         subcontractor: { select: { company: true } },
         customer: { select: { name: true } },
         versions: { orderBy: { versionNo: "desc" }, take: 1, select: { versionNo: true } },
+        files: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true } },
       },
     }),
   ]);

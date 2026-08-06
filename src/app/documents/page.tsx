@@ -10,12 +10,13 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
-import { getDocumentDashboard, type DocumentSummary } from "@/data/queries";
+import { getDocumentDashboard, getProjects, getSubcontractors, type DocumentSummary } from "@/data/queries";
 import { cn } from "@/lib/utils";
 import { formatWhen } from "@/lib/format";
 import { PageShell } from "@/components/common/page-shell";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { StatusPill } from "@/components/common/status-pill";
+import { DocumentUpload } from "@/components/documents/document-upload";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Documents · Vantara IQ" };
@@ -75,7 +76,11 @@ const TYPE_LABEL: Record<string, string> = {
 };
 
 export default async function DocumentsPage() {
-  const d = await getDocumentDashboard();
+  const [d, projects, subs] = await Promise.all([
+    getDocumentDashboard(),
+    getProjects(),
+    getSubcontractors(),
+  ]);
 
   return (
     <PageShell
@@ -107,6 +112,11 @@ export default async function DocumentsPage() {
           />
           <Kpi label="Executed" value={d.executed} icon={<Archive className="size-3.5" />} />
         </div>
+
+        <DocumentUpload
+          projects={projects.map((p) => ({ id: p.id, name: p.name, number: p.number }))}
+          subcontractors={subs.map((x) => ({ id: x.id, company: x.company }))}
+        />
 
         <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
           <div className="xl:col-span-8">
