@@ -1413,6 +1413,8 @@ export interface DocumentSummary {
   expirationDate: string;
   versionNo: number;
   updatedAt: string;
+  /** Newest attached file, for a one-click download straight from a row. */
+  fileId: string | null;
 }
 
 export interface DocumentDashboard {
@@ -1512,6 +1514,88 @@ export async function getDocumentDashboard(): Promise<DocumentDashboard> {
       expirationDate: d.expirationDate,
       versionNo: d.versions[0]?.versionNo ?? 0,
       updatedAt: d.updatedAt.toISOString(),
+      fileId: d.files[0]?.id ?? null,
     })),
   };
+}
+
+export interface DocumentFileRef {
+  id: string;
+  fileName: string;
+  mime: string;
+  sizeBytes: number;
+  kind: string;
+  createdAt: string;
+}
+
+export interface DocumentDetail extends DocumentSummary {
+  files: DocumentFileRef[];
+  createdAt: string;
+}
+
+/**
+ * Every document a viewer may see.
+ *
+ * Staff see the lot. A crew sees only documents addressed to their company or
+ * explicitly shared with them — the same rule the download route enforces, so
+ * the list and the file can never disagree about who is allowed what.
+ */
+export async function getDocuments(): Promise<DocumentDetail[]> {
+  const user = await viewer();
+  if (!user) return [];
+
+  const staffViewer = await visibleProjectIds(user).then((v) => v === null);
+
+  const rows = await prisma.document.findMany({
+    where: {
+      deletedAt: null,
+      ...(staffViewer
+        ? {}
+        : {
+            OR: [
+              { subcontractorId: user.subcontractorId ?? "" },
+              {
+                access: {
+                  some: {
+                    canView: true,
+                    OR: [{ subcontractorId: user.subcontractorId ?? "" }, { userId: user.id }],
+                  },
+                },
+              },
+            ],
+          }),
+    },
+    orderBy: { updatedAt: "desc" },
+    include: {
+      project: { select: { name: true } },
+      subcontractor: { select: { company: true } },
+      customer: { select: { name: true } },
+      versions: { orderBy: { versionNo: "desc" }, take: 1, select: { versionNo: true } },
+      files: { orderBy: { createdAt: "desc" } },
+    },
+  });
+
+  return rows.map((d) => ({
+    id: d.id,
+    title: d.title,
+    type: d.type,
+    status: d.status,
+    project: d.project?.name ?? null,
+    subcontractor: d.subcontractor?.company ?? null,
+    customer: d.customer?.name ?? null,
+    effectiveDate: d.effectiveDate,
+    expirationDate: d.expirationDate,
+    versionNo: d.versions[0]?.versionNo ?? 1,
+    updatedAt: d.updatedAt.toISOString(),
+    createdAt: d.createdAt.toISOString(),
+    fileId: d.files[0]?.id ?? null,
+    files: d.files.map((f) => ({
+      id: f.id,
+      fileName: f.fileName,
+      mime: f.mime,
+      sizeBytes: f.sizeBytes,
+      kind: f.kind,
+      createdAt: f.createdAt.toISOString(),
+    })),
+  }));
 }
