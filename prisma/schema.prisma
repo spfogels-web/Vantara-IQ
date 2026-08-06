@@ -19,6 +19,8 @@ enum Role {
   ADMIN
   PM
   OFFICE
+  /// Field supervisor working for Fortitude — staff access, same as a PM.
+  SUPERVISOR
   SUBCONTRACTOR
 }
 
@@ -77,6 +79,7 @@ model Customer {
   projects       Project[]
   documents      CustomerDocument[]
   rates          CustomerRate[]
+  contracts      Document[]
   createdAt      DateTime           @default(now())
 }
 
@@ -143,6 +146,7 @@ model Project {
   /// typed names — renaming a project can no longer revoke a crew's access,
   /// and deleting one cannot leave an assignment pointing at nothing.
   crews            Subcontractor[]   @relation("ProjectCrews")
+  documents        Document[]
   createdAt        DateTime          @default(now())
 }
 
@@ -314,6 +318,7 @@ model Subcontractor {
   users     User[]
   documents SubDocument[]
   rates     SubcontractorRate[]
+  contracts Document[]
   createdAt DateTime            @default(now())
 }
 
@@ -444,4 +449,319 @@ model ExtractedRow {
   status      RowStatus  @default(PENDING)
   data        Json       @default("{}")
   createdAt   DateTime   @default(now())
+}
+
+/**
+ * ================================================================== *
+ * Document Intelligence Center
+ * A document is structured content, not a file. A version holds the
+ * editor tree plus the variable values and clause versions resolved at
+ * render time; the PDF is an output. That is what makes versioning,
+ * diffing and comparison possible — a stack of PDFs cannot be diffed.
+ * Executed versions are immutable. Corrections create a new version or
+ * an amendment that supersedes; nothing overwrites signed history.
+ * ==================================================================
+ */
+
+enum DocType {
+  NDA
+  MASTER_SUBCONTRACTOR_AGREEMENT
+  PROJECT_SUBCONTRACTOR_AGREEMENT
+  SUBCONTRACTOR_RATE_CARD
+  CHANGE_ORDER
+  PURCHASE_ORDER
+  CUSTOMER_CONTRACT
+  WORK_AUTHORIZATION
+  INSURANCE_REQUEST
+  W9_REQUEST
+  LIEN_WAIVER
+  SAFETY_FORM
+  EMPLOYMENT_DOCUMENT
+  VENDOR_AGREEMENT
+  CLOSEOUT
+  CUSTOM
+}
+
+enum DocStatus {
+  DRAFT
+  INTERNAL_REVIEW
+  CHANGES_REQUESTED
+  APPROVED
+  READY_TO_SEND
+  SENT
+  VIEWED
+  PARTIALLY_SIGNED
+  SIGNED
+  EXECUTED
+  EXPIRED
+  SUPERSEDED
+  ARCHIVED
+  VOIDED
+}
+
+enum ApprovalStatus {
+  NOT_REQUESTED
+  PENDING
+  APPROVED
+  CHANGES_REQUESTED
+}
+
+/// A reusable starting point. Holds slots; the resolver fills them.
+model DocumentTemplate {
+  id             String              @id @default(cuid())
+  name           String
+  type           DocType             @default(CUSTOM)
+  category       String              @default("")
+  description    String              @default("")
+  /// Editor tree with variable slots and clause anchors.
+  bodyJson       Json                @default("{}")
+  version        Int                 @default(1)
+  active         Boolean             @default(true)
+  approvalStatus ApprovalStatus      @default(NOT_REQUESTED)
+  approvedBy     String?
+  approvedAt     DateTime?
+  supersedesId   String?
+  createdBy      String              @default("")
+  documents      Document[]
+  conditions     TemplateCondition[]
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([type, active])
+}
+
+/// A variable a template can reference. sourcePath is how it resolves
+/// against live data, e.g. "subcontractor.legalName" or "project.number".
+model TemplateVariable {
+  id         String   @id @default(cuid())
+  key        String   @unique
+  label      String
+  sourcePath String   @default("")
+  kind       String   @default("text")
+  /// Custom variables are author-defined; built-ins ship with the app.
+  custom     Boolean  @default(false)
+  sample     String   @default("")
+  createdAt  DateTime @default(now())
+}
+
+/// "If project state is Georgia, insert the Georgia governing-law clause."
+model TemplateCondition {
+  id         String           @id @default(cuid())
+  template   DocumentTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  templateId String
+  /// Structured predicate, evaluated server-side. Never eval'd as code.
+  expression Json             @default("{}")
+  clause     Clause?          @relation(fields: [clauseId], references: [id])
+  clauseId   String?
+  sectionKey String           @default("")
+  order      Int              @default(0)
+
+  @@index([templateId])
+}
+
+/// A versioned block of contract language.
+model Clause {
+  id             String              @id @default(cuid())
+  name           String
+  category       String              @default("")
+  body           String              @default("")
+  version        Int                 @default(1)
+  effectiveDate  String              @default("")
+  /// Empty means "applies everywhere" for both of these.
+  states         String[]            @default([])
+  customerIds    String[]            @default([])
+  active         Boolean             @default(true)
+  approvalStatus ApprovalStatus      @default(NOT_REQUESTED)
+  supersedesId   String?
+  createdBy      String              @default("")
+  conditions     TemplateCondition[]
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([category, active])
+}
+
+model Document {
+  id               String            @id @default(cuid())
+  type             DocType           @default(CUSTOM)
+  title            String
+  status           DocStatus         @default(DRAFT)
+  /// Pointer to the version currently in force. Never deleted.
+  currentVersionId String?
+  template         DocumentTemplate? @relation(fields: [templateId], references: [id])
+  templateId       String?
+
+  customer        Customer?      @relation(fields: [customerId], references: [id])
+  customerId      String?
+  project         Project?       @relation(fields: [projectId], references: [id])
+  projectId       String?
+  subcontractor   Subcontractor? @relation(fields: [subcontractorId], references: [id])
+  subcontractorId String?
+  rateCardId      String?
+  dailyId         String?
+  invoiceId       String?
+
+  effectiveDate  String @default("")
+  expirationDate String @default("")
+
+  ownerId      String    @default("")
+  createdBy    String    @default("")
+  /// When this document was replaced by a newer agreement.
+  supersedesId String?
+  archivedAt   DateTime?
+  /// Soft delete — legal records are never hard-deleted.
+  deletedAt    DateTime?
+
+  versions   DocumentVersion[]
+  files      DocumentFile[]
+  access     DocumentAccess[]
+  favorites  DocumentFavorite[]
+  auditTrail DocumentAuditEvent[]
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+
+  @@index([status])
+  @@index([type])
+  @@index([projectId])
+  @@index([subcontractorId])
+  @@index([customerId])
+}
+
+model DocumentVersion {
+  id         String   @id @default(cuid())
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentId String
+  versionNo  Int
+
+  /// The editable content — the source of truth, not the PDF.
+  bodyJson          Json @default("{}")
+  /// What the variables resolved to when this version was rendered, so an
+  /// executed document still reads correctly after the source data moves on.
+  variablesSnapshot Json @default("{}")
+  /// Which clause versions were used, for the same reason.
+  clausesSnapshot   Json @default("[]")
+
+  changeReason    String         @default("")
+  changedSections String[]       @default([])
+  approvalStatus  ApprovalStatus @default(NOT_REQUESTED)
+  approvedBy      String?
+  approvedAt      DateTime?
+
+  /// SHA-256 of the rendered PDF, so a signature binds to exact content.
+  checksum  String  @default("")
+  pdfFileId String?
+
+  /// Set the moment the document executes. A locked version is immutable.
+  lockedAt  DateTime?
+  createdBy String    @default("")
+  createdAt DateTime  @default(now())
+
+  fields   DocumentField[]
+  comments DocumentComment[]
+
+  @@unique([documentId, versionNo])
+  @@index([documentId])
+}
+
+/// A placed field on a page — where a signer signs, dates or fills in.
+model DocumentField {
+  id        String          @id @default(cuid())
+  version   DocumentVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  versionId String
+  kind      String          @default("text")
+  page      Int             @default(1)
+  x         Float           @default(0)
+  y         Float           @default(0)
+  w         Float           @default(0)
+  h         Float           @default(0)
+  /// Which signer must complete it; null means an internal fill-in.
+  signerId  String?
+  required  Boolean         @default(true)
+  label     String          @default("")
+  value     String          @default("")
+  options   String[]        @default([])
+  sortOrder Int             @default(0)
+
+  @@index([versionId])
+}
+
+/// A stored object. Originals and generated files are kept apart so an
+/// upload is never overwritten by a render.
+model DocumentFile {
+  id         String    @id @default(cuid())
+  document   Document? @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentId String?
+  versionId  String?
+  /// original_upload | generated_pdf | executed_pdf | audit_certificate |
+  /// signature_image | attachment
+  kind       String    @default("attachment")
+  storageKey String
+  fileName   String    @default("")
+  mime       String    @default("")
+  sizeBytes  Int       @default(0)
+  checksum   String    @default("")
+  scanStatus String    @default("pending")
+  uploadedBy String    @default("")
+  createdAt  DateTime  @default(now())
+
+  @@index([documentId])
+}
+
+model DocumentComment {
+  id         String          @id @default(cuid())
+  version    DocumentVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  versionId  String
+  anchor     String          @default("")
+  body       String
+  /// Internal notes are never visible to a subcontractor.
+  internal   Boolean         @default(true)
+  authorId   String          @default("")
+  resolvedAt DateTime?
+  createdAt  DateTime        @default(now())
+
+  @@index([versionId])
+}
+
+/// An explicit share. A crew sees a document because of a row here or
+/// because it is addressed to their company — never by guessing an id.
+model DocumentAccess {
+  id              String   @id @default(cuid())
+  document        Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentId      String
+  subcontractorId String?
+  userId          String?
+  canView         Boolean  @default(true)
+  canSign         Boolean  @default(false)
+  sharedBy        String   @default("")
+  createdAt       DateTime @default(now())
+
+  @@index([documentId])
+  @@index([subcontractorId])
+}
+
+model DocumentFavorite {
+  id         String   @id @default(cuid())
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentId String
+  userId     String
+  createdAt  DateTime @default(now())
+
+  @@unique([documentId, userId])
+}
+
+/// Append-only. Every action that touches a document lands here.
+model DocumentAuditEvent {
+  id          String   @id @default(cuid())
+  document    Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  documentId  String
+  versionId   String?
+  action      String
+  actorUserId String?
+  actorEmail  String   @default("")
+  detail      Json     @default("{}")
+  ip          String   @default("")
+  userAgent   String   @default("")
+  at          DateTime @default(now())
+
+  @@index([documentId, at])
 }

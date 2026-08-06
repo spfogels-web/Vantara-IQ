@@ -22,7 +22,7 @@ import { prisma } from "@/lib/prisma";
 export const SESSION_COOKIE = "vq_session";
 const SESSION_DAYS = 7;
 
-export type SessionRole = "ADMIN" | "PM" | "OFFICE" | "SUBCONTRACTOR";
+export type SessionRole = "ADMIN" | "PM" | "OFFICE" | "SUPERVISOR" | "SUBCONTRACTOR";
 
 export interface SessionPayload {
   userId: string;
@@ -109,7 +109,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
 
 /** Staff see the whole operation; subcontractors see only their own work. */
 export function isStaff(role: SessionRole) {
-  return role === "ADMIN" || role === "PM" || role === "OFFICE";
+  return role === "ADMIN" || role === "PM" || role === "OFFICE" || role === "SUPERVISOR";
 }
 
 export async function setSessionCookie(token: string) {

@@ -1396,3 +1396,121 @@ export async function getVendorPacket(subcontractorId: string): Promise<VendorPa
     }),
   };
 }
+
+/* ------------------------------------------------------------------ *
+ * Document Intelligence Center.
+ * ------------------------------------------------------------------ */
+
+export interface DocumentSummary {
+  id: string;
+  title: string;
+  type: string;
+  status: string;
+  project: string | null;
+  subcontractor: string | null;
+  customer: string | null;
+  effectiveDate: string;
+  expirationDate: string;
+  versionNo: number;
+  updatedAt: string;
+}
+
+export interface DocumentDashboard {
+  drafts: number;
+  awaitingApproval: number;
+  awaitingSignature: number;
+  signedThisMonth: number;
+  expiringSoon: number;
+  executed: number;
+  templates: number;
+  clauses: number;
+  total: number;
+  recent: DocumentSummary[];
+}
+
+/** Statuses that mean "sent, not finished" — the signature queue. */
+const AWAITING_SIGNATURE = ["SENT", "VIEWED", "PARTIALLY_SIGNED"] as const;
+
+/**
+ * The document dashboard.
+ *
+ * Counts come from the database, so an empty centre reports zeros rather than
+ * a plausible-looking figure. A zero that is true tells you what to set up.
+ */
+export async function getDocumentDashboard(): Promise<DocumentDashboard> {
+  await requireStaff();
+
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const soon = new Date(now.getTime() + 30 * 86_400_000).toISOString().slice(0, 10);
+  const today = now.toISOString().slice(0, 10);
+
+  const live = { deletedAt: null };
+
+  const [
+    drafts,
+    awaitingApproval,
+    awaitingSignature,
+    signedThisMonth,
+    expiringSoon,
+    executed,
+    templates,
+    clauses,
+    total,
+    recentRows,
+  ] = await Promise.all([
+    prisma.document.count({ where: { ...live, status: "DRAFT" } }),
+    prisma.document.count({ where: { ...live, status: { in: ["INTERNAL_REVIEW", "CHANGES_REQUESTED"] } } }),
+    prisma.document.count({ where: { ...live, status: { in: [...AWAITING_SIGNATURE] } } }),
+    prisma.document.count({
+      where: { ...live, status: { in: ["SIGNED", "EXECUTED"] }, updatedAt: { gte: monthStart } },
+    }),
+    prisma.document.count({
+      where: {
+        ...live,
+        status: { notIn: ["ARCHIVED", "VOIDED", "SUPERSEDED", "EXPIRED"] },
+        expirationDate: { gt: "", lte: soon, gte: today },
+      },
+    }),
+    prisma.document.count({ where: { ...live, status: "EXECUTED" } }),
+    prisma.documentTemplate.count({ where: { active: true } }),
+    prisma.clause.count({ where: { active: true } }),
+    prisma.document.count({ where: live }),
+    prisma.document.findMany({
+      where: live,
+      orderBy: { updatedAt: "desc" },
+      take: 8,
+      include: {
+        project: { select: { name: true } },
+        subcontractor: { select: { company: true } },
+        customer: { select: { name: true } },
+        versions: { orderBy: { versionNo: "desc" }, take: 1, select: { versionNo: true } },
+      },
+    }),
+  ]);
+
+  return {
+    drafts,
+    awaitingApproval,
+    awaitingSignature,
+    signedThisMonth,
+    expiringSoon,
+    executed,
+    templates,
+    clauses,
+    total,
+    recent: recentRows.map((d) => ({
+      id: d.id,
+      title: d.title,
+      type: d.type,
+      status: d.status,
+      project: d.project?.name ?? null,
+      subcontractor: d.subcontractor?.company ?? null,
+      customer: d.customer?.name ?? null,
+      effectiveDate: d.effectiveDate,
+      expirationDate: d.expirationDate,
+      versionNo: d.versions[0]?.versionNo ?? 0,
+      updatedAt: d.updatedAt.toISOString(),
+    })),
+  };
+}

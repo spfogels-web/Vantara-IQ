@@ -14,6 +14,7 @@ const ROLE_LABEL: Record<string, string> = {
   ADMIN: "Administrator",
   PM: "Project manager",
   OFFICE: "Office",
+  SUPERVISOR: "Supervisor",
   SUBCONTRACTOR: "Subcontractor",
 };
 
