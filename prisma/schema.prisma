@@ -256,6 +256,9 @@ model Subcontractor {
   crewSize       Int       @default(0)
   equipment      String[]  @default([])
   logoUrl        String?
+  /// Internal note on this crew — why their rates differ, what kit they run,
+  /// anything the office needs to see beside the name. Never shown to the sub.
+  notes          String    @default("")
   since          String    @default("")
 
   // ---- Vendor packet -------------------------------------------------------

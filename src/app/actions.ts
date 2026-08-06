@@ -162,6 +162,7 @@ export type SubcontractorInput = {
   crewSize: number;
   state: string;
   since: string;
+  notes: string;
 };
 
 /** "Trenching, Conduit , Restoration" -> ["Trenching","Conduit","Restoration"] */
@@ -187,6 +188,7 @@ function subcontractorData(input: SubcontractorInput) {
     state: state as "INVITED" | "ONBOARDING" | "PENDING_REVIEW" | "ACTIVE" | "INACTIVE",
     tone: state === "ACTIVE" ? "success" : state === "INACTIVE" ? "neutral" : "warning",
     since: input.since.trim(),
+    notes: (input.notes ?? "").trim(),
   };
 }
 

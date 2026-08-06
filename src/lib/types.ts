@@ -291,6 +291,8 @@ export interface Subcontractor {
   complianceTone: Tone;
   scorecard: SubScorecard;
   crewSize: number;
+  /** Internal note — why rates differ, what kit they run. Staff only. */
+  notes: string;
   /** From the required capabilities statement submitted at onboarding. */
   equipment: string[];
   since: string;

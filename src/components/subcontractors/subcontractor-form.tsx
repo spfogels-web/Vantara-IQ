@@ -48,6 +48,7 @@ const empty: SubcontractorInput = {
   crewSize: 0,
   state: "PENDING_REVIEW",
   since: String(new Date().getFullYear()),
+  notes: "",
 };
 
 function fromSub(s: Subcontractor): SubcontractorInput {
@@ -62,6 +63,7 @@ function fromSub(s: Subcontractor): SubcontractorInput {
     crewSize: s.crewSize,
     state: STATE_FROM_LABEL[s.state] ?? "PENDING_REVIEW",
     since: s.since,
+    notes: s.notes,
   };
 }
 
@@ -220,6 +222,17 @@ export function SubcontractorForm({
                 className={cn(inputClass, "num")}
               />
             </Field>
+            {/* The asterisk: why this crew is different. Kept internal — a note
+                saying "pays $6 bore, runs a drill" is exactly what a sub should
+                not read on their own profile. */}
+            <Field label="Internal note" className="sm:col-span-2">
+              <input
+                value={form.notes}
+                onChange={(e) => set("notes", e.target.value)}
+                placeholder="e.g. Runs a directional drill — $6.00 bore rate"
+                className={inputClass}
+              />
+            </Field>
             <Field label="Status">
               <select
                 value={form.state}
@@ -264,15 +277,17 @@ function Field({
   label,
   hint,
   required,
+  className,
   children,
 }: {
   label: string;
   hint?: string;
   required?: boolean;
+  className?: string;
   children: React.ReactNode;
 }) {
   return (
-    <label className="flex flex-col gap-1.5">
+    <label className={cn("flex flex-col gap-1.5", className)}>
       <span className="text-[11.5px] font-medium text-muted-foreground">
         {label}
         {required ? <span className="ml-0.5 text-critical">*</span> : null}

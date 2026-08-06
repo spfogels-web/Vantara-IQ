@@ -175,6 +175,7 @@ function toSubcontractor(r: SubRow): Subcontractor {
     complianceTone: r.complianceTone as Tone,
     scorecard: (r.scorecard as unknown as SubScorecard) ?? emptyScorecard,
     crewSize: r.crewSize,
+    notes: r.notes,
     equipment: r.equipment,
     since: r.since,
   };

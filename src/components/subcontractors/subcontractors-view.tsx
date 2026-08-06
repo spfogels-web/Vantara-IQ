@@ -548,6 +548,22 @@ function SubDetail({
         </Panel>
       </div>
 
+      {/* The asterisk on this crew — why their numbers differ. Staff only, and
+          it sits above the rate card because that is usually what it explains. */}
+      {s.notes.trim() ? (
+        <Panel className="border-warning/25 bg-warning/[0.05]">
+          <PanelBody className="flex items-start gap-2.5">
+            <BadgeCheck className="mt-0.5 size-4 shrink-0 text-warning" />
+            <div className="min-w-0">
+              <p className="text-[11px] font-medium uppercase tracking-[0.06em] text-muted-foreground">
+                Internal note
+              </p>
+              <p className="mt-0.5 text-[12.5px] text-foreground">{s.notes}</p>
+            </div>
+          </PanelBody>
+        </Panel>
+      ) : null}
+
       {/* The vendor packet the sub filled in from their own portal */}
       <PacketSummary key={`packet-${s.id}`} subcontractorId={s.id} />
 
