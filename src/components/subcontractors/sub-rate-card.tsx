@@ -109,6 +109,25 @@ export function SubRateCard({ subcontractorId }: { subcontractorId: string }) {
     void load();
   }
 
+  /**
+   * Save a text field on blur, and only when it actually changed.
+   *
+   * Blur rather than keystroke: a rate card is a legal figure, and writing on
+   * every character would fill the history with half-typed values.
+   */
+  async function setField(
+    id: string,
+    field: "code" | "description" | "unit",
+    raw: string,
+    current: string,
+  ) {
+    const next = raw.trim();
+    if (next === current.trim()) return;
+    const res = await updateSubRate(id, { [field]: next });
+    if (!res.ok) setError(res.error);
+    void load();
+  }
+
   async function remove(id: string) {
     await deleteSubRate(id);
     void load();
@@ -118,7 +137,7 @@ export function SubRateCard({ subcontractorId }: { subcontractorId: string }) {
     <Panel>
       <PanelHeader
         title="Rate card"
-        description="What we pay this sub, per unit code — the basis for their pay application."
+        description="What we pay this sub, per unit code. Edit any cell and it saves when you click away."
         count={rates?.length ?? 0}
       >
         <button
@@ -224,29 +243,49 @@ export function SubRateCard({ subcontractorId }: { subcontractorId: string }) {
             </thead>
             <tbody>
               {rates.map((r) => (
-                <tr key={r.id} className="group/rate border-b border-border/40 last:border-0 hover:bg-foreground/[0.02]">
-                  <td className="num px-4 py-2 text-[12px] font-semibold uppercase text-brand-bright sm:px-5">
-                    {r.code}
+                <tr key={r.id} className="border-b border-border/40 last:border-0 hover:bg-foreground/[0.02]">
+                  {/* Every cell is an input with a visible border. The previous
+                      version hid the borders until hover, which made an editable
+                      table look like read-only text — nobody found the edit. */}
+                  <td className="px-4 py-1.5 sm:px-5">
+                    <input
+                      defaultValue={r.code}
+                      onBlur={(e) => void setField(r.id, "code", e.target.value, r.code)}
+                      className="num w-full min-w-[7rem] rounded border border-border/70 bg-foreground/[0.03] px-1.5 py-1 text-[12px] font-semibold uppercase text-brand-bright outline-none focus:border-brand/60 focus:bg-brand/[0.06]"
+                    />
                   </td>
-                  <td className="px-3 py-2 text-[12px] text-muted-foreground">{r.description}</td>
-                  <td className="px-3 py-2 text-[11.5px] text-muted-foreground">{r.unit}</td>
-                  <td className="px-3 py-2 text-right">
+                  <td className="px-3 py-1.5">
+                    <input
+                      defaultValue={r.description}
+                      placeholder="Description"
+                      onBlur={(e) => void setField(r.id, "description", e.target.value, r.description)}
+                      className="w-full min-w-[10rem] rounded border border-border/70 bg-foreground/[0.03] px-1.5 py-1 text-[12px] text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-brand/60 focus:bg-brand/[0.06]"
+                    />
+                  </td>
+                  <td className="px-3 py-1.5">
+                    <input
+                      defaultValue={r.unit}
+                      placeholder="ft"
+                      onBlur={(e) => void setField(r.id, "unit", e.target.value, r.unit)}
+                      className="w-16 rounded border border-border/70 bg-foreground/[0.03] px-1.5 py-1 text-[11.5px] text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-brand/60 focus:bg-brand/[0.06]"
+                    />
+                  </td>
+                  <td className="px-3 py-1.5 text-right">
                     <input
                       type="number"
                       step="0.01"
                       min={0}
                       defaultValue={r.rate}
                       onBlur={(e) => void setRateValue(r.id, e.target.value, r.rate)}
-                      className="num w-24 rounded border border-transparent bg-transparent px-1.5 py-0.5 text-right text-[12.5px] font-medium text-foreground outline-none hover:border-border focus:border-brand/50 focus:bg-foreground/[0.03]"
+                      className="num w-24 rounded border border-border/70 bg-foreground/[0.03] px-1.5 py-1 text-right text-[12.5px] font-semibold text-foreground outline-none focus:border-brand/60 focus:bg-brand/[0.06]"
                     />
-                    <span className="ml-1 text-[10.5px] text-muted-foreground">/{r.unit}</span>
                   </td>
-                  <td className="px-3 py-2 text-right">
+                  <td className="px-3 py-1.5 text-right">
                     <button
                       type="button"
                       onClick={() => void remove(r.id)}
-                      title="Remove rate"
-                      className="focus-ring grid size-6 place-items-center rounded text-muted-foreground/0 transition group-hover/rate:text-muted-foreground hover:!text-critical"
+                      title="Remove this rate"
+                      className="focus-ring grid size-7 place-items-center rounded border border-border/70 text-muted-foreground transition hover:border-critical/40 hover:text-critical"
                     >
                       <Trash2 className="size-3.5" />
                     </button>

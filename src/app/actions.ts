@@ -329,13 +329,26 @@ export async function addSubRate(subcontractorId: string, input: SubRateInput) {
   return { ok: true as const };
 }
 
-export async function updateSubRate(id: string, patch: { rate?: number; description?: string }) {
+export async function updateSubRate(
+  id: string,
+  patch: { rate?: number; description?: string; unit?: string; code?: string },
+) {
   await requireStaff();
+
+  // A code is what pricing matches on, so an empty one would silently orphan
+  // the row from every daily that bills it.
+  const code = patch.code?.trim().toUpperCase();
+  if (patch.code !== undefined && !code) {
+    return { ok: false as const, error: "A rate needs a unit code." };
+  }
+
   await prisma.subcontractorRate.update({
     where: { id },
     data: {
+      ...(code ? { code } : {}),
       ...(patch.rate != null && Number.isFinite(patch.rate) ? { rate: patch.rate } : {}),
       ...(patch.description != null ? { description: patch.description.trim() } : {}),
+      ...(patch.unit != null ? { unit: patch.unit.trim() } : {}),
     },
   });
   revalidatePath("/subcontractors");
