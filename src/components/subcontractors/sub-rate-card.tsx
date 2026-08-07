@@ -4,7 +4,7 @@ import * as React from "react";
 import { Download, Loader2, Plus, Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { formatCurrency } from "@/lib/format";
+import { formatRate } from "@/lib/format";
 import { compareByPriority } from "@/lib/unit-codes";
 import {
   addSubRate,
@@ -311,7 +311,7 @@ export function SubRateCard({ subcontractorId }: { subcontractorId: string }) {
                   {rates.length} coded rate{rates.length === 1 ? "" : "s"}
                 </td>
                 <td className="num px-3 py-2 text-right text-[11.5px] text-muted-foreground">
-                  avg {formatCurrency(rates.reduce((s, r) => s + r.rate, 0) / rates.length)}
+                  avg {formatRate(rates.reduce((s, r) => s + r.rate, 0) / rates.length)}
                 </td>
                 <td />
               </tr>

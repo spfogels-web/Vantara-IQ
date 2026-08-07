@@ -7,7 +7,7 @@ import { ArrowLeft, Check, CheckCheck, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { toneStyles } from "@/lib/tone";
-import { formatCurrency } from "@/lib/format";
+import { formatRate } from "@/lib/format";
 import { bulkApproveRows, setRowStatus } from "@/app/actions";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { StatusPill } from "@/components/common/status-pill";
@@ -132,8 +132,8 @@ export function ReviewScreen({ imp, rows }: { imp: ReviewImport; rows: ReviewRow
                     {r.warning ? <span className="mt-0.5 block text-[10.5px] text-warning">⚠ {r.warning}</span> : null}
                   </td>
                   <td className="px-3 py-2.5 text-[12px] text-muted-foreground">{r.unit || "—"}</td>
-                  <td className="num px-3 py-2.5 text-right text-[12px] text-foreground">{r.rate != null ? formatCurrency(r.rate) : "—"}</td>
-                  <td className="num px-3 py-2.5 text-right text-[12px] text-muted-foreground">{r.minimum != null ? formatCurrency(r.minimum) : "—"}</td>
+                  <td className="num px-3 py-2.5 text-right text-[12px] text-foreground">{r.rate != null ? formatRate(r.rate) : "—"}</td>
+                  <td className="num px-3 py-2.5 text-right text-[12px] text-muted-foreground">{r.minimum != null ? formatRate(r.minimum) : "—"}</td>
                   <td className="px-3 py-2.5">
                     <span className={cn("num text-[11.5px] font-medium", toneStyles[confTone(r.confidence)].text)}>
                       {Math.round(r.confidence * 100)}%

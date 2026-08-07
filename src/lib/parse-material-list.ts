@@ -307,38 +307,61 @@ export interface ParsedRate {
 /**
  * Pull code/rate pairs off a unit rate sheet.
  *
- * Globe's Exhibit A is 29 pages of exactly one shape: a work-item code, then a
- * dollar figure. No AI is needed to read that, and using one is actively worse
- * — a model has to hold hundreds of rows in a single reply and gets truncated,
- * which is how the first import of this document came back with zero rows. A
- * regex reads all 29 pages exactly, instantly, for nothing, and cannot lose the
- * second half of the card.
+ * Exhibit A is 29 pages of a two-column table, and pdf.js flattens it into
+ * alternating lines — a row of codes, then that row's prices in the same order:
  *
- * Codes are matched greedily up to the price because they are full of the
- * characters a naive pattern would stop at: BFOV(12.7)(2W)12"DEPTH(D),
- * BM60(1)(1 1/4)P>100, 1/2 TON TRUCK W/TOOLS (A)F, HC3-5 (B)>300<=600.
+ *     BFO12,BFO48
+ *     $2.75,$2.75
+ *     BFOE(36),BFOV(12.7)(2W)12"DEPTH
+ *     $0.30,$1.35
+ *
+ * So a code and its price are never on the same line, and the only correct
+ * reading is to zip a code line against the price line under it by index.
+ *
+ * An earlier version matched "text immediately before a $", which silently
+ * paired every price with the *previous* row's last code — 1,336 rows that all
+ * looked plausible and were all one row out of step. It put $0.30 on the 12.7
+ * duct that bills at $1.35. Nothing about the output announced the error, which
+ * is exactly why this reads structurally instead of by proximity.
+ *
+ * No AI: a model has to hold hundreds of rows in one reply and gets truncated,
+ * which is how the first import of this document came back with zero rows, and
+ * the retry came back with invented codes.
  */
 export function parseRateSheet(text: string): ParsedRate[] {
   const out = new Map<string, number>();
 
-  // pdf.js joins positioned runs with commas, and a two-column page puts two
-  // pairs on one line — so scan for every occurrence rather than per line.
-  const pair = /([^,\n$]{2,60}?)\s*,?\s*\$\s*([\d,]+\.\d{2})/g;
+  const lines = text.split("\n").map((l) => l.trim());
+  const isPriceLine = (l: string) => /^\$/.test(l) && !/[A-Za-z]/.test(l.replace(/\$/g, ""));
 
-  for (const m of text.matchAll(pair)) {
-    const code = m[1]
-      .replace(/^[\s,]+|[\s,]+$/g, "")
-      // Strip a leading page/header fragment that ran into the first code.
-      .replace(/^.*?(?:CWI|SUB RATES|Page \d+ of \d+)\s*/i, "")
-      .trim();
-    const rate = Number.parseFloat(m[2].replace(/,/g, ""));
+  for (let i = 0; i < lines.length - 1; i++) {
+    const codeLine = lines[i];
+    const priceLine = lines[i + 1];
+    if (!codeLine || !isPriceLine(priceLine) || isPriceLine(codeLine)) continue;
 
-    if (!code || !Number.isFinite(rate)) continue;
-    // A code always carries a letter or digit and is never a sentence.
-    if (!/[A-Z0-9]/i.test(code) || code.length > 60) continue;
-    // Later pages repeat nothing; a duplicate means the same code twice, so
-    // keep the first and don't let a stray re-read change a live rate.
-    if (!out.has(code)) out.set(code, rate);
+    const codes = codeLine.split(",").map((c) => c.trim());
+    const prices = priceLine.split(",").map((p) => p.trim());
+    // A row whose two halves disagree in width has lost a cell somewhere;
+    // zipping it anyway would shift every pair after the gap.
+    if (codes.length !== prices.length) continue;
+
+    for (let c = 0; c < codes.length; c++) {
+      const code = codes[c];
+      const raw = prices[c];
+      const m = /^\$([\d,]+(?:\.\d{1,2})?)$/.exec(raw);
+      if (!m) continue;
+      const rate = Number.parseFloat(m[1].replace(/,/g, ""));
+
+      if (!code || !Number.isFinite(rate)) continue;
+      // A code always carries a letter or digit and is never a sentence.
+      if (!/[A-Z0-9]/i.test(code) || code.length > 60) continue;
+      // Header cells sit in the code column on the first row of every page.
+      if (/^(CWI|SUB RATES|Page \d+ of \d+)$/i.test(code)) continue;
+      // A duplicate means the same code printed twice; keep the first and
+      // don't let a stray re-read change a live rate.
+      if (!out.has(code)) out.set(code, rate);
+    }
+    i++; // the price line is consumed
   }
 
   return [...out.entries()].map(([code, rate]) => ({ code, rate }));

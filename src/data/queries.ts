@@ -1334,6 +1334,188 @@ export async function getProjectValuation(projectId: string): Promise<ProjectVal
 }
 
 /* ------------------------------------------------------------------ *
+ * Customer rollup — the book of business, added up from the jobs.
+ * ------------------------------------------------------------------ */
+
+export interface CustomerRollup {
+  /** Every project's material list priced at this customer's rate card. */
+  contractValue: number;
+  /** The same lists priced at the crews' cards. Null until a crew is assigned. */
+  baselineSubCost: number | null;
+  baselineNetProfit: number | null;
+  baselineNetProfitPct: number | null;
+  /** Prior billing typed in by hand, plus everything priced off dailies since. */
+  billedToDate: number;
+  priorBilled: number;
+  billedFromDailies: number;
+  /** Coverage, so a total assembled from half the jobs can't read as complete. */
+  projects: number;
+  projectsValued: number;
+  unpricedCodes: number;
+  perProject: {
+    id: string;
+    name: string;
+    contractValue: number;
+    subCost: number | null;
+    netProfit: number | null;
+    billed: number;
+    unpricedCodes: number;
+  }[];
+}
+
+/**
+ * Add every project up into what the relationship is worth.
+ *
+ * Contract value is not a figure anyone types — it is each job's material list
+ * priced at the signed rate card, summed. Land another project and it grows on
+ * its own. The sub side is the same lists at the crews' cards, so the spread is
+ * the baseline net the book is carrying before overhead.
+ *
+ * Jobs with no material list contribute nothing and are counted separately:
+ * a total built from three of five projects is not a smaller number, it is a
+ * wrong one, and the caller is told which it has.
+ */
+export async function getCustomerRollup(customerId: string): Promise<CustomerRollup> {
+  // The whole point of this figure is margin against the customer, which is
+  // the one thing a crew must never see about the work they do.
+  await requireStaff();
+
+  const customer = await prisma.customer.findUnique({
+    where: { id: customerId },
+    select: { id: true, name: true, priorBilled: true },
+  });
+
+  const empty: CustomerRollup = {
+    contractValue: 0,
+    baselineSubCost: null,
+    baselineNetProfit: null,
+    baselineNetProfitPct: null,
+    billedToDate: 0,
+    priorBilled: 0,
+    billedFromDailies: 0,
+    projects: 0,
+    projectsValued: 0,
+    unpricedCodes: 0,
+    perProject: [],
+  };
+  if (!customer) return empty;
+
+  // Older projects carry only the client name, so match on either.
+  const projects = await prisma.project.findMany({
+    where: { OR: [{ customerId: customer.id }, { client: customer.name }] },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
+
+  const perProject: CustomerRollup["perProject"] = [];
+  let contractValue = 0;
+  let subCostTotal = 0;
+  let anySubCost = false;
+  let billedFromDailies = 0;
+  let unpricedCodes = 0;
+  let projectsValued = 0;
+
+  for (const p of projects) {
+    const v = await getProjectValuation(p.id);
+    const subCost = v.subCost?.total ?? null;
+
+    contractValue += v.revenue.total;
+    billedFromDailies += v.billed.revenue.total;
+    unpricedCodes += v.revenue.unpriced.length;
+    if (v.revenue.total > 0) projectsValued++;
+    if (subCost !== null) {
+      subCostTotal += subCost;
+      anySubCost = true;
+    }
+
+    perProject.push({
+      id: p.id,
+      name: p.name,
+      contractValue: v.revenue.total,
+      subCost,
+      netProfit: subCost !== null ? v.revenue.total - subCost : null,
+      billed: v.billed.revenue.total,
+      unpricedCodes: v.revenue.unpriced.length,
+    });
+  }
+
+  const baselineSubCost = anySubCost ? subCostTotal : null;
+  const baselineNetProfit = baselineSubCost !== null ? contractValue - baselineSubCost : null;
+
+  return {
+    contractValue,
+    baselineSubCost,
+    baselineNetProfit,
+    baselineNetProfitPct:
+      baselineNetProfit !== null && contractValue > 0 ? baselineNetProfit / contractValue : null,
+    billedToDate: customer.priorBilled + billedFromDailies,
+    priorBilled: customer.priorBilled,
+    billedFromDailies,
+    projects: projects.length,
+    projectsValued,
+    unpricedCodes,
+    perProject,
+  };
+}
+
+/**
+ * Contract value for every customer at once, for the directory list.
+ *
+ * The same arithmetic as the rollup — material lists at the signed card — but
+ * batched into four queries instead of one valuation per project, because the
+ * list renders every customer on the page and the per-project path does a
+ * handful of round trips each.
+ */
+export async function getCustomerContractValues(): Promise<Record<string, number>> {
+  await requireStaff();
+
+  const [customers, projects, rates] = await Promise.all([
+    prisma.customer.findMany({ select: { id: true, name: true } }),
+    prisma.project.findMany({
+      select: {
+        customerId: true,
+        client: true,
+        materials: { select: { code: true, item: true, unit: true, planned: true } },
+      },
+    }),
+    prisma.customerRate.findMany({
+      select: {
+        customerId: true, code: true, description: true,
+        unit: true, rate: true, effectiveDate: true, expirationDate: true,
+      },
+    }),
+  ]);
+
+  const ratesByCustomer = new Map<string, typeof rates>();
+  for (const r of rates) {
+    const list = ratesByCustomer.get(r.customerId) ?? [];
+    list.push(r);
+    ratesByCustomer.set(r.customerId, list);
+  }
+  const byName = new Map(customers.map((c) => [c.name, c.id]));
+
+  const out: Record<string, number> = {};
+  for (const c of customers) out[c.id] = 0;
+
+  for (const p of projects) {
+    // Older projects carry only the client name, same fallback as the rollup.
+    const customerId = p.customerId ?? byName.get(p.client) ?? null;
+    if (!customerId || !(customerId in out)) continue;
+
+    const card = ratesByCustomer.get(customerId);
+    if (!card?.length) continue;
+
+    const quantities: QuantityRow[] = p.materials
+      .filter((m) => m.code && m.planned > 0)
+      .map((m) => ({ code: m.code, quantity: m.planned, description: m.item, unit: m.unit }));
+
+    out[customerId] += priceQuantities(quantities, card).total;
+  }
+
+  return out;
+}
+
+/* ------------------------------------------------------------------ *
  * Vendor packet.
  * ------------------------------------------------------------------ */
 

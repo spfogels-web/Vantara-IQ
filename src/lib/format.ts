@@ -13,6 +13,26 @@ const compactCurrency = new Intl.NumberFormat("en-US", {
 
 const number0 = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 
+/**
+ * Exact cents, always both digits.
+ *
+ * Unit rates must never be rounded on screen. $8.80 shown as $9 is a 2.3%
+ * error on the biggest margin line on a job, and it makes the app disagree
+ * with the signed rate sheet — which is the one thing a rate card cannot do.
+ * Use this anywhere a per-unit price is displayed; formatCurrency's whole
+ * dollars are for totals, where the cents genuinely do not matter.
+ */
+const rateFormat = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+export function formatRate(value: number) {
+  return rateFormat.format(value);
+}
+
 export function formatCurrency(value: number) {
   return currency0.format(value);
 }

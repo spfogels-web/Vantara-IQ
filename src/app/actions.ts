@@ -21,7 +21,7 @@ import { findJobProfile } from "@/lib/job-profiles";
 import { isLabourOrEquipmentCode } from "@/lib/unit-codes";
 import { packetStatus } from "@/lib/vendor-packet";
 import { describeFileRejection } from "@/lib/document-storage";
-import { getVendorPacket } from "@/data/queries";
+import { getCustomerRollup, getVendorPacket } from "@/data/queries";
 import {
   assertOwnSubcontractor,
   assertProjectAccess,
@@ -593,6 +593,29 @@ export async function updateCustomer(id: string, input: CustomerInput) {
   await prisma.customer.update({ where: { id }, data: customerData(input) });
   revalidatePath("/customers");
   return { ok: true as const, id };
+}
+
+/**
+ * Set what was billed to this customer before the system was tracking it.
+ *
+ * The only figure on the customer tiles anyone types. Everything after it is
+ * priced off dailies, so this is purely the opening balance that makes the
+ * running total start where the business actually is.
+ */
+export async function setPriorBilled(id: string, amount: number) {
+  await requireStaff();
+  const value = Math.round(Number(amount));
+  if (!Number.isFinite(value) || value < 0) {
+    return { ok: false as const, error: "Enter a dollar amount of zero or more." };
+  }
+  await prisma.customer.update({ where: { id }, data: { priorBilled: value } });
+  revalidatePath("/customers");
+  return { ok: true as const, priorBilled: value };
+}
+
+/** The customer tiles, computed from the projects. Staff-only inside. */
+export async function customerRollup(customerId: string) {
+  return getCustomerRollup(customerId);
 }
 
 export async function deleteCustomer(id: string) {

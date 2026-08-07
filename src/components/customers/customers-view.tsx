@@ -28,11 +28,19 @@ import {
   initials,
 } from "@/lib/format";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
+import { CustomerValueTiles } from "@/components/customers/customer-value";
 import { StatusPill } from "@/components/common/status-pill";
 import { Button } from "@/components/ui/button";
 import { CustomerBilling } from "@/components/customers/customer-billing";
 
-export function CustomersView({ customers }: { customers: Customer[] }) {
+export function CustomersView({
+  customers,
+  contractValues,
+}: {
+  customers: Customer[];
+  /** Each customer's jobs priced at their own card, keyed by customer id. */
+  contractValues: Record<string, number>;
+}) {
   const router = useRouter();
   const [query, setQuery] = React.useState("");
   const [selectedId, setSelectedId] = React.useState(customers[0]?.id ?? null);
@@ -128,7 +136,7 @@ export function CustomersView({ customers }: { customers: Customer[] }) {
                       </span>
                     </span>
                     <span className="num shrink-0 text-right text-[11.5px] font-medium text-muted-foreground">
-                      {c.contractValue > 0 ? formatCompactCurrency(c.contractValue) : "—"}
+                      {(contractValues[c.id] ?? 0) > 0 ? formatCompactCurrency(contractValues[c.id]) : "—"}
                     </span>
                   </button>
                 </li>
@@ -163,7 +171,6 @@ export function CustomersView({ customers }: { customers: Customer[] }) {
 }
 
 function CustomerDetail({ customer: c, onEdit }: { customer: Customer; onEdit: () => void }) {
-  const billedPct = c.contractValue > 0 ? c.billedToDate / c.contractValue : 0;
 
   return (
     <div className="flex flex-col gap-3">
@@ -207,12 +214,10 @@ function CustomerDetail({ customer: c, onEdit }: { customer: Customer; onEdit: (
             </Button>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <MiniStat label="Contract value" value={c.contractValue > 0 ? formatCompactCurrency(c.contractValue) : "—"} />
-            <MiniStat label="Billed to date" value={c.billedToDate > 0 ? formatCompactCurrency(c.billedToDate) : "—"} hint={c.contractValue > 0 ? formatPercent(billedPct) : undefined} />
-            <MiniStat label="Open AR" value={c.openAr > 0 ? formatCompactCurrency(c.openAr) : "—"} tone={c.openAr > 0 ? "text-warning" : undefined} />
-            <MiniStat label="Avg days to pay" value={c.avgDaysToPay > 0 ? String(c.avgDaysToPay) : "—"} />
-          </div>
+          {/* Computed from the projects' own material lists and dailies. The
+              four seeded figures that used to sit here — contract value, open
+              AR, average days to pay — had no record behind them. */}
+          <CustomerValueTiles customerId={c.id} />
         </PanelBody>
       </Panel>
 
@@ -280,16 +285,6 @@ function CustomerDetail({ customer: c, onEdit }: { customer: Customer; onEdit: (
 
       {/* Contract, documents & live editable rate card */}
       <CustomerBilling customerId={c.id} />
-    </div>
-  );
-}
-
-function MiniStat({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: string }) {
-  return (
-    <div className="rounded-lg border border-border/60 bg-foreground/[0.02] px-3 py-2.5">
-      <p className="eyebrow">{label}</p>
-      <p className={cn("num mt-0.5 text-[16px] font-semibold tracking-[-0.02em] text-foreground", tone)}>{value}</p>
-      {hint ? <p className="text-[11px] text-muted-foreground">{hint} complete</p> : null}
     </div>
   );
 }

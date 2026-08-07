@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { formatCurrency } from "@/lib/format";
+import { formatRate } from "@/lib/format";
 import {
   addCustomerRate,
   deleteCustomerDocument,
@@ -199,8 +199,8 @@ export function CustomerBilling({ customerId }: { customerId: string }) {
                     <td className="px-4 py-2 sm:px-5"><span className="num rounded bg-foreground/[0.06] px-1.5 py-0.5 text-[11.5px] font-semibold text-foreground ring-1 ring-inset ring-foreground/[0.06]">{r.code}</span></td>
                     <td className="px-3 py-2 text-[12px] text-muted-foreground">{r.description}</td>
                     <td className="px-3 py-2 text-[12px] text-muted-foreground">{r.unit}</td>
-                    <td className="num px-3 py-2 text-right text-[12.5px] font-medium text-foreground">{formatCurrency(r.rate)}</td>
-                    <td className="num px-3 py-2 text-right text-[12px] text-muted-foreground">{r.minimum != null ? formatCurrency(r.minimum) : "—"}</td>
+                    <td className="num px-3 py-2 text-right text-[12.5px] font-medium text-foreground">{formatRate(r.rate)}</td>
+                    <td className="num px-3 py-2 text-right text-[12px] text-muted-foreground">{r.minimum != null ? formatRate(r.minimum) : "—"}</td>
                     <td className="px-3 py-2 text-right">
                       <button onClick={() => removeRate(r.id)} className="focus-ring grid size-6 place-items-center rounded text-muted-foreground hover:text-critical"><Trash2 className="size-3.5" /></button>
                     </td>

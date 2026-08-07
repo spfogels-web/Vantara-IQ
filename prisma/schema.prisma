@@ -69,6 +69,14 @@ model Customer {
   paymentTerms   String             @default("Net 30")
   retainagePct   Float              @default(0.1)
   invoiceMinimum Int                @default(0)
+  /// Work billed to this customer before it was tracked here — typed in by
+  /// hand so the running total starts from where the business actually is,
+  /// not from the first daily this app happened to see. Everything after it
+  /// is computed from priced dailies, never entered.
+  priorBilled    Int                @default(0)
+  /// Legacy seeded figures. The tiles are computed from the projects' own
+  /// material lists and dailies now; these stay only so old rows keep their
+  /// history, and nothing reads them.
   contractValue  Int                @default(0)
   billedToDate   Int                @default(0)
   openAr         Int                @default(0)
