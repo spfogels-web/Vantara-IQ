@@ -1,4 +1,5 @@
 import {
+  IdCard,
   AlertTriangle,
   BarChart3,
   Banknote,
@@ -45,6 +46,7 @@ export const iconRegistry = {
   chart: BarChart3,
   check: CheckCircle2,
   clipboard: ClipboardList,
+  idCard: IdCard,
   clock: Clock,
   customers: Building2,
   dashboard: LayoutDashboard,

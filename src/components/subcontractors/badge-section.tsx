@@ -251,23 +251,39 @@ function BadgeRow({
         </button>
       </div>
 
-      {/* Documents. Licence first — both sides — then one proof of name. */}
-      <div className="mt-2.5 grid grid-cols-2 gap-2 sm:grid-cols-4">
-        {LICENSE_DOCS.map((spec) => (
-          <DocSlot key={spec.kind} badge={b} spec={spec} inviteToken={inviteToken} onChanged={onChanged} required />
-        ))}
-        {IDENTITY_DOCS.map((spec) => (
-          <DocSlot
-            key={spec.kind}
-            badge={b}
-            spec={spec}
-            inviteToken={inviteToken}
-            onChanged={onChanged}
-            // Either satisfies the requirement, so neither is individually
-            // demanded once the other is on file.
-            required={!b.readiness.hasIdentity}
-          />
-        ))}
+      {/* Two groups, not four equal boxes. The licence needs both sides; the
+          second document is one of two. Four identical tiles read as "upload
+          all four", which is how a crew ends up sending a passport they did
+          not need to send. */}
+      <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <DocGroup
+          title="Driving licence"
+          note="Both sides"
+          done={b.readiness.hasLicenseFront && b.readiness.hasLicenseBack}
+        >
+          {LICENSE_DOCS.map((spec) => (
+            <DocSlot key={spec.kind} badge={b} spec={spec} inviteToken={inviteToken} onChanged={onChanged} required />
+          ))}
+        </DocGroup>
+
+        <DocGroup
+          title="Proof of name"
+          note="Either one — not both"
+          done={b.readiness.hasIdentity}
+        >
+          {IDENTITY_DOCS.map((spec) => (
+            <DocSlot
+              key={spec.kind}
+              badge={b}
+              spec={spec}
+              inviteToken={inviteToken}
+              onChanged={onChanged}
+              // Once one is on file the other stops being asked for.
+              required={!b.readiness.hasIdentity}
+              dimmed={b.readiness.hasIdentity && !b.documents.some((d) => d.kind === spec.kind)}
+            />
+          ))}
+        </DocGroup>
       </div>
 
       {b.readiness.missing.length > 0 ? (
@@ -359,6 +375,48 @@ function BadgeRow({
 }
 
 /**
+ * A labelled pair of slots.
+ *
+ * The heading carries the rule — "both sides", "either one — not both" — so it
+ * is stated once where it applies, rather than inferred from which tiles happen
+ * to be outlined.
+ */
+function DocGroup({
+  title,
+  note,
+  done,
+  children,
+}: {
+  title: string;
+  note: string;
+  done: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-xl border p-2.5 transition-colors",
+        done ? "border-success/25 bg-success/[0.03]" : "border-warning/30 bg-warning/[0.03]",
+      )}
+    >
+      <div className="mb-2 flex items-center gap-1.5 px-0.5">
+        <span
+          className={cn(
+            "grid size-4 shrink-0 place-items-center rounded-full",
+            done ? "bg-success text-white" : "border border-warning/50 text-warning",
+          )}
+        >
+          {done ? <Check className="size-2.5" /> : <span className="text-[9px] font-bold">!</span>}
+        </span>
+        <span className="text-[11.5px] font-semibold text-foreground">{title}</span>
+        <span className="text-[10.5px] text-muted-foreground">· {note}</span>
+      </div>
+      <div className="grid grid-cols-2 gap-2">{children}</div>
+    </div>
+  );
+}
+
+/**
  * One document slot — upload, and see it once it's there.
  *
  * The image renders straight from the row rather than through a URL, because
@@ -368,12 +426,15 @@ function DocSlot({
   badge,
   spec,
   required,
+  dimmed,
   inviteToken,
   onChanged,
 }: {
   badge: CrewBadgeView;
   spec: { kind: BadgeDocKind; label: string; hint: string };
   required: boolean;
+  /** The alternative is already on file, so this one is no longer wanted. */
+  dimmed?: boolean;
   inviteToken?: string;
   onChanged: () => void;
 }) {
@@ -419,14 +480,17 @@ function DocSlot({
           onClick={() => setOpen(true)}
           className="focus-ring block w-full overflow-hidden rounded-lg border border-success/30 text-left"
         >
-          <span className="relative block aspect-[8/5] bg-foreground/[0.04]">
+          <span className="relative block aspect-[8/5] bg-foreground/[0.05]">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={doc.dataUrl} alt={spec.label} className="size-full object-cover" />
-            <span className="absolute right-1 top-1 grid size-4 place-items-center rounded-full bg-success text-white">
-              <Check className="size-2.5" />
+            <span className="absolute right-1.5 top-1.5 grid size-5 place-items-center rounded-full bg-success text-white shadow">
+              <Check className="size-3" />
             </span>
           </span>
-          <span className="block px-1.5 py-1 text-[10.5px] text-muted-foreground">{spec.label}</span>
+          <span className="flex items-center justify-between gap-1 px-2 py-1.5">
+            <span className="truncate text-[11px] font-medium text-foreground">{spec.label}</span>
+            <span className="shrink-0 text-[10px] text-muted-foreground">View</span>
+          </span>
         </button>
       ) : (
         <button
@@ -434,8 +498,11 @@ function DocSlot({
           onClick={() => ref.current?.click()}
           disabled={busy}
           className={cn(
-            "focus-ring flex w-full flex-col items-center justify-center gap-1 rounded-lg border border-dashed px-2 py-4 text-center transition",
-            required ? "border-warning/40 hover:border-warning" : "border-border hover:border-brand/40",
+            "focus-ring flex w-full flex-col items-center justify-center gap-1 rounded-lg border border-dashed px-2 py-5 text-center transition",
+            required
+              ? "border-warning/50 bg-warning/[0.04] hover:border-warning"
+              : "border-border hover:border-brand/40",
+            dimmed && "opacity-45",
           )}
         >
           {busy ? (

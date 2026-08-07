@@ -10,6 +10,7 @@ import {
 } from "@/lib/authz";
 import { packetStatus } from "@/lib/vendor-packet";
 import { badgeReadiness } from "@/lib/badge";
+import { isStaff } from "@/lib/auth";
 import { balanceOf, isPastDue } from "@/lib/billing";
 import { schedulePosition, type SchedulePosition } from "@/lib/schedule";
 import {
@@ -1095,16 +1096,57 @@ export async function getPortfolioSummary(): Promise<string> {
  * than no badge — it trains people to ignore it.
  */
 export async function getNavBadges(): Promise<Record<string, number>> {
-  const [atRisk, awaiting, subsPending] = await Promise.all([
+  const user = await viewer();
+  if (!user) return {};
+
+  /**
+   * A crew's counts are their own.
+   *
+   * These were global: the number beside "My projects" was every project at
+   * risk across the business, and the one beside "Dailies" was every crew's
+   * unreviewed work. Small numbers, but they are somebody else's, and they sat
+   * in a rail a subcontractor looks at all day.
+   */
+  if (!isStaff(user.role)) {
+    if (!user.subcontractorId) return {};
+
+    const [mine, badgesOutstanding] = await Promise.all([
+      prisma.daily.count({
+        where: {
+          status: { in: ["Submitted", "In review"] },
+          subcontractor: user.subcontractorName ?? " ",
+        },
+      }),
+      // Anything not yet cleared for the yard — a badge in draft, waiting on
+      // Fortitude, or refused. The rail stays lit until every one is sorted.
+      prisma.crewBadge.count({
+        where: { subcontractorId: user.subcontractorId, status: { not: "APPROVED" } },
+      }),
+    ]);
+
+    // No badges at all is itself outstanding: nobody can collect material.
+    const anyBadges = await prisma.crewBadge.count({
+      where: { subcontractorId: user.subcontractorId },
+    });
+
+    const badges: Record<string, number> = {};
+    if (mine > 0) badges["/dailies"] = mine;
+    if (anyBadges === 0) badges["/badges"] = 1;
+    else if (badgesOutstanding > 0) badges["/badges"] = badgesOutstanding;
+    return badges;
+  }
+
+  const [atRisk, awaiting, subsPending, badgesToReview] = await Promise.all([
     prisma.project.count({ where: { tone: { in: ["critical", "warning"] } } }),
     prisma.daily.count({ where: { status: { in: ["Submitted", "In review"] } } }),
     prisma.subcontractor.count({ where: { state: "PENDING_REVIEW" } }),
+    prisma.crewBadge.count({ where: { status: "SUBMITTED" } }),
   ]);
 
   const badges: Record<string, number> = {};
   if (atRisk > 0) badges["/projects"] = atRisk;
   if (awaiting > 0) badges["/dailies"] = awaiting;
-  if (subsPending > 0) badges["/subcontractors"] = subsPending;
+  if (subsPending + badgesToReview > 0) badges["/subcontractors"] = subsPending + badgesToReview;
   return badges;
 }
 
