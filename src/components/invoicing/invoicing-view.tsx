@@ -73,11 +73,11 @@ export function InvoicingView({
       return;
     }
     const bits = [
-      `${res.created} draft invoice${res.created === 1 ? "" : "s"} from ${res.lines} priced line${res.lines === 1 ? "" : "s"}`,
+      `${res.filed} daily${res.filed === 1 ? "" : "s"} filed onto ${res.created} invoice${res.created === 1 ? "" : "s"}, ${res.lines} priced line${res.lines === 1 ? "" : "s"}`,
     ];
-    // Say what was left out. A generate that silently drops work reads as a
-    // complete run, and the money never turns up missing until much later.
-    if (res.undated > 0) bits.push(`${res.undated} daily with no work date was skipped`);
+    // Say what was left out. A run that silently drops work reads as a
+    // complete one, and the money never turns up missing until much later.
+    if (res.skipped > 0) bits.push(`${res.skipped} could not be billed`);
     if (res.unpriced.length > 0) {
       bits.push(`no rate on the card for ${res.unpriced.join(", ")} — that work is not on any invoice`);
     }

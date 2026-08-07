@@ -20,12 +20,17 @@ import {
   pdfTextPages,
 } from "@/lib/parse-material-list";
 import { findJobProfile } from "@/lib/job-profiles";
-import { priceQuantities } from "@/lib/pricing";
-import { addDays, balanceOf, daysFromTerms, invoiceMoney, weekOf } from "@/lib/billing";
 import { isLabourOrEquipmentCode } from "@/lib/unit-codes";
 import { packetStatus } from "@/lib/vendor-packet";
 import { readExif } from "@/lib/exif";
+import { balanceOf } from "@/lib/billing";
 import { badgeReadiness } from "@/lib/badge";
+import {
+  fileApprovedDaily,
+  unfileDaily,
+  type FileResult,
+  type UnfileResult,
+} from "@/lib/auto-invoice";
 import { describeFileRejection } from "@/lib/document-storage";
 import { getCrewBadges, getCustomerRollup, getVendorPacket } from "@/data/queries";
 import {
@@ -1796,21 +1801,59 @@ export async function reviewDaily(input: {
     },
   });
 
+  /**
+   * Approval is the moment work becomes billable, so it is the moment it
+   * lands on a bill.
+   *
+   * Filing is reported, never silent, and never fatal: a daily carrying a code
+   * with no rate on the customer's card is still approved work, and refusing
+   * the approval over it would leave the crew unpaid to protect an invoice.
+   * The approval stands and the reason comes back for someone to act on.
+   */
+  let billing: FileResult | UnfileResult | null = null;
+  if (input.decision === "APPROVED") {
+    billing = await fileApprovedDaily(daily.id);
+  } else {
+    // Denied work cannot sit on an invoice. It comes off a draft; if it is
+    // already on a sent invoice that needs a credit, not a quiet edit.
+    billing = await unfileDaily(daily.id);
+  }
+
   revalidatePath("/dailies");
+  revalidatePath("/invoicing");
+  revalidatePath("/customers");
   if (daily.projectId) revalidatePath(`/projects/${daily.projectId}`);
-  return { ok: true as const };
+  return { ok: true as const, billing };
 }
 
-/** Put a decided daily back in review — a reviewer can change their mind. */
+/**
+ * Put a decided daily back in review — a reviewer can change their mind.
+ *
+ * Refused when the work is already on an invoice the customer has. Reopening
+ * would take it out of "approved" while the figure stays on their bill, and
+ * the two records would disagree from then on. Void or credit that invoice
+ * first; the reviewer is told which one.
+ */
 export async function reopenDailyReview(dailyId: string) {
   await requireStaff();
+
+  const pulled = await unfileDaily(dailyId);
+  if (!pulled.ok) {
+    return {
+      ok: false as const,
+      error: `This work is on ${pulled.blockedBy}, which has been sent. Void or credit that invoice before reopening it.`,
+    };
+  }
+
   const daily = await prisma.daily.update({
     where: { id: dailyId },
     data: { status: "In review", tone: "warning", reviewNote: "", reviewedBy: "", reviewedAt: "" },
   });
   revalidatePath("/dailies");
+  revalidatePath("/invoicing");
+  revalidatePath("/customers");
   if (daily.projectId) revalidatePath(`/projects/${daily.projectId}`);
-  return { ok: true as const };
+  return { ok: true as const, removedFrom: pulled.removedFrom };
 }
 
 export async function deleteDailySheet(id: string) {
@@ -2107,33 +2150,22 @@ export async function archiveDocument(id: string) {
  * ------------------------------------------------------------------ */
 
 /**
- * Stage every uninvoiced approved daily into weekly draft invoices.
+ * Catch up any approved dailies that aren't on an invoice yet.
  *
- * Only approved dailies bill. Submitted, in-review, flagged and denied work is
- * production nobody has stood behind yet, and invoicing it is how a contractor
- * ends up issuing credits.
+ * Approval files work automatically now, so this is a backfill rather than the
+ * main path: dailies approved before that existed, ones whose customer had no
+ * rate card at the time, and anything that failed to file for a reason since
+ * fixed. Running it when there is nothing outstanding is a no-op.
  *
- * A daily bills once: its id is on the line it produced, so a second run finds
- * it already invoiced and skips it rather than double-billing the customer.
- *
- * Codes with no rate on the card are reported back, never billed at zero — a
- * silent zero is an invoice that is quietly short.
+ * It goes through exactly the same filing as approval does, so a daily cannot
+ * be billed twice and the invoice it lands on is the same one either way.
  */
 export async function generateInvoices(customerId: string) {
   await requireStaff();
 
   const customer = await prisma.customer.findUnique({
     where: { id: customerId },
-    select: {
-      id: true, name: true, shortCode: true,
-      retainagePct: true, paymentTerms: true,
-      rates: {
-        select: {
-          code: true, description: true, unit: true,
-          rate: true, effectiveDate: true, expirationDate: true,
-        },
-      },
-    },
+    select: { id: true, name: true, rates: { select: { id: true }, take: 1 } },
   });
   if (!customer) return { ok: false as const, error: "Customer not found." };
   if (customer.rates.length === 0) {
@@ -2142,160 +2174,55 @@ export async function generateInvoices(customerId: string) {
 
   const projects = await prisma.project.findMany({
     where: { OR: [{ customerId: customer.id }, { client: customer.name }] },
-    select: { id: true, name: true },
+    select: { id: true },
   });
-  const projectIds = projects.map((p) => p.id);
-  if (projectIds.length === 0) return { ok: false as const, error: "No projects for this customer." };
-
-  // Everything already on an invoice, so a rerun cannot bill it twice.
-  const invoiced = new Set(
-    (
-      await prisma.invoiceLine.findMany({
-        where: { dailyId: { not: "" }, invoice: { customerId: customer.id } },
-        select: { dailyId: true },
-      })
-    ).map((l) => l.dailyId),
-  );
+  if (projects.length === 0) return { ok: false as const, error: "No projects for this customer." };
 
   const dailies = await prisma.daily.findMany({
-    where: { projectId: { in: projectIds }, status: "Approved" },
-    select: { id: true, projectId: true, projectName: true, workDate: true, lineItems: true },
+    where: { projectId: { in: projects.map((p) => p.id) }, status: "Approved" },
+    select: { id: true },
     orderBy: { workDate: "asc" },
   });
 
-  const billable = dailies.filter((d) => !invoiced.has(d.id));
-  if (billable.length === 0) {
-    return { ok: false as const, error: "No approved dailies waiting to be billed." };
-  }
+  const invoices = new Set<string>();
+  const unpriced = new Set<string>();
+  const skipped: string[] = [];
+  let filed = 0;
+  let lines = 0;
 
-  /** Group by the project and the week the work fell in. */
-  const batches = new Map<
-    string,
-    {
-      projectId: string | null;
-      projectName: string;
-      start: string;
-      end: string;
-      dailies: typeof billable;
-    }
-  >();
-  const undated: string[] = [];
-
-  for (const d of billable) {
-    const week = weekOf(d.workDate);
-    if (!week) {
-      // No work date means no billing period. Report it rather than filing it
-      // into whatever week today happens to be.
-      undated.push(d.id);
+  for (const d of dailies) {
+    const res = await fileApprovedDaily(d.id);
+    if (res.ok) {
+      filed++;
+      lines += res.lines ?? 0;
+      if (res.invoiceNumber) invoices.add(res.invoiceNumber);
+      for (const c of res.unpriced ?? []) unpriced.add(c);
       continue;
     }
-    const key = `${d.projectId ?? ""}|${week.start}`;
-    const batch = batches.get(key) ?? {
-      projectId: d.projectId,
-      projectName: d.projectName,
-      start: week.start,
-      end: week.end,
-      dailies: [] as typeof billable,
-    };
-    batch.dailies.push(d);
-    batches.set(key, batch);
-  }
-
-  const terms = daysFromTerms(customer.paymentTerms);
-  const unpricedCodes = new Set<string>();
-  let created = 0;
-  let staged = 0;
-
-  for (const batch of batches.values()) {
-    const lines: {
-      dailyId: string; workDate: string; code: string; description: string;
-      unit: string; quantity: number; rate: number; amount: number;
-    }[] = [];
-
-    for (const d of batch.dailies) {
-      // Roll the daily's own line items up by code before pricing, so one
-      // sheet reporting a code twice bills as one line at one rate.
-      const byCode = new Map<string, number>();
-      const items = Array.isArray(d.lineItems) ? (d.lineItems as unknown[]) : [];
-      for (const raw of items) {
-        const li = raw as { code?: unknown; quantity?: unknown };
-        if (typeof li?.code !== "string" || !li.code.trim()) continue;
-        const qty = typeof li.quantity === "number" ? li.quantity : 0;
-        byCode.set(li.code.trim(), (byCode.get(li.code.trim()) ?? 0) + qty);
-      }
-
-      // Priced at the card in force on the work date, not today's card.
-      const priced = priceQuantities(
-        [...byCode.entries()].map(([code, quantity]) => ({ code, quantity })),
-        customer.rates,
-        d.workDate,
-      );
-      for (const u of priced.unpriced) unpricedCodes.add(u.code);
-
-      for (const l of priced.lines) {
-        lines.push({
-          dailyId: d.id,
-          workDate: d.workDate,
-          code: l.code,
-          description: l.description,
-          unit: l.unit,
-          quantity: l.quantity,
-          rate: l.rate,
-          amount: Math.round(l.amount * 100) / 100,
-        });
-      }
-    }
-
-    if (lines.length === 0) continue;
-
-    const money = invoiceMoney(
-      lines.reduce((s, l) => s + l.amount, 0),
-      customer.retainagePct,
-    );
-
-    // Number by customer and period end. A collision with a concurrent run
-    // bumps the suffix rather than failing the whole batch.
-    const stamp = batch.end.replace(/-/g, "");
-    let saved = false;
-    for (let n = 1; n <= 50 && !saved; n++) {
-      try {
-        await prisma.invoice.create({
-          data: {
-            number: `${customer.shortCode}-${stamp}-${String(n).padStart(2, "0")}`,
-            customerId: customer.id,
-            projectId: batch.projectId,
-            projectName: batch.projectName,
-            periodStart: batch.start,
-            periodEnd: batch.end,
-            status: "DRAFT",
-            subtotal: money.subtotal,
-            retainagePct: customer.retainagePct,
-            retainageHeld: money.retainageHeld,
-            amountDue: money.amountDue,
-            dueAt: terms !== null ? new Date(`${addDays(batch.end, terms)}T00:00:00Z`) : null,
-            lines: { create: lines },
-          },
-        });
-        saved = true;
-      } catch (e) {
-        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") continue;
-        throw e;
-      }
-    }
-    if (!saved) continue;
-
-    created++;
-    staged += lines.length;
+    // "Already on X" is the normal case on a rerun, not a problem to report.
+    if (res.reason && !res.reason.startsWith("Already on")) skipped.push(res.reason);
+    for (const c of res.unpriced ?? []) unpriced.add(c);
   }
 
   revalidatePath("/invoicing");
   revalidatePath("/customers");
+
+  if (filed === 0) {
+    return {
+      ok: false as const,
+      error: skipped.length
+        ? `Nothing new to bill. ${skipped[0]}`
+        : "Nothing new to bill — every approved daily is already on an invoice.",
+    };
+  }
+
   return {
     ok: true as const,
-    created,
-    lines: staged,
-    undated: undated.length,
-    unpriced: [...unpricedCodes],
+    created: invoices.size,
+    filed,
+    lines,
+    skipped: skipped.length,
+    unpriced: [...unpriced],
   };
 }
 
