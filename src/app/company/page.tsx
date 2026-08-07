@@ -1,9 +1,10 @@
 import { redirect } from "next/navigation";
 
-import { getVendorPacket } from "@/data/queries";
+import { getDocuments, getVendorPacket } from "@/data/queries";
 import { getCurrentUser } from "@/lib/auth";
 import { PageShell } from "@/components/common/page-shell";
 import { VendorPacketForm } from "@/components/subcontractors/vendor-packet-form";
+import { DocumentList } from "@/components/documents/document-list";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Company profile · Vantara IQ" };
@@ -21,7 +22,10 @@ export default async function CompanyProfilePage() {
   if (!me) redirect("/login");
   if (!me.subcontractorId) redirect("/subcontractors");
 
-  const packet = await getVendorPacket(me.subcontractorId);
+  const [packet, docs] = await Promise.all([
+    getVendorPacket(me.subcontractorId),
+    getDocuments(),
+  ]);
   if (!packet) redirect("/dailies");
 
   return (
@@ -30,7 +34,14 @@ export default async function CompanyProfilePage() {
       title="Company profile"
       description="What Fortitude needs on file before your crew can be assigned work. Everything saves together — fill in what you can and come back for the rest."
     >
-      <VendorPacketForm packet={packet} />
+      <div className="flex flex-col gap-3">
+        {/* Their paperwork, above the form. A crew opening this page is usually
+            looking for their signed rates or their agreement, not to re-edit
+            their EIN — so the thing they came for goes first. */}
+        <DocumentList docs={docs} />
+
+        <VendorPacketForm packet={packet} />
+      </div>
     </PageShell>
   );
 }
