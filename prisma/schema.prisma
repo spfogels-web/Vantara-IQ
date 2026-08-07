@@ -88,6 +88,7 @@ model Customer {
   documents      CustomerDocument[]
   rates          CustomerRate[]
   contracts      Document[]
+  invoices       Invoice[]
   createdAt      DateTime           @default(now())
 }
 
@@ -148,6 +149,7 @@ model Project {
   dailies          Daily[]
   materials        ProjectMaterial[]
   materialImports  RateImport[]
+  invoices         Invoice[]
   sheets           DailySheet[]
   /// Crews assigned to this job. This relation is what a subcontractor's
   /// access is decided by, so it is a real foreign key rather than a list of
@@ -374,6 +376,103 @@ model Daily {
   reviewedBy     String   @default("")
   reviewedAt     String   @default("")
   createdAt      DateTime @default(now())
+}
+
+/// Where an invoice stands. DRAFT is staged and still recomputable; everything
+/// from SENT on is a figure the customer has seen, and is frozen.
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PARTIAL
+  PAID
+  VOID
+}
+
+/// A week's approved dailies, priced and sent as one bill.
+///
+/// Each daily is its own priced line group — that is how the work is approved
+/// and how a dispute gets settled — but they leave together on a weekly cutoff
+/// because that is what the customer's billing calendar expects.
+///
+/// The money columns are written once, at issue, from the rate card as it stood
+/// that day. They are never recomputed. A rate card edited in March must not
+/// silently restate a January invoice the customer has already paid.
+model Invoice {
+  id            String        @id @default(cuid())
+  number        String        @unique
+  customer      Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customerId    String
+  project       Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  projectId     String?
+  /// Denormalised so the invoice still reads if the project is renamed.
+  projectName   String        @default("")
+  /// Inclusive weekly cutoff this batch covers, as YYYY-MM-DD.
+  periodStart   String        @default("")
+  periodEnd     String        @default("")
+  status        InvoiceStatus @default(DRAFT)
+  /// Work priced at the customer's card.
+  subtotal      Float         @default(0)
+  /// Held back per the contract, captured at issue so a later change to the
+  /// customer's terms cannot restate what was withheld on an old invoice.
+  retainagePct  Float         @default(0)
+  retainageHeld Float         @default(0)
+  /// subtotal - retainageHeld. What the customer actually owes on this bill.
+  amountDue     Float         @default(0)
+  issuedAt      DateTime?
+  dueAt         DateTime?
+  voidedAt      DateTime?
+  voidReason    String        @default("")
+  notes         String        @default("")
+  lines         InvoiceLine[]
+  payments      Payment[]
+  createdAt     DateTime      @default(now())
+
+  @@index([customerId, status])
+  @@index([projectId])
+}
+
+/// One priced unit code on an invoice, carrying the daily it came from.
+///
+/// The rate is stored on the line rather than looked up, for the same reason
+/// the totals are: this is the number the customer was billed, not the number
+/// the card happens to say today.
+model InvoiceLine {
+  id          String  @id @default(cuid())
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoiceId   String
+  /// The daily this production was reported on. Kept as a plain id — deleting
+  /// a daily must not quietly delete a line off a sent invoice.
+  dailyId     String  @default("")
+  workDate    String  @default("")
+  code        String  @default("")
+  description String  @default("")
+  unit        String  @default("")
+  quantity    Float   @default(0)
+  rate        Float   @default(0)
+  amount      Float   @default(0)
+
+  @@index([invoiceId])
+  @@index([dailyId])
+}
+
+/// Money actually received against an invoice.
+///
+/// Recorded by hand from the bank or the remittance advice. Partial payments
+/// are normal on this work, so an invoice is only PAID once the payments cover
+/// it — nothing infers payment from an invoice merely being old.
+model Payment {
+  id         String   @id @default(cuid())
+  invoice    Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoiceId  String
+  amount     Float    @default(0)
+  /// Date the money landed, as YYYY-MM-DD — the bank's date, not today's.
+  receivedOn String   @default("")
+  method     String   @default("")
+  reference  String   @default("")
+  note       String   @default("")
+  createdAt  DateTime @default(now())
+
+  @@index([invoiceId])
 }
 
 /// One project-specific onboarding invite link.

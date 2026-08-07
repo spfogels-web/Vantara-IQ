@@ -9,6 +9,7 @@ import {
   visibleProjectIds,
 } from "@/lib/authz";
 import { packetStatus } from "@/lib/vendor-packet";
+import { balanceOf, isPastDue } from "@/lib/billing";
 import {
   priceQuantities,
   valueProject,
@@ -1348,6 +1349,20 @@ export interface CustomerRollup {
   billedToDate: number;
   priorBilled: number;
   billedFromDailies: number;
+  /**
+   * Contract value not yet billed — work sold and still to invoice. Clamped at
+   * zero: billing past the material list means the list is stale, not that the
+   * backlog is negative.
+   */
+  leftToBill: number;
+  /** Invoices and the money against them. */
+  ar: ArTotals;
+  /**
+   * Codes reported on approved dailies that no rate card can price, with the
+   * quantity stuck behind them. This is production already in the ground that
+   * cannot be invoiced — the most expensive thing on this screen to not know.
+   */
+  unbillable: { code: string; quantity: number }[];
   /** Coverage, so a total assembled from half the jobs can't read as complete. */
   projects: number;
   projectsValued: number;
@@ -1393,6 +1408,9 @@ export async function getCustomerRollup(customerId: string): Promise<CustomerRol
     billedToDate: 0,
     priorBilled: 0,
     billedFromDailies: 0,
+    leftToBill: 0,
+    ar: { ...EMPTY_AR, counts: { ...EMPTY_AR.counts } },
+    unbillable: [],
     projects: 0,
     projectsValued: 0,
     unpricedCodes: 0,
@@ -1407,6 +1425,8 @@ export async function getCustomerRollup(customerId: string): Promise<CustomerRol
     orderBy: { name: "asc" },
   });
 
+  const ar = await getCustomerAr(customer.id);
+
   const perProject: CustomerRollup["perProject"] = [];
   let contractValue = 0;
   let subCostTotal = 0;
@@ -1414,6 +1434,7 @@ export async function getCustomerRollup(customerId: string): Promise<CustomerRol
   let billedFromDailies = 0;
   let unpricedCodes = 0;
   let projectsValued = 0;
+  const unbillable = new Map<string, number>();
 
   for (const p of projects) {
     const v = await getProjectValuation(p.id);
@@ -1423,6 +1444,9 @@ export async function getCustomerRollup(customerId: string): Promise<CustomerRol
     billedFromDailies += v.billed.revenue.total;
     unpricedCodes += v.revenue.unpriced.length;
     if (v.revenue.total > 0) projectsValued++;
+    for (const u of v.billed.revenue.unpriced) {
+      unbillable.set(u.code, (unbillable.get(u.code) ?? 0) + u.quantity);
+    }
     if (subCost !== null) {
       subCostTotal += subCost;
       anySubCost = true;
@@ -1451,11 +1475,199 @@ export async function getCustomerRollup(customerId: string): Promise<CustomerRol
     billedToDate: customer.priorBilled + billedFromDailies,
     priorBilled: customer.priorBilled,
     billedFromDailies,
+    leftToBill: Math.max(0, contractValue - (customer.priorBilled + billedFromDailies)),
+    ar,
+    unbillable: [...unbillable.entries()].map(([code, quantity]) => ({ code, quantity })),
     projects: projects.length,
     projectsValued,
     unpricedCodes,
     perProject,
   };
+}
+
+/* ------------------------------------------------------------------ *
+ * Accounts receivable — what has been billed, and what has come back.
+ * ------------------------------------------------------------------ */
+
+export interface ArTotals {
+  /** Invoiced and not void, at the figures the customer was sent. */
+  invoiced: number;
+  /** Money received against those invoices. */
+  collected: number;
+  /** Invoiced less collected — what is actually outstanding. */
+  openAr: number;
+  /** The part of open AR whose due date has passed. */
+  pastDue: number;
+  /** Withheld under the contract. Owed, but not billable until release. */
+  retainageHeld: number;
+  /** Staged but not sent — revenue one click from being invoiced. */
+  draftValue: number;
+  counts: { draft: number; open: number; pastDue: number; paid: number };
+}
+
+const EMPTY_AR: ArTotals = {
+  invoiced: 0, collected: 0, openAr: 0, pastDue: 0,
+  retainageHeld: 0, draftValue: 0,
+  counts: { draft: 0, open: 0, pastDue: 0, paid: 0 },
+};
+
+/**
+ * Add invoices and their payments up into an AR position.
+ *
+ * Open AR is invoiced-less-received, never a status flag on its own: an
+ * invoice marked PAID with a $40 short payment against it is $40 of AR, and a
+ * business that trusts the flag never finds that money.
+ *
+ * Retainage sits outside AR deliberately. It is owed, but it is not collectable
+ * until release, and folding it into AR makes the position look healthier than
+ * the bank will.
+ */
+function totalAr(
+  invoices: {
+    status: string;
+    amountDue: number;
+    retainageHeld: number;
+    dueAt: Date | null;
+    payments: { amount: number }[];
+  }[],
+  today = new Date(),
+): ArTotals {
+  const t: ArTotals = { ...EMPTY_AR, counts: { ...EMPTY_AR.counts } };
+
+  for (const inv of invoices) {
+    if (inv.status === "VOID") continue;
+
+    if (inv.status === "DRAFT") {
+      t.draftValue += inv.amountDue;
+      t.counts.draft++;
+      continue;
+    }
+
+    const { paid, balance, settled } = balanceOf(inv.amountDue, inv.payments);
+    t.invoiced += inv.amountDue;
+    t.collected += paid;
+    t.retainageHeld += inv.retainageHeld;
+
+    if (settled) {
+      t.counts.paid++;
+      continue;
+    }
+
+    t.openAr += balance;
+    t.counts.open++;
+    if (isPastDue(inv.dueAt, balance, today)) {
+      t.pastDue += balance;
+      t.counts.pastDue++;
+    }
+  }
+
+  const round = (n: number) => Math.round(n * 100) / 100;
+  t.invoiced = round(t.invoiced);
+  t.collected = round(t.collected);
+  t.openAr = round(t.openAr);
+  t.pastDue = round(t.pastDue);
+  t.retainageHeld = round(t.retainageHeld);
+  t.draftValue = round(t.draftValue);
+  return t;
+}
+
+/** The AR position for one customer. */
+export async function getCustomerAr(customerId: string): Promise<ArTotals> {
+  await requireStaff();
+  const invoices = await prisma.invoice.findMany({
+    where: { customerId },
+    select: {
+      status: true, amountDue: true, retainageHeld: true, dueAt: true,
+      payments: { select: { amount: true } },
+    },
+  });
+  return totalAr(invoices);
+}
+
+export interface InvoiceRow {
+  id: string;
+  number: string;
+  customer: string;
+  customerId: string;
+  project: string;
+  periodStart: string;
+  periodEnd: string;
+  status: string;
+  subtotal: number;
+  retainageHeld: number;
+  amountDue: number;
+  paid: number;
+  balance: number;
+  issuedAt: string | null;
+  dueAt: string | null;
+  pastDue: boolean;
+  lineCount: number;
+  dailyCount: number;
+  payments: {
+    id: string; amount: number; receivedOn: string;
+    method: string; reference: string; note: string;
+  }[];
+}
+
+/** Every invoice, newest period first, with its money worked out. */
+export async function getInvoiceRows(): Promise<InvoiceRow[]> {
+  await requireStaff();
+  const rows = await prisma.invoice.findMany({
+    orderBy: [{ periodEnd: "desc" }, { number: "desc" }],
+    select: {
+      id: true, number: true, projectName: true, customerId: true,
+      periodStart: true, periodEnd: true, status: true,
+      subtotal: true, retainageHeld: true, amountDue: true,
+      issuedAt: true, dueAt: true,
+      customer: { select: { name: true } },
+      lines: { select: { dailyId: true } },
+      payments: {
+        orderBy: { receivedOn: "asc" },
+        select: {
+          id: true, amount: true, receivedOn: true,
+          method: true, reference: true, note: true,
+        },
+      },
+    },
+  });
+
+  const now = new Date();
+  return rows.map((r) => {
+    const { paid, balance } = balanceOf(r.amountDue, r.payments);
+    return {
+      id: r.id,
+      number: r.number,
+      customer: r.customer.name,
+      customerId: r.customerId,
+      project: r.projectName,
+      periodStart: r.periodStart,
+      periodEnd: r.periodEnd,
+      status: r.status,
+      subtotal: r.subtotal,
+      retainageHeld: r.retainageHeld,
+      amountDue: r.amountDue,
+      paid,
+      balance,
+      issuedAt: r.issuedAt?.toISOString().slice(0, 10) ?? null,
+      dueAt: r.dueAt?.toISOString().slice(0, 10) ?? null,
+      pastDue: r.status !== "DRAFT" && r.status !== "VOID" && isPastDue(r.dueAt, balance, now),
+      lineCount: r.lines.length,
+      dailyCount: new Set(r.lines.map((l) => l.dailyId).filter(Boolean)).size,
+      payments: r.payments,
+    };
+  });
+}
+
+/** The AR position across every customer, for the invoicing page. */
+export async function getArTotals(): Promise<ArTotals> {
+  await requireStaff();
+  const invoices = await prisma.invoice.findMany({
+    select: {
+      status: true, amountDue: true, retainageHeld: true, dueAt: true,
+      payments: { select: { amount: true } },
+    },
+  });
+  return totalAr(invoices);
 }
 
 /**

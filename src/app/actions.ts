@@ -18,6 +18,8 @@ import {
   pdfTextPages,
 } from "@/lib/parse-material-list";
 import { findJobProfile } from "@/lib/job-profiles";
+import { priceQuantities } from "@/lib/pricing";
+import { addDays, balanceOf, daysFromTerms, invoiceMoney, weekOf } from "@/lib/billing";
 import { isLabourOrEquipmentCode } from "@/lib/unit-codes";
 import { packetStatus } from "@/lib/vendor-packet";
 import { describeFileRejection } from "@/lib/document-storage";
@@ -1913,5 +1915,337 @@ export async function archiveDocument(id: string) {
     data: { documentId: id, action: "document.archived", actorUserId: user.id, actorEmail: user.email },
   });
   revalidatePath("/documents");
+  return { ok: true as const };
+}
+
+/* ------------------------------------------------------------------ *
+ * Invoicing — approved production, priced and sent, and the money back.
+ * ------------------------------------------------------------------ */
+
+/**
+ * Stage every uninvoiced approved daily into weekly draft invoices.
+ *
+ * Only approved dailies bill. Submitted, in-review, flagged and denied work is
+ * production nobody has stood behind yet, and invoicing it is how a contractor
+ * ends up issuing credits.
+ *
+ * A daily bills once: its id is on the line it produced, so a second run finds
+ * it already invoiced and skips it rather than double-billing the customer.
+ *
+ * Codes with no rate on the card are reported back, never billed at zero — a
+ * silent zero is an invoice that is quietly short.
+ */
+export async function generateInvoices(customerId: string) {
+  await requireStaff();
+
+  const customer = await prisma.customer.findUnique({
+    where: { id: customerId },
+    select: {
+      id: true, name: true, shortCode: true,
+      retainagePct: true, paymentTerms: true,
+      rates: {
+        select: {
+          code: true, description: true, unit: true,
+          rate: true, effectiveDate: true, expirationDate: true,
+        },
+      },
+    },
+  });
+  if (!customer) return { ok: false as const, error: "Customer not found." };
+  if (customer.rates.length === 0) {
+    return { ok: false as const, error: "No rate card on this customer — nothing can be priced." };
+  }
+
+  const projects = await prisma.project.findMany({
+    where: { OR: [{ customerId: customer.id }, { client: customer.name }] },
+    select: { id: true, name: true },
+  });
+  const projectIds = projects.map((p) => p.id);
+  if (projectIds.length === 0) return { ok: false as const, error: "No projects for this customer." };
+
+  // Everything already on an invoice, so a rerun cannot bill it twice.
+  const invoiced = new Set(
+    (
+      await prisma.invoiceLine.findMany({
+        where: { dailyId: { not: "" }, invoice: { customerId: customer.id } },
+        select: { dailyId: true },
+      })
+    ).map((l) => l.dailyId),
+  );
+
+  const dailies = await prisma.daily.findMany({
+    where: { projectId: { in: projectIds }, status: "Approved" },
+    select: { id: true, projectId: true, projectName: true, workDate: true, lineItems: true },
+    orderBy: { workDate: "asc" },
+  });
+
+  const billable = dailies.filter((d) => !invoiced.has(d.id));
+  if (billable.length === 0) {
+    return { ok: false as const, error: "No approved dailies waiting to be billed." };
+  }
+
+  /** Group by the project and the week the work fell in. */
+  const batches = new Map<
+    string,
+    {
+      projectId: string | null;
+      projectName: string;
+      start: string;
+      end: string;
+      dailies: typeof billable;
+    }
+  >();
+  const undated: string[] = [];
+
+  for (const d of billable) {
+    const week = weekOf(d.workDate);
+    if (!week) {
+      // No work date means no billing period. Report it rather than filing it
+      // into whatever week today happens to be.
+      undated.push(d.id);
+      continue;
+    }
+    const key = `${d.projectId ?? ""}|${week.start}`;
+    const batch = batches.get(key) ?? {
+      projectId: d.projectId,
+      projectName: d.projectName,
+      start: week.start,
+      end: week.end,
+      dailies: [] as typeof billable,
+    };
+    batch.dailies.push(d);
+    batches.set(key, batch);
+  }
+
+  const terms = daysFromTerms(customer.paymentTerms);
+  const unpricedCodes = new Set<string>();
+  let created = 0;
+  let staged = 0;
+
+  for (const batch of batches.values()) {
+    const lines: {
+      dailyId: string; workDate: string; code: string; description: string;
+      unit: string; quantity: number; rate: number; amount: number;
+    }[] = [];
+
+    for (const d of batch.dailies) {
+      // Roll the daily's own line items up by code before pricing, so one
+      // sheet reporting a code twice bills as one line at one rate.
+      const byCode = new Map<string, number>();
+      const items = Array.isArray(d.lineItems) ? (d.lineItems as unknown[]) : [];
+      for (const raw of items) {
+        const li = raw as { code?: unknown; quantity?: unknown };
+        if (typeof li?.code !== "string" || !li.code.trim()) continue;
+        const qty = typeof li.quantity === "number" ? li.quantity : 0;
+        byCode.set(li.code.trim(), (byCode.get(li.code.trim()) ?? 0) + qty);
+      }
+
+      // Priced at the card in force on the work date, not today's card.
+      const priced = priceQuantities(
+        [...byCode.entries()].map(([code, quantity]) => ({ code, quantity })),
+        customer.rates,
+        d.workDate,
+      );
+      for (const u of priced.unpriced) unpricedCodes.add(u.code);
+
+      for (const l of priced.lines) {
+        lines.push({
+          dailyId: d.id,
+          workDate: d.workDate,
+          code: l.code,
+          description: l.description,
+          unit: l.unit,
+          quantity: l.quantity,
+          rate: l.rate,
+          amount: Math.round(l.amount * 100) / 100,
+        });
+      }
+    }
+
+    if (lines.length === 0) continue;
+
+    const money = invoiceMoney(
+      lines.reduce((s, l) => s + l.amount, 0),
+      customer.retainagePct,
+    );
+
+    // Number by customer and period end. A collision with a concurrent run
+    // bumps the suffix rather than failing the whole batch.
+    const stamp = batch.end.replace(/-/g, "");
+    let saved = false;
+    for (let n = 1; n <= 50 && !saved; n++) {
+      try {
+        await prisma.invoice.create({
+          data: {
+            number: `${customer.shortCode}-${stamp}-${String(n).padStart(2, "0")}`,
+            customerId: customer.id,
+            projectId: batch.projectId,
+            projectName: batch.projectName,
+            periodStart: batch.start,
+            periodEnd: batch.end,
+            status: "DRAFT",
+            subtotal: money.subtotal,
+            retainagePct: customer.retainagePct,
+            retainageHeld: money.retainageHeld,
+            amountDue: money.amountDue,
+            dueAt: terms !== null ? new Date(`${addDays(batch.end, terms)}T00:00:00Z`) : null,
+            lines: { create: lines },
+          },
+        });
+        saved = true;
+      } catch (e) {
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") continue;
+        throw e;
+      }
+    }
+    if (!saved) continue;
+
+    created++;
+    staged += lines.length;
+  }
+
+  revalidatePath("/invoicing");
+  revalidatePath("/customers");
+  return {
+    ok: true as const,
+    created,
+    lines: staged,
+    undated: undated.length,
+    unpriced: [...unpricedCodes],
+  };
+}
+
+/** Send a draft. From here the figures are what the customer has seen. */
+export async function issueInvoice(id: string) {
+  await requireStaff();
+  const inv = await prisma.invoice.findUnique({ where: { id }, select: { status: true } });
+  if (!inv) return { ok: false as const, error: "Invoice not found." };
+  if (inv.status !== "DRAFT") return { ok: false as const, error: "Only a draft can be sent." };
+
+  await prisma.invoice.update({
+    where: { id },
+    data: { status: "SENT", issuedAt: new Date() },
+  });
+  revalidatePath("/invoicing");
+  revalidatePath("/customers");
+  return { ok: true as const };
+}
+
+/**
+ * Record money received.
+ *
+ * The invoice's status follows the money: partly covered is PARTIAL, covered is
+ * PAID. Nothing infers payment from age, and a payment never edits the invoice's
+ * own figures — what was billed and what was paid stay separate records.
+ */
+export async function recordPayment(
+  invoiceId: string,
+  input: { amount: number; receivedOn: string; method?: string; reference?: string; note?: string },
+) {
+  await requireStaff();
+
+  const amount = Math.round(Number(input.amount) * 100) / 100;
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { ok: false as const, error: "Enter an amount greater than zero." };
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.receivedOn?.trim() ?? "")) {
+    return { ok: false as const, error: "Enter the date the money landed." };
+  }
+
+  const invoice = await prisma.invoice.findUnique({
+    where: { id: invoiceId },
+    select: { id: true, status: true, amountDue: true, payments: { select: { amount: true } } },
+  });
+  if (!invoice) return { ok: false as const, error: "Invoice not found." };
+  if (invoice.status === "DRAFT") {
+    return { ok: false as const, error: "Send the invoice before recording a payment against it." };
+  }
+  if (invoice.status === "VOID") {
+    return { ok: false as const, error: "That invoice is void." };
+  }
+
+  await prisma.payment.create({
+    data: {
+      invoiceId,
+      amount,
+      receivedOn: input.receivedOn.trim(),
+      method: input.method?.trim() ?? "",
+      reference: input.reference?.trim() ?? "",
+      note: input.note?.trim() ?? "",
+    },
+  });
+
+  const after = balanceOf(invoice.amountDue, [...invoice.payments, { amount }]);
+  await prisma.invoice.update({
+    where: { id: invoiceId },
+    data: { status: after.settled ? "PAID" : "PARTIAL" },
+  });
+
+  revalidatePath("/invoicing");
+  revalidatePath("/customers");
+  return { ok: true as const, balance: after.balance };
+}
+
+/** Remove a payment entered in error, and put the invoice back where it belongs. */
+export async function deletePayment(id: string) {
+  await requireStaff();
+  const payment = await prisma.payment.findUnique({
+    where: { id },
+    select: { invoiceId: true },
+  });
+  if (!payment) return { ok: false as const, error: "Payment not found." };
+
+  await prisma.payment.delete({ where: { id } });
+
+  const invoice = await prisma.invoice.findUnique({
+    where: { id: payment.invoiceId },
+    select: { amountDue: true, status: true, payments: { select: { amount: true } } },
+  });
+  if (invoice && invoice.status !== "VOID") {
+    const after = balanceOf(invoice.amountDue, invoice.payments);
+    await prisma.invoice.update({
+      where: { id: payment.invoiceId },
+      data: {
+        status: after.settled ? "PAID" : invoice.payments.length > 0 ? "PARTIAL" : "SENT",
+      },
+    });
+  }
+
+  revalidatePath("/invoicing");
+  revalidatePath("/customers");
+  return { ok: true as const };
+}
+
+/**
+ * Void an invoice, with the reason on the record.
+ *
+ * Voiding rather than deleting: the number was issued, and an invoice that
+ * vanishes leaves a hole in the sequence nobody can explain later. The dailies
+ * it covered are released so the work can be billed again correctly.
+ */
+export async function voidInvoice(id: string, reason: string) {
+  await requireStaff();
+  if (!reason.trim()) return { ok: false as const, error: "A void needs a reason on the record." };
+
+  const invoice = await prisma.invoice.findUnique({
+    where: { id },
+    select: { status: true, payments: { select: { id: true } } },
+  });
+  if (!invoice) return { ok: false as const, error: "Invoice not found." };
+  if (invoice.payments.length > 0) {
+    return {
+      ok: false as const,
+      error: "Money has been received against this invoice — remove the payments first.",
+    };
+  }
+
+  await prisma.invoice.update({
+    where: { id },
+    data: { status: "VOID", voidedAt: new Date(), voidReason: reason.trim() },
+  });
+  await prisma.invoiceLine.updateMany({ where: { invoiceId: id }, data: { dailyId: "" } });
+
+  revalidatePath("/invoicing");
+  revalidatePath("/customers");
   return { ok: true as const };
 }

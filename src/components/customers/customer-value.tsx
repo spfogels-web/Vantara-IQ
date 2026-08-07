@@ -68,9 +68,11 @@ export function CustomerValueTiles({ customerId }: { customerId: string }) {
         ? `${data.projectsValued} of ${data.projects} projects priced`
         : `${data.projects} project${data.projects === 1 ? "" : "s"}`;
 
+  const ar = data.ar;
+
   return (
     <div className="flex flex-col gap-2">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <Tile
           label="Contract value"
           value={data.contractValue > 0 ? formatCompactCurrency(data.contractValue) : "—"}
@@ -83,11 +85,44 @@ export function CustomerValueTiles({ customerId }: { customerId: string }) {
           billedPct={billedPct}
           onSaved={load}
         />
+        {/* What is sold and still to invoice. The figure that answers "how much
+            work is in the ground that we haven't been paid a cent for yet". */}
         <Tile
-          label="Subcontractor cost"
-          value={data.baselineSubCost !== null ? formatCompactCurrency(data.baselineSubCost) : "—"}
-          exact={data.baselineSubCost !== null ? formatCurrency(data.baselineSubCost) : undefined}
-          hint={data.baselineSubCost === null ? "no crew assigned" : "at their signed cards"}
+          label="Left to bill"
+          value={data.leftToBill > 0 ? formatCompactCurrency(data.leftToBill) : "—"}
+          exact={data.leftToBill > 0 ? formatCurrency(data.leftToBill) : undefined}
+          hint={
+            ar.draftValue > 0
+              ? `${formatCompactCurrency(ar.draftValue)} staged as drafts`
+              : data.leftToBill > 0
+                ? "sold, not yet invoiced"
+                : "everything sold is billed"
+          }
+        />
+
+        <Tile
+          label="Open AR"
+          value={ar.openAr > 0 ? formatCompactCurrency(ar.openAr) : "—"}
+          exact={ar.openAr > 0 ? formatCurrency(ar.openAr) : undefined}
+          tone={ar.pastDue > 0 ? "text-critical" : ar.openAr > 0 ? "text-warning" : undefined}
+          hint={
+            ar.pastDue > 0
+              ? `${formatCompactCurrency(ar.pastDue)} past due on ${ar.counts.pastDue}`
+              : ar.counts.open > 0
+                ? `${ar.counts.open} invoice${ar.counts.open === 1 ? "" : "s"} outstanding`
+                : ar.counts.paid > 0
+                  ? "all invoices settled"
+                  : "nothing invoiced yet"
+          }
+        />
+        {/* Money earned and withheld under the contract. Outside AR on purpose:
+            it is owed but not collectable until release, and counting it as AR
+            makes the position look healthier than the bank will. */}
+        <Tile
+          label="Retainage held"
+          value={ar.retainageHeld > 0 ? formatCompactCurrency(ar.retainageHeld) : "—"}
+          exact={ar.retainageHeld > 0 ? formatCurrency(ar.retainageHeld) : undefined}
+          hint={ar.retainageHeld > 0 ? "earned, held until release" : "none withheld yet"}
         />
         <Tile
           label="Baseline net profit"
@@ -95,7 +130,7 @@ export function CustomerValueTiles({ customerId }: { customerId: string }) {
           exact={data.baselineNetProfit !== null ? formatCurrency(data.baselineNetProfit) : undefined}
           hint={
             data.baselineNetProfitPct !== null
-              ? `${formatPercent(data.baselineNetProfitPct, 1)} before overhead`
+              ? `${formatCompactCurrency(data.baselineSubCost ?? 0)} sub cost · ${formatPercent(data.baselineNetProfitPct, 1)}`
               : "needs a crew rate card"
           }
           tone={
@@ -113,6 +148,28 @@ export function CustomerValueTiles({ customerId }: { customerId: string }) {
           {data.unpricedCodes} material code{data.unpricedCodes === 1 ? " has" : "s have"} no rate on
           the card — that work is missing from the contract value, not counted at zero.
         </p>
+      ) : null}
+
+      {/* Work already in the ground that no rate card can price. Louder than
+          the material-list warning above, because this is production that has
+          happened and cannot be invoiced until the code is right. */}
+      {data.unbillable.length > 0 ? (
+        <div className="rounded-lg border border-critical/30 bg-critical/[0.06] px-3 py-2">
+          <p className="text-[11.5px] font-medium text-critical">
+            Reported on approved dailies but not billable — no matching code on the rate card:
+          </p>
+          <ul className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5">
+            {data.unbillable.map((u) => (
+              <li key={u.code} className="num text-[11.5px] text-critical/90">
+                {u.code} · {u.quantity.toLocaleString()}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Fix the code on the daily, or add the rate — this work is excluded from billing, not
+            billed at zero.
+          </p>
+        </div>
       ) : null}
     </div>
   );
