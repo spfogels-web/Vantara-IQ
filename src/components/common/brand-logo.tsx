@@ -12,8 +12,9 @@ import { cn } from "@/lib/utils";
  *
  * It also means this is a server component. Nothing here needs state.
  *
- * Both files are padded to the same 4:1 canvas, so a single height places
- * either identically and the mark does not jump as the theme flips.
+ * Both files are built onto one 2002x381 canvas with the artwork at the same
+ * scale, so a single height places either identically and the lockup does not
+ * change size as the theme flips.
  */
 export function BrandLogo({
   className,
@@ -59,9 +60,22 @@ export function BrandLogo({
  * the mark and the lockup to drift apart.
  */
 export function BrandMark({ size = 34, className }: { size?: number; className?: string }) {
-  // The mark occupies roughly the first eighth of the 4:1 canvas, so showing a
-  // square window of a 4x-wide image lands on it.
-  const inner = { width: size * 4.15, height: size * 4.15 * 0.25 };
+  /**
+   * Measured, not guessed. On the 2002x381 canvas the V occupies x 180–430,
+   * y 47–330 — taller than it is wide, so it is scaled to fill 85% of the
+   * window's height and shifted to centre, which keeps the whole mark in frame
+   * and leaves the divider bar outside it.
+   *
+   * Re-measure if the artwork is replaced; a slightly different crop will
+   * otherwise clip the point off the V or drag the divider back in.
+   */
+  const inner = {
+    width: size * 5.994,
+    left: -size * 0.539,
+    top: -size * 0.066,
+  };
+
+  const common = "absolute max-w-none object-contain";
 
   return (
     <span
@@ -73,7 +87,7 @@ export function BrandMark({ size = 34, className }: { size?: number; className?:
         src="/vantara-logo-on-light.png"
         alt="Vantara IQ"
         style={inner}
-        className="absolute left-0 top-1/2 max-w-none -translate-y-1/2 object-contain dark:hidden"
+        className={cn(common, "dark:hidden")}
       />
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
@@ -81,7 +95,7 @@ export function BrandMark({ size = 34, className }: { size?: number; className?:
         alt=""
         aria-hidden="true"
         style={inner}
-        className="absolute left-0 top-1/2 hidden max-w-none -translate-y-1/2 object-contain dark:block"
+        className={cn(common, "hidden dark:block")}
       />
     </span>
   );
