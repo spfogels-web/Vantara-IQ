@@ -1357,8 +1357,18 @@ export async function pushMaterialsToProject(importId: string, projectId: string
     };
   }
 
-  // Clear this import's own rows, and any row on the project already carrying
-  // one of the incoming codes — whichever import put it there.
+  /**
+   * A material list replaces the job's list. It does not merge into it.
+   *
+   * Replacing only the codes the new list happened to mention left every row
+   * from a previous push standing. Thompson rd ended up carrying Charles
+   * Hart's whole list underneath its own — thirteen rows at Charles Hart's
+   * quantities — and read $68,214.81 against a real value near $7,500. Nothing
+   * on screen looked wrong, because every individual figure was right.
+   *
+   * Rows added by hand (no source import) survive; they were not part of any
+   * list and nobody asked for them to be replaced.
+   */
   const codes = rows.map((r) => r.code || "").filter(Boolean);
 
   // Carry scope decisions across the replacement. Marking riser guards
@@ -1374,7 +1384,16 @@ export async function pushMaterialsToProject(importId: string, projectId: string
   );
 
   const replaced = await prisma.projectMaterial.deleteMany({
-    where: { projectId, OR: [{ sourceImportId: importId }, { code: { in: codes } }] },
+    where: {
+      projectId,
+      OR: [
+        // Everything any list put here, including a list since deleted.
+        { sourceImportId: { not: "" } },
+        // And any hand-added row this list also names, so one code cannot
+        // appear twice at two quantities.
+        { code: { in: codes } },
+      ],
+    },
   });
 
   await prisma.projectMaterial.createMany({

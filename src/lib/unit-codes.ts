@@ -94,8 +94,55 @@ export function isAerialCode(code: string): boolean {
   return /^CO/.test(normalizeCode(code));
 }
 
+/**
+ * Pole-mounted units that carry a buried prefix.
+ *
+ * BDSFH(POLE) is a fibre distribution hub on a pole — a B code doing aerial
+ * work. The paperwork says so in the code itself, so this reads it rather than
+ * keeping a list of exceptions that will always be one sheet out of date.
+ */
+function isPoleMounted(code: string): boolean {
+  return /\(POLE\)|POLE\)/.test(normalizeCode(code));
+}
+
+/**
+ * Riser guards. A B code, and aerial work all the same.
+ *
+ * A riser guard protects cable running up a pole, so it appears on buried
+ * material lists but is not buried work — Fortitude does not do it. Marking it
+ * out of scope on one project was not enough: the next list brought it back,
+ * priced, on a job nobody was going to build it on.
+ */
+function isRiserGuardCode(code: string): boolean {
+  return /^BM82/.test(normalizeCode(code));
+}
+
+/**
+ * Underground work, by the coding Windstream actually uses.
+ *
+ * B is the buried prefix across the whole sheet: BFO (buried fibre), BFOV
+ * (duct), BM (pipe crossings, grounds, signs), BD (pedestals and vaults), BHF
+ * (handholes), BG (grounds), BC (buried cable). The aerial families are P
+ * (PM pole, PE guy, PF anchor), CO, HO and the STRAT/MAKE READY estimate lines
+ * — none of which start with B.
+ *
+ * This used to be a hand-written list of twelve families, which is why it
+ * recognised BFO12, BFO24, BFO48 and BFO144 but not BFO36 or BFO96; BD4MPF and
+ * BD5MPF but not BD3MPF; and nothing at all for BFOE depth adders or BHF
+ * handholes. Every one of those is ordinary underground work that then sat in
+ * the review queue while the codes beside it went through, so a job's material
+ * list came up short and its value with it. A list of families can only ever be
+ * as current as the last sheet somebody read.
+ */
 export function isPriorityCode(code: string): boolean {
-  return priorityFamily(code) !== null || isBuriedMiscCode(code) || isRibbonInDuctCode(code);
+  const c = normalizeCode(code);
+  if (!c) return false;
+  if (isAerialCode(c) || isPoleMounted(c) || isRiserGuardCode(c)) return false;
+  // Labour, equipment and hourly lines are not material at all.
+  if (isLabourOrEquipmentCode(c)) return false;
+  if (/^B/.test(c)) return true;
+  // Kept for anything historically classified that does not start with B.
+  return priorityFamily(c) !== null || isRibbonInDuctCode(c);
 }
 
 /**
