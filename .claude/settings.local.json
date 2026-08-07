@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rm -f prisma/_subs.ts prisma/_assign.ts prisma/_dupes.ts prisma/_dedupe.ts prisma/_recheck.ts prisma/_upload-test.ts)",
+      "Bash(git add *)",
+      "Bash(git commit -q -m ' *)",
+      "Bash(git push *)"
+    ]
+  }
+}

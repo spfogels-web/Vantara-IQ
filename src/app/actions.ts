@@ -1308,12 +1308,24 @@ async function runMaterialExtraction(projectId: string, file: File) {
   }
 }
 
-/** Removes a material import and its rows from a project. */
+/**
+ * Removes a material import and everything it put on the project.
+ *
+ * sourceImportId is a plain string, not a foreign key, so deleting the import
+ * on its own left the tracked material rows behind — a wrong list could be
+ * deleted and its quantities would still be in the project's value, with no
+ * import left on screen to explain where they came from.
+ */
 export async function deleteProjectMaterialImport(importId: string, projectId: string) {
   await requireStaff();
+  const removed = await prisma.projectMaterial.deleteMany({
+    where: { projectId, sourceImportId: importId },
+  });
   await prisma.rateImport.delete({ where: { id: importId } });
   revalidatePath(`/projects/${projectId}`);
-  return { ok: true as const };
+  revalidatePath("/materials");
+  revalidatePath("/customers");
+  return { ok: true as const, removed: removed.count };
 }
 
 /** Rough classification so the tracked list groups sensibly without asking. */
@@ -1327,8 +1339,14 @@ function materialCategory(text: string): string {
 
 /**
  * Promote a reviewed import onto the project. Only APPROVED rows cross over —
- * this is the line between "Claude read it" and "we're tracking it". Approving
- * the same import twice replaces its previous rows rather than doubling them.
+ * this is the line between "Claude read it" and "we're tracking it".
+ *
+ * A project holds one planned quantity per code, so an incoming code replaces
+ * whatever was there regardless of which import put it there. Guarding only
+ * against re-pushing the *same* import was not enough: uploading the same
+ * material list twice made two imports, both pushed, and the project quietly
+ * carried every quantity twice — which doubles the contract value without a
+ * single figure looking wrong.
  */
 export async function pushMaterialsToProject(importId: string, projectId: string) {
   await requireStaff();
@@ -1344,7 +1362,13 @@ export async function pushMaterialsToProject(importId: string, projectId: string
     };
   }
 
-  await prisma.projectMaterial.deleteMany({ where: { projectId, sourceImportId: importId } });
+  // Clear this import's own rows, and any row on the project already carrying
+  // one of the incoming codes — whichever import put it there.
+  const codes = rows.map((r) => r.code || "").filter(Boolean);
+  const replaced = await prisma.projectMaterial.deleteMany({
+    where: { projectId, OR: [{ sourceImportId: importId }, { code: { in: codes } }] },
+  });
+
   await prisma.projectMaterial.createMany({
     data: rows.map((r) => {
       const d = (r.data ?? {}) as Record<string, unknown>;
@@ -1369,7 +1393,7 @@ export async function pushMaterialsToProject(importId: string, projectId: string
 
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/materials");
-  return { ok: true as const, count: rows.length };
+  return { ok: true as const, count: rows.length, replaced: replaced.count };
 }
 
 /**
@@ -2274,4 +2298,188 @@ export async function voidInvoice(id: string, reason: string) {
   revalidatePath("/invoicing");
   revalidatePath("/customers");
   return { ok: true as const };
+}
+
+/* ------------------------------------------------------------------ *
+ * Direct rate-sheet upload — drop the signed sheet, get a rate card.
+ * ------------------------------------------------------------------ */
+
+/**
+ * Read a rate sheet straight onto a card, no review queue.
+ *
+ * The import screen exists for documents that need a human to check what was
+ * read. A signed rate sheet is not one of them: it is a two-column price table,
+ * and the parser reads it deterministically off the PDF's own text layer or the
+ * spreadsheet's own cells — no AI, so nothing to second-guess.
+ *
+ * Codes replace by code rather than piling up. Uploading a revised sheet should
+ * leave the card matching the sheet, not the sheet plus every prior version of
+ * it, and rates that only existed on the old sheet are reported so a rate that
+ * quietly disappeared is visible rather than assumed dropped on purpose.
+ */
+export async function uploadRateSheet(formData: FormData) {
+  await requireStaff();
+
+  const file = formData.get("file") as File | null;
+  const subcontractorId = String(formData.get("subcontractorId") || "");
+  const customerId = String(formData.get("customerId") || "");
+
+  if (!file) return { ok: false as const, error: "Choose a file." };
+  if (!subcontractorId && !customerId) {
+    return { ok: false as const, error: "No card to load these onto." };
+  }
+  if (file.size > MAX_DOC_BYTES) {
+    return { ok: false as const, error: "File is over 10 MB." };
+  }
+
+  const buf = Buffer.from(await file.arrayBuffer());
+  const name = file.name.toLowerCase();
+  let parsed: { code: string; rate: number; description?: string; unit?: string }[] = [];
+
+  if (name.endsWith(".pdf")) {
+    const text = await pdfTextLayer(buf);
+    if (!text) {
+      return {
+        ok: false as const,
+        error: "That PDF has no text layer — it's a scan. Send it through the rate-import screen, which can read images.",
+      };
+    }
+    parsed = parseRateSheet(text);
+  } else if (/\.(xlsx|xls|csv)$/.test(name)) {
+    // A spreadsheet already has its columns; find the code and the price
+    // rather than guessing by position, because these sheets are hand-made and
+    // the column order is never the same twice.
+    const wb = XLSX.read(buf, { type: "buffer" });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
+    const keyFor = (row: Record<string, unknown>, want: RegExp) =>
+      Object.keys(row).find((k) => want.test(k.trim()));
+
+    for (const row of rows) {
+      const codeKey = keyFor(row, /^(code|unit ?code|item|cwi)$/i);
+      const rateKey = keyFor(row, /^(rate|price|amount|unit ?price|sub ?rate)$/i);
+      if (!codeKey || !rateKey) continue;
+      const code = String(row[codeKey] ?? "").trim();
+      const rate = Number(String(row[rateKey] ?? "").replace(/[$,]/g, ""));
+      if (!code || !Number.isFinite(rate)) continue;
+      const descKey = keyFor(row, /^(description|desc|work)$/i);
+      const unitKey = keyFor(row, /^(unit|uom)$/i);
+      parsed.push({
+        code,
+        rate,
+        description: descKey ? String(row[descKey] ?? "").trim() : "",
+        unit: unitKey ? String(row[unitKey] ?? "").trim() : "",
+      });
+    }
+    if (parsed.length === 0) {
+      return {
+        ok: false as const,
+        error: "Couldn't find a code column and a rate column in that spreadsheet.",
+      };
+    }
+  } else {
+    return { ok: false as const, error: "Upload a PDF, XLSX or CSV." };
+  }
+
+  if (parsed.length === 0) {
+    return { ok: false as const, error: "No priced rows found in that file." };
+  }
+
+  const codes = parsed.map((r) => r.code);
+  let added = 0;
+  let changed = 0;
+  let same = 0;
+  const moved: string[] = [];
+
+  if (subcontractorId) {
+    const existing = await prisma.subcontractorRate.findMany({
+      where: { subcontractorId },
+      select: { id: true, code: true, rate: true, unit: true, description: true },
+    });
+    const byCode = new Map(existing.map((r) => [r.code.toUpperCase(), r]));
+
+    for (const r of parsed) {
+      const prior = byCode.get(r.code.toUpperCase());
+      if (!prior) {
+        await prisma.subcontractorRate.create({
+          data: {
+            subcontractorId,
+            code: r.code,
+            description: r.description ?? "",
+            unit: r.unit ?? "",
+            rate: r.rate,
+            source: "upload",
+          },
+        });
+        added++;
+        continue;
+      }
+      if (prior.rate !== r.rate) {
+        moved.push(`${r.code}: ${prior.rate} → ${r.rate}`);
+        changed++;
+      } else same++;
+      await prisma.subcontractorRate.update({
+        where: { id: prior.id },
+        data: {
+          rate: r.rate,
+          unit: r.unit || prior.unit,
+          description: r.description || prior.description,
+          source: "upload",
+        },
+      });
+    }
+  } else {
+    const existing = await prisma.customerRate.findMany({
+      where: { customerId },
+      select: { id: true, code: true, rate: true, unit: true, description: true },
+    });
+    const byCode = new Map(existing.map((r) => [r.code.toUpperCase(), r]));
+
+    for (const r of parsed) {
+      const prior = byCode.get(r.code.toUpperCase());
+      if (!prior) {
+        await prisma.customerRate.create({
+          data: {
+            customerId,
+            code: r.code,
+            description: r.description ?? "",
+            unit: r.unit ?? "",
+            rate: r.rate,
+            source: "upload",
+          },
+        });
+        added++;
+        continue;
+      }
+      if (prior.rate !== r.rate) {
+        moved.push(`${r.code}: ${prior.rate} → ${r.rate}`);
+        changed++;
+      } else same++;
+      await prisma.customerRate.update({
+        where: { id: prior.id },
+        data: {
+          rate: r.rate,
+          unit: r.unit || prior.unit,
+          description: r.description || prior.description,
+          source: "upload",
+        },
+      });
+    }
+  }
+
+  revalidatePath("/subcontractors");
+  revalidatePath("/customers");
+  return {
+    ok: true as const,
+    fileName: file.name,
+    parsed: parsed.length,
+    added,
+    changed,
+    same,
+    // Cap the list — a sheet that revises hundreds of rates should say so,
+    // not print an unreadable wall.
+    moved: moved.slice(0, 12),
+    moreMoved: Math.max(0, moved.length - 12),
+    codes: codes.length,
+  };
 }

@@ -15,6 +15,7 @@ import {
   updateSubRate,
 } from "@/app/actions";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
+import { RateSheetUpload } from "@/components/common/rate-sheet-upload";
 
 /**
  * What we pay this sub, per unit code.
@@ -203,6 +204,11 @@ export function SubRateCard({ subcontractorId }: { subcontractorId: string }) {
           {error ? <p className="col-span-full text-[11.5px] text-critical">{error}</p> : null}
         </form>
       ) : null}
+
+      {/* Drop the signed sheet straight on. A rate sheet is a two-column price
+          table, read deterministically off the file itself, so it does not need
+          the review queue that an AI-extracted document does. */}
+      <RateSheetUpload subcontractorId={subcontractorId} onLoaded={load} />
 
       {/* Apply an extracted rate document — the GC contract or the sub's own
           signed rate sheet — instead of keying every line. */}

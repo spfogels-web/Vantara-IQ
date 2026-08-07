@@ -26,6 +26,7 @@ import {
   uploadCustomerDocument,
 } from "@/app/actions";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
+import { RateSheetUpload } from "@/components/common/rate-sheet-upload";
 import { StatusPill } from "@/components/common/status-pill";
 import { Button } from "@/components/ui/button";
 
@@ -176,6 +177,14 @@ export function CustomerBilling({ customerId }: { customerId: string }) {
             </Button>
           </div>
         </PanelHeader>
+
+        {/* Load the signed Exhibit straight on — read off the file itself, so
+            it does not need the review queue an AI extraction does. */}
+        <RateSheetUpload
+          customerId={customerId}
+          onLoaded={() => void listCustomerRates(customerId).then(setRates)}
+        />
+
         <div className="overflow-x-auto">
           <table className="w-full min-w-[560px] text-left">
             <thead>
