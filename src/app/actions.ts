@@ -26,6 +26,13 @@ import { readExif } from "@/lib/exif";
 import { balanceOf } from "@/lib/billing";
 import { badgeReadiness } from "@/lib/badge";
 import {
+  canStoreBankDetails,
+  decryptField,
+  encryptField,
+  isValidRouting,
+  last4,
+} from "@/lib/field-crypto";
+import {
   fileApprovedDaily,
   unfileDaily,
   type FileResult,
@@ -3080,3 +3087,234 @@ export async function listCrewBadges(subcontractorId: string) {
   return getCrewBadges(subcontractorId);
 }
 
+
+/* ------------------------------------------------------------------ *
+ * ACH authorisation — where a crew's money goes.
+ * ------------------------------------------------------------------ */
+
+export interface AchView {
+  legalName: string; dba: string; ein: string;
+  addressLine1: string; addressLine2: string;
+  city: string; stateRegion: string; postalCode: string;
+  phone: string; email: string;
+  bankName: string; bankAddressLine1: string;
+  bankCity: string; bankStateRegion: string; bankPostalCode: string;
+  accountType: string;
+  /** Masked. The real numbers never leave the server. */
+  accountLast4: string;
+  routingLast4: string;
+  signerName: string; signerTitle: string;
+  signatureDataUrl: string;
+  signedDate: string;
+  submittedAt: string | null;
+  /** False when the environment has no key, so the form can say why. */
+  canStore: boolean;
+}
+
+/**
+ * The authorisation on file, with the account and routing numbers masked.
+ *
+ * Deliberately never returns them. There is no screen that needs an account
+ * number displayed — reconciling a remittance takes the last four, and paying
+ * takes a decryption at the point of payment, not a value sitting in a page
+ * somebody might screenshot.
+ */
+export async function getAchAuthorization(subcontractorId: string): Promise<AchView | null> {
+  await assertOwnSubcontractor(subcontractorId);
+
+  const row = await prisma.achAuthorization.findUnique({ where: { subcontractorId } });
+  if (!row) return null;
+
+  return {
+    legalName: row.legalName, dba: row.dba, ein: row.ein,
+    addressLine1: row.addressLine1, addressLine2: row.addressLine2,
+    city: row.city, stateRegion: row.stateRegion, postalCode: row.postalCode,
+    phone: row.phone, email: row.email,
+    bankName: row.bankName, bankAddressLine1: row.bankAddressLine1,
+    bankCity: row.bankCity, bankStateRegion: row.bankStateRegion,
+    bankPostalCode: row.bankPostalCode,
+    accountType: row.accountType,
+    accountLast4: row.accountLast4,
+    routingLast4: row.routingLast4,
+    signerName: row.signerName, signerTitle: row.signerTitle,
+    signatureDataUrl: row.signatureDataUrl,
+    signedDate: row.signedDate,
+    submittedAt: row.submittedAt?.toISOString().slice(0, 10) ?? null,
+    canStore: canStoreBankDetails(),
+  };
+}
+
+/**
+ * Save a signed ACH authorisation.
+ *
+ * The bank numbers are encrypted before they touch the database and only their
+ * last four are kept in the clear. If the environment has no key, this refuses
+ * rather than storing them in plaintext — a missing key is a configuration
+ * problem, and writing the account number anyway to keep the form working
+ * would turn it into a permanent one.
+ *
+ * Blank bank numbers on an existing record mean "leave what's there", so
+ * correcting a typo in the address does not require re-entering the account.
+ */
+export async function saveAchAuthorization(input: {
+  subcontractorId: string;
+  inviteToken?: string;
+  legalName: string; dba?: string; ein: string;
+  addressLine1: string; addressLine2?: string;
+  city: string; stateRegion: string; postalCode: string;
+  phone?: string; email?: string;
+  bankName: string; bankAddressLine1?: string;
+  bankCity?: string; bankStateRegion?: string; bankPostalCode?: string;
+  accountType: string;
+  /** Blank keeps whatever is already stored. */
+  accountNumber?: string;
+  routingNumber?: string;
+  signerName: string; signerTitle?: string;
+  signatureDataUrl: string;
+  signedDate: string;
+}) {
+  await assertSubcontractorWrite(input.subcontractorId, input.inviteToken);
+
+  const existing = await prisma.achAuthorization.findUnique({
+    where: { subcontractorId: input.subcontractorId },
+    select: { id: true, accountNumberEnc: true, routingNumberEnc: true, accountLast4: true, routingLast4: true },
+  });
+
+  const required: [string, string | undefined][] = [
+    ["Legal business name", input.legalName],
+    ["EIN", input.ein],
+    ["Street address", input.addressLine1],
+    ["City", input.city],
+    ["State", input.stateRegion],
+    ["ZIP", input.postalCode],
+    ["Bank name", input.bankName],
+    ["Name of the person signing", input.signerName],
+    ["Signature", input.signatureDataUrl],
+    ["Date", input.signedDate],
+  ];
+  const missing = required.filter(([, v]) => !v?.trim()).map(([label]) => label);
+  if (missing.length) {
+    return { ok: false as const, error: `Still needed: ${missing.join(", ")}.` };
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.signedDate.trim())) {
+    return { ok: false as const, error: "Enter the date as YYYY-MM-DD." };
+  }
+
+  const account = (input.accountNumber ?? "").replace(/\s|-/g, "");
+  const routing = (input.routingNumber ?? "").replace(/\s|-/g, "");
+
+  // Both are required on a first submission; on an edit, blank keeps the
+  // stored value so a typo elsewhere doesn't mean re-keying the account.
+  if (!existing && (!account || !routing)) {
+    return { ok: false as const, error: "Account number and routing number are both needed." };
+  }
+  if (account && !/^\d{4,17}$/.test(account)) {
+    return { ok: false as const, error: "An account number is 4 to 17 digits." };
+  }
+  if (routing && !isValidRouting(routing)) {
+    return {
+      ok: false as const,
+      error: "That routing number isn't valid — it's nine digits and the check digit doesn't match. Worth reading it off a cheque again.",
+    };
+  }
+
+  if ((account || routing) && !canStoreBankDetails()) {
+    return {
+      ok: false as const,
+      error: "Bank details can't be stored on this environment yet — the encryption key isn't set. Everything else on the form saves.",
+    };
+  }
+
+  const data = {
+    subcontractorId: input.subcontractorId,
+    legalName: input.legalName.trim(),
+    dba: input.dba?.trim() ?? "",
+    ein: input.ein.trim(),
+    addressLine1: input.addressLine1.trim(),
+    addressLine2: input.addressLine2?.trim() ?? "",
+    city: input.city.trim(),
+    stateRegion: input.stateRegion.trim(),
+    postalCode: input.postalCode.trim(),
+    phone: input.phone?.trim() ?? "",
+    email: input.email?.trim() ?? "",
+    bankName: input.bankName.trim(),
+    bankAddressLine1: input.bankAddressLine1?.trim() ?? "",
+    bankCity: input.bankCity?.trim() ?? "",
+    bankStateRegion: input.bankStateRegion?.trim() ?? "",
+    bankPostalCode: input.bankPostalCode?.trim() ?? "",
+    accountType: input.accountType === "savings" ? "savings" : "checking",
+    accountNumberEnc: account ? encryptField(account) : (existing?.accountNumberEnc ?? ""),
+    routingNumberEnc: routing ? encryptField(routing) : (existing?.routingNumberEnc ?? ""),
+    accountLast4: account ? last4(account) : (existing?.accountLast4 ?? ""),
+    routingLast4: routing ? last4(routing) : (existing?.routingLast4 ?? ""),
+    signerName: input.signerName.trim(),
+    signerTitle: input.signerTitle?.trim() ?? "",
+    signatureDataUrl: input.signatureDataUrl,
+    signedDate: input.signedDate.trim(),
+    submittedAt: new Date(),
+  };
+
+  await prisma.achAuthorization.upsert({
+    where: { subcontractorId: input.subcontractorId },
+    create: data,
+    update: data,
+  });
+
+  // Keep the vendor packet's payment section in step, so a crew isn't asked
+  // for the same thing twice in two places.
+  await prisma.subcontractor.update({
+    where: { id: input.subcontractorId },
+    data: {
+      paymentMethod: "ACH",
+      remittanceEmail: input.email?.trim() || undefined,
+    },
+  });
+
+  revalidatePath("/subcontractors");
+  revalidatePath("/company");
+  return { ok: true as const };
+}
+
+/**
+ * Decrypt the bank numbers for one crew, to actually pay them.
+ *
+ * Staff only, and separate from the read used to render a page — the numbers
+ * come out at the moment somebody is setting up a payment, and not before.
+ * Every call is written to the audit log, because the interesting question
+ * about an account number is never "what is it" but "who looked".
+ */
+export async function revealBankDetails(subcontractorId: string) {
+  const user = await requireStaff();
+
+  const row = await prisma.achAuthorization.findUnique({
+    where: { subcontractorId },
+    select: { accountNumberEnc: true, routingNumberEnc: true, subcontractor: { select: { company: true } } },
+  });
+  if (!row?.accountNumberEnc) return { ok: false as const, error: "No bank details on file." };
+
+  try {
+    const accountNumber = decryptField(row.accountNumberEnc);
+    const routingNumber = row.routingNumberEnc ? decryptField(row.routingNumberEnc) : "";
+
+    await prisma.accessLog.create({
+      data: {
+        action: "ach.revealed",
+        actorUserId: user.id,
+        actorEmail: user.email,
+        subjectId: subcontractorId,
+        detail: `Viewed bank details for ${row.subcontractor.company}`,
+      },
+    }).catch(() => {
+      // An audit table that isn't there must not stop a payment going out,
+      // but it should not fail silently in development either.
+      console.warn("ach.revealed could not be recorded");
+    });
+
+    return { ok: true as const, accountNumber, routingNumber };
+  } catch {
+    return {
+      ok: false as const,
+      error: "Stored details could not be decrypted — the encryption key has changed or the record was altered.",
+    };
+  }
+}

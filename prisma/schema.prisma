@@ -278,6 +278,7 @@ model Subcontractor {
   /// Jobs this crew is assigned to — the authority on what they can see.
   projects       Project[] @relation("ProjectCrews")
   badges         CrewBadge[]
+  ach            AchAuthorization?
   compliance     Json      @default("[]")
   complianceTone String    @default("neutral")
   scorecard      Json      @default("{}")
@@ -366,6 +367,85 @@ model SubDocument {
   dataUrl         String
   uploadedBy      String        @default("subcontractor")
   createdAt       DateTime      @default(now())
+}
+
+/// Who looked at something sensitive, and when.
+///
+/// The interesting question about a bank account number is never "what is it"
+/// but "who read it". Decryption is the moment worth recording, so it is
+/// recorded — and kept separate from the record it concerns, so removing a
+/// crew does not remove the history of who accessed their details.
+model AccessLog {
+  id         String   @id @default(cuid())
+  /// Dotted, e.g. "ach.revealed".
+  action     String
+  actorUserId String  @default("")
+  actorEmail String   @default("")
+  /// What was accessed, in words — this is read by a person, not a query.
+  detail     String   @default("")
+  subjectId  String   @default("")
+  createdAt  DateTime @default(now())
+
+  @@index([action, createdAt])
+  @@index([subjectId])
+}
+
+/// A signed ACH authorisation — the crew telling us where to send their money.
+///
+/// One per subcontractor: a company has one place it gets paid, and allowing
+/// several would mean choosing between them at payment time, which is exactly
+/// the decision nobody wants to make by hand. Replacing it supersedes the old
+/// one, and the signature and date move with it.
+///
+/// The account and routing numbers are encrypted at rest and never leave the
+/// server in the clear — see src/lib/field-crypto.ts. Everything else here is
+/// ordinary business information and stays queryable.
+model AchAuthorization {
+  id              String        @id @default(cuid())
+  subcontractor   Subcontractor @relation(fields: [subcontractorId], references: [id], onDelete: Cascade)
+  subcontractorId String        @unique
+
+  // Who is being paid. Repeated from the vendor packet rather than referenced,
+  // because this is a signed instrument: it has to say what it said on the day,
+  // even if the packet is edited afterwards.
+  legalName    String @default("")
+  dba          String @default("")
+  ein          String @default("")
+  addressLine1 String @default("")
+  addressLine2 String @default("")
+  city         String @default("")
+  stateRegion  String @default("")
+  postalCode   String @default("")
+  phone        String @default("")
+  email        String @default("")
+
+  // Where the money goes.
+  bankName            String @default("")
+  bankAddressLine1    String @default("")
+  bankCity            String @default("")
+  bankStateRegion     String @default("")
+  bankPostalCode      String @default("")
+  /// "checking" | "savings"
+  accountType         String @default("checking")
+  /// AES-256-GCM ciphertext. Never sent to a client.
+  accountNumberEnc    String @default("")
+  routingNumberEnc    String @default("")
+  /// Shown instead of the real thing, and enough to reconcile a remittance.
+  accountLast4        String @default("")
+  routingLast4        String @default("")
+
+  // The authorisation itself.
+  signerName      String    @default("")
+  signerTitle     String    @default("")
+  /// Drawn signature as a data URL.
+  signatureDataUrl String   @default("")
+  /// The date the signer put on it, as YYYY-MM-DD.
+  signedDate      String    @default("")
+  /// When the form was actually submitted — distinct from the date typed on it.
+  submittedAt     DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 enum BadgeStatus {

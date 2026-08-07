@@ -1,10 +1,12 @@
 import { redirect } from "next/navigation";
 
 import { getCrewBadges, getDocuments, getVendorPacket } from "@/data/queries";
+import { getAchAuthorization } from "@/app/actions";
 import { getCurrentUser } from "@/lib/auth";
 import { PageShell } from "@/components/common/page-shell";
 import { VendorPacketForm } from "@/components/subcontractors/vendor-packet-form";
 import { DocumentList } from "@/components/documents/document-list";
+import { AchForm } from "@/components/subcontractors/ach-form";
 import { BadgeSection } from "@/components/subcontractors/badge-section";
 
 export const dynamic = "force-dynamic";
@@ -23,10 +25,11 @@ export default async function CompanyProfilePage() {
   if (!me) redirect("/login");
   if (!me.subcontractorId) redirect("/subcontractors");
 
-  const [packet, docs, badges] = await Promise.all([
+  const [packet, docs, badges, ach] = await Promise.all([
     getVendorPacket(me.subcontractorId),
     getDocuments(),
     getCrewBadges(me.subcontractorId),
+    getAchAuthorization(me.subcontractorId),
   ]);
   if (!packet) redirect("/dailies");
 
@@ -49,6 +52,10 @@ export default async function CompanyProfilePage() {
           badges={badges}
           canReview={false}
         />
+
+        {/* How they get paid. Above the general packet because it is the
+            thing a crew chases, and it is the thing that holds up a payment. */}
+        <AchForm subcontractorId={me.subcontractorId} existing={ach} />
 
         <VendorPacketForm packet={packet} />
       </div>
