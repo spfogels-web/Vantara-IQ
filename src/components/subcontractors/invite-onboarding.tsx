@@ -47,6 +47,15 @@ export function InviteOnboarding({ project }: { token: string; project: InvitePr
   const [account, setAccount] = React.useState({ company: "", name: "", email: "", password: "" });
   const [caps, setCaps] = React.useState({ crews: "", fieldStaff: "", equipment: "", trades: [] as string[] });
   const [agreementDownloaded, setAgreementDownloaded] = React.useState(false);
+  const [docStatus, setDocStatus] = React.useState<{ canSubmit: boolean; blockers: string[] }>({
+    canSubmit: false,
+    blockers: [],
+  });
+  // Identity-stable so DocumentCenter's effect doesn't refire every render.
+  const handleDocStatus = React.useCallback(
+    (next: { canSubmit: boolean; blockers: string[] }) => setDocStatus(next),
+    [],
+  );
 
   const setA = (k: keyof typeof account) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setAccount((f) => ({ ...f, [k]: e.target.value }));
@@ -293,15 +302,24 @@ export function InviteOnboarding({ project }: { token: string; project: InvitePr
               account now.
             </p>
             <div className="mt-4">
-              <DocumentCenter subcontractorId={subId} initialDocs={[]} uploadedBy="subcontractor" />
+              <DocumentCenter subcontractorId={subId} initialDocs={[]} uploadedBy="subcontractor" onStatusChange={handleDocStatus} />
             </div>
           </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-3">
+            {/* Blocked only by the documents that must be in hand now. A
+                missing COI never stops a crew finishing — they upload it from
+                their portal when their agent sends it. */}
             <button
               type="button"
               onClick={() => setStep("done")}
-              className="brand-gradient focus-ring inline-flex items-center gap-1.5 rounded-lg px-4 py-2.5 text-[13px] font-semibold text-white"
+              disabled={!docStatus.canSubmit}
+              title={
+                docStatus.canSubmit
+                  ? undefined
+                  : `Still needed: ${docStatus.blockers.join(", ")}`
+              }
+              className="brand-gradient focus-ring inline-flex items-center gap-1.5 rounded-lg px-4 py-2.5 text-[13px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
             >
               Submit for review
             </button>
@@ -313,7 +331,9 @@ export function InviteOnboarding({ project }: { token: string; project: InvitePr
               Back
             </button>
             <span className="text-[11.5px] text-muted-foreground">
-              You can keep uploading from your portal after submitting.
+              {docStatus.canSubmit
+                ? "Anything still outstanding can be uploaded from your portal later."
+                : `Still needed: ${docStatus.blockers.join(", ")}.`}
             </span>
           </div>
         </div>

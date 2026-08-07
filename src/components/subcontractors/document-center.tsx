@@ -88,11 +88,14 @@ export function DocumentCenter({
   initialDocs,
   uploadedBy = "subcontractor",
   canDelete = true,
+  onStatusChange,
 }: {
   subcontractorId: string;
   initialDocs: SubDoc[];
   uploadedBy?: "subcontractor" | "contractor";
   canDelete?: boolean;
+  /** Reports what is still outstanding so a parent can gate its own button. */
+  onStatusChange?: (status: { canSubmit: boolean; blockers: string[] }) => void;
 }) {
   const [docs, setDocs] = React.useState<SubDoc[]>(initialDocs);
   const [busy, setBusy] = React.useState<string | null>(null);
@@ -126,6 +129,16 @@ export function DocumentCenter({
   const requiredDone = DOC_SECTIONS.filter((s) => s.required).every((s) =>
     docs.some((d) => d.section === s.key),
   );
+
+  // Tell the parent whenever the picture changes, so the submit button and this
+  // list can never disagree about what is missing.
+  const blockerLabels = submitBlockers.map((s) => s.label).join("|");
+  React.useEffect(() => {
+    onStatusChange?.({
+      canSubmit: blockerLabels.length === 0,
+      blockers: blockerLabels ? blockerLabels.split("|") : [],
+    });
+  }, [blockerLabels, onStatusChange]);
 
   return (
     <div className="flex flex-col gap-3">

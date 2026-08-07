@@ -19,6 +19,7 @@ import {
 } from "@/lib/parse-material-list";
 import { findJobProfile } from "@/lib/job-profiles";
 import { isLabourOrEquipmentCode } from "@/lib/unit-codes";
+import { packetStatus } from "@/lib/vendor-packet";
 import { describeFileRejection } from "@/lib/document-storage";
 import { getVendorPacket } from "@/data/queries";
 import {
@@ -258,7 +259,25 @@ export async function saveOrganizationLogo(url: string) {
  */
 export async function setSubcontractorProjects(id: string, projectIds: string[]) {
   await requireStaff();
+
   const wanted = [...new Set(projectIds.map((p) => p.trim()).filter(Boolean))];
+
+  // Assigning work is the moment the paperwork has to be real. Checked here
+  // rather than only in the UI, because this action is reachable on its own —
+  // and unassigning must always be allowed, or a crew whose packet lapses could
+  // never be taken off a job.
+  if (wanted.length > 0) {
+    const sub = await prisma.subcontractor.findUnique({ where: { id } });
+    if (!sub) return { ok: false as const, error: "Subcontractor not found." };
+
+    const packet = packetStatus(sub);
+    if (!packet.complete) {
+      return {
+        ok: false as const,
+        error: `Their vendor packet is incomplete — still needed: ${packet.blocking.join(", ")}.`,
+      };
+    }
+  }
   const real = await prisma.project.findMany({
     where: { id: { in: wanted } },
     select: { id: true },

@@ -533,14 +533,27 @@ function SubDetail({
             icon={<FolderKanban className="size-3.5" />}
           />
           <PanelBody>
+            {/* Two separate gates, reported separately. Compliance is about
+                documents lapsing; the packet is about who this company legally
+                is. Merging them into one "not eligible" would leave the office
+                guessing which to chase. */}
             <AssignProjects
               subcontractorId={s.id}
               assigned={s.assignedProjects}
               projects={projects}
-              disabled={!gate.eligible}
-              disabledReason="Complete onboarding before assigning work"
+              disabled={!gate.eligible || !s.packet.complete}
+              disabledReason={
+                !s.packet.complete
+                  ? `Vendor packet incomplete — still needed: ${s.packet.blocking.join(", ")}`
+                  : "Complete onboarding before assigning work"
+              }
             />
-            {!gate.eligible ? (
+            {!s.packet.complete ? (
+              <p className="mt-1.5 text-center text-[10.5px] text-warning">
+                Vendor packet incomplete — {s.packet.blocking.length} item
+                {s.packet.blocking.length === 1 ? "" : "s"} outstanding
+              </p>
+            ) : !gate.eligible ? (
               <p className="mt-1.5 text-center text-[10.5px] text-warning">
                 Blocked until onboarding is complete &amp; approved
               </p>
