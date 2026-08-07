@@ -86,14 +86,19 @@ function formatBytes(n: number) {
 export function DocumentCenter({
   subcontractorId,
   initialDocs,
-  uploadedBy = "subcontractor",
   canDelete = true,
+  inviteToken,
   onStatusChange,
 }: {
   subcontractorId: string;
   initialDocs: SubDoc[];
-  uploadedBy?: "subcontractor" | "contractor";
   canDelete?: boolean;
+  /**
+   * Set during onboarding, when nobody has a login yet. It is what authorizes
+   * writing into this crew's packet — without it the server would have only
+   * the id from the form, which anyone could supply.
+   */
+  inviteToken?: string;
   /** Reports what is still outstanding so a parent can gate its own button. */
   onStatusChange?: (status: { canSubmit: boolean; blockers: string[] }) => void;
 }) {
@@ -108,7 +113,7 @@ export function DocumentCenter({
     fd.set("file", file);
     fd.set("subcontractorId", subcontractorId);
     fd.set("section", section);
-    fd.set("uploadedBy", uploadedBy);
+    if (inviteToken) fd.set("inviteToken", inviteToken);
     const res = await uploadSubDocument(fd);
     setBusy(null);
     if (res.ok) setDocs((d) => [...d, res.doc]);

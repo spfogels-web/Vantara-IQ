@@ -649,7 +649,7 @@ function SubDetail({
           {docs === null ? (
             <p className="text-[12px] text-muted-foreground">Loading documents…</p>
           ) : (
-            <DocumentCenter key={s.id} subcontractorId={s.id} initialDocs={docs} uploadedBy="contractor" />
+            <DocumentCenter key={s.id} subcontractorId={s.id} initialDocs={docs} />
           )}
         </PanelBody>
       </Panel>

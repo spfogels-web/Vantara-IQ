@@ -103,3 +103,63 @@ export async function assertOwnSubcontractor(subcontractorId: string): Promise<C
 export function isSubViewer(user: CurrentUser | null): boolean {
   return !!user && !isStaff(user.role);
 }
+
+/**
+ * Permission to write into one subcontractor's record, during or after onboarding.
+ *
+ * Onboarding genuinely runs before anyone has a login — a crew follows an invite
+ * link and starts filling the packet in. So these actions cannot demand a
+ * session. What they can demand is the invite token that created the record,
+ * which binds the caller to exactly one company.
+ *
+ * Three ways in, in order: Fortitude staff, the sub's own login, or the invite
+ * token bound to that subcontractor. Nothing else. Without this an action that
+ * takes a subcontractor id lets anyone on the internet write into any sub's
+ * file — upload a document into a competitor's packet, or rewrite their
+ * capabilities — because a Server Action is just a POST to the page.
+ */
+export async function assertSubcontractorWrite(
+  subcontractorId: string,
+  inviteToken?: string | null,
+): Promise<void> {
+  if (!subcontractorId) throw new NotAuthorizedError("No subcontractor given.");
+
+  const user = await viewer();
+  if (user && isStaff(user.role)) return;
+  if (user && user.subcontractorId === subcontractorId) return;
+
+  if (inviteToken) {
+    const invite = await prisma.invite.findUnique({
+      where: { token: inviteToken },
+      select: { subcontractorId: true },
+    });
+    // The token has to already own this record. A valid token for some other
+    // company is not a key to this one.
+    if (invite?.subcontractorId && invite.subcontractorId === subcontractorId) return;
+  }
+
+  throw new NotAuthorizedError("That belongs to another subcontractor.");
+}
+
+/**
+ * Claim a fresh invite for the subcontractor it just created.
+ *
+ * One-way: a token that already points at a company cannot be repointed at
+ * another, or a leaked link would become a key to whichever record the holder
+ * named last.
+ */
+export async function bindInviteToSubcontractor(
+  inviteToken: string,
+  subcontractorId: string,
+): Promise<void> {
+  if (!inviteToken || !subcontractorId) return;
+  const invite = await prisma.invite.findUnique({
+    where: { token: inviteToken },
+    select: { subcontractorId: true },
+  });
+  if (!invite || invite.subcontractorId) return;
+  await prisma.invite.update({
+    where: { token: inviteToken },
+    data: { subcontractorId },
+  });
+}

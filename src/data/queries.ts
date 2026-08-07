@@ -2117,3 +2117,43 @@ export async function getProjectPhotos(projectId: string): Promise<ProjectPhotoR
     createdAt: r.createdAt.toISOString(),
   }));
 }
+
+/**
+ * Resolve an invite link to the job it was issued for.
+ *
+ * Public by necessity — the crew opening it has no account. It returns only
+ * what the invitation itself already told them (which job, which customer,
+ * where), and nothing about the project's money, materials or other crews.
+ *
+ * Unknown or already-claimed tokens return null so the page can refuse rather
+ * than render an onboarding form for a string somebody typed.
+ */
+export async function getInvite(token: string): Promise<{
+  projectName: string;
+  client: string;
+  location: string;
+} | null> {
+  if (!token?.trim()) return null;
+
+  const invite = await prisma.invite.findUnique({
+    where: { token },
+    select: { projectId: true, projectName: true, customer: true, subcontractorId: true },
+  });
+  if (!invite || invite.subcontractorId) return null;
+
+  // Read the project directly rather than through getProject, which is scoped
+  // to a signed-in viewer and would return nothing here. The invite is the
+  // authorization, and only these three fields cross over.
+  const project = invite.projectId
+    ? await prisma.project.findUnique({
+        where: { id: invite.projectId },
+        select: { name: true, client: true, location: true },
+      })
+    : null;
+
+  return {
+    projectName: project?.name ?? invite.projectName,
+    client: project?.client ?? invite.customer,
+    location: project?.location ?? "",
+  };
+}

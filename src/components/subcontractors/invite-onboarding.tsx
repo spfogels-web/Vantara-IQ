@@ -40,7 +40,7 @@ const inputClass =
 
 type Step = "account" | "capabilities" | "agreement" | "documents" | "done";
 
-export function InviteOnboarding({ project }: { token: string; project: InviteProject }) {
+export function InviteOnboarding({ token, project }: { token: string; project: InviteProject }) {
   const [step, setStep] = React.useState<Step>("account");
   const [subId, setSubId] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
@@ -76,6 +76,7 @@ export function InviteOnboarding({ project }: { token: string; project: InvitePr
         name: account.name,
         email: account.email,
         projectName: project?.name,
+        inviteToken: token,
       });
       if (res.ok) {
         setSubId(res.id);
@@ -91,12 +92,18 @@ export function InviteOnboarding({ project }: { token: string; project: InvitePr
     if (!subId || !capsValid || saving) return;
     setSaving(true);
     try {
-      await updateSubcontractorCapabilities(subId, {
-        trades: caps.trades,
-        crews: caps.crews,
-        fieldStaff: caps.fieldStaff,
-        equipment: caps.equipment.split("\n").map((s) => s.trim()).filter(Boolean),
-      });
+      await updateSubcontractorCapabilities(
+        subId,
+        {
+          trades: caps.trades,
+          crews: caps.crews,
+          fieldStaff: caps.fieldStaff,
+          equipment: caps.equipment.split("\n").map((s) => s.trim()).filter(Boolean),
+        },
+        // Nobody has a login yet — the token is what proves this browser is
+        // filling in this company's record and not someone else's.
+        token,
+      );
       setStep("agreement");
     } finally {
       setSaving(false);
@@ -302,7 +309,7 @@ export function InviteOnboarding({ project }: { token: string; project: InvitePr
               account now.
             </p>
             <div className="mt-4">
-              <DocumentCenter subcontractorId={subId} initialDocs={[]} uploadedBy="subcontractor" onStatusChange={handleDocStatus} />
+              <DocumentCenter subcontractorId={subId} initialDocs={[]} inviteToken={token} onStatusChange={handleDocStatus} />
             </div>
           </div>
 

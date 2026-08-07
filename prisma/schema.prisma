@@ -555,7 +555,18 @@ model Invite {
   customer    String   @default("")
   email       String?
   used        Boolean  @default(false)
+  /// The subcontractor this invite created, once they start onboarding.
+  ///
+  /// This is what authorizes the rest of the flow. Onboarding legitimately runs
+  /// before anyone has a login, so the actions that write to a subcontractor
+  /// cannot demand a session — but they can demand the token that made this
+  /// record, which binds a caller to one company and no other. Without it, an
+  /// action taking a subcontractor id would let anyone write into any sub's
+  /// file, including uploading documents into a competitor's packet.
+  subcontractorId String?
   createdAt   DateTime @default(now())
+
+  @@index([subcontractorId])
 }
 
 /// Feedback from the pilot account.

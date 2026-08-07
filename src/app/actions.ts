@@ -1,5 +1,6 @@
 "use server";
 
+import { randomBytes } from "node:crypto";
 import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import * as XLSX from "xlsx";
@@ -30,6 +31,9 @@ import {
   assertProjectAccess,
   requireStaff,
   requireUser,
+  assertSubcontractorWrite,
+  bindInviteToSubcontractor,
+  viewer,
 } from "@/lib/authz";
 
 /**
@@ -41,11 +45,13 @@ import {
  * could otherwise invoke any export in this file and read another crew's rate
  * card. The guard belongs next to the data access, not in front of the URL.
  *
- * The exceptions are the onboarding actions used by the public /invite flow
- * (submitOnboarding, createSubcontractorDraft, updateSubcontractorCapabilities,
- * uploadSubDocument). They run before an account exists, so they cannot require
- * a session — they are write-only into a PENDING_REVIEW record that cannot
- * receive work until Fortitude approves it.
+ * The one exception is createSubcontractorDraft, used by the public /invite
+ * flow. It runs before an account exists, so it cannot require a session — it
+ * requires a stored, unclaimed invite token instead, which is what proves the
+ * caller was actually invited. Every later step in that flow
+ * (updateSubcontractorCapabilities, uploadSubDocument) takes the same token and
+ * checks it against the record it is writing to, so a token for one company is
+ * not a key to another.
  */
 
 /**
@@ -76,63 +82,6 @@ export async function submitFeedback(input: {
     data: { category: input.category, message: input.message, page: input.page },
   });
   return { ok: true as const };
-}
-
-/**
- * Subcontractor onboarding submission. Creates the account in PENDING_REVIEW —
- * it shows up in Fortitude's Subcontractors tab for review and cannot receive
- * work until approved (and compliance docs are on file).
- */
-export async function submitOnboarding(input: {
-  company: string;
-  name: string;
-  email: string;
-  projectName?: string;
-  trades: string[];
-  crews?: string;
-  fieldStaff?: string;
-  equipment: string[];
-}) {
-  const compliance = [
-    { label: "General liability COI", status: "missing", expires: "—", daysOut: null },
-    { label: "Workers' comp", status: "missing", expires: "—", daysOut: null },
-    { label: "W-9", status: "missing", expires: "—", daysOut: null },
-    { label: "Master subcontract", status: "missing", expires: "—", daysOut: null },
-  ];
-  const scorecard = {
-    rating: 0,
-    projectsCompleted: 0,
-    avgApprovalDays: 0,
-    avgDailyFt: 0,
-    docAccuracy: 0,
-    safetyIncidents: 0,
-    disputes: 0,
-    avgProductionPct: 0,
-  };
-
-  const sub = await prisma.subcontractor.create({
-    data: {
-      company: input.company,
-      lead: input.name,
-      email: input.email,
-      trades: input.trades,
-      equipment: input.equipment,
-      crewSize: Number(input.fieldStaff) || Number(input.crews) || 0,
-      state: "PENDING_REVIEW",
-      tone: "warning",
-      complianceTone: "neutral",
-      // The invite may name a job. Resolve it to a real project; if nothing
-      // matches, the crew is created unassigned and staff assign it — better
-      // than recording an assignment that points at nothing.
-      projects: await connectProjectByName(input.projectName),
-      compliance: compliance as unknown as Prisma.InputJsonValue,
-      scorecard: scorecard as unknown as Prisma.InputJsonValue,
-      since: "2026",
-    },
-  });
-
-  revalidatePath("/subcontractors");
-  return { ok: true as const, id: sub.id };
 }
 
 /** Fortitude approves a pending subcontractor -> becomes Active. */
@@ -412,12 +361,35 @@ export async function pushImportToSubcontractor(importId: string, subcontractorI
   return { ok: true as const, count: rows.length };
 }
 
+/**
+ * Start a subcontractor record from an invite.
+ *
+ * Deliberately open — the crew following the link has no login yet, and that is
+ * the point of an invite. What it does do is bind the token to the record it
+ * creates, so every later step in the flow can prove which company the caller
+ * is without needing a session.
+ */
 export async function createSubcontractorDraft(input: {
   company: string;
   name: string;
   email: string;
   projectName?: string;
+  inviteToken?: string;
 }) {
+  // The invitation is the authorization. Without one this endpoint lets anyone
+  // on the internet create crew records in the system, and every later step
+  // that trusts the token has nothing to check against.
+  const invite = input.inviteToken
+    ? await prisma.invite.findUnique({
+        where: { token: input.inviteToken },
+        select: { subcontractorId: true },
+      })
+    : null;
+  if (!invite) return { ok: false as const, error: "This invitation link is not valid." };
+  if (invite.subcontractorId) {
+    return { ok: false as const, error: "This invitation has already been used." };
+  }
+
   const compliance = [
     { label: "General liability COI", status: "missing", expires: "—", daysOut: null },
     { label: "Workers' comp", status: "missing", expires: "—", daysOut: null },
@@ -445,14 +417,22 @@ export async function createSubcontractorDraft(input: {
       since: "2026",
     },
   });
+  if (input.inviteToken) await bindInviteToSubcontractor(input.inviteToken, sub.id);
   return { ok: true as const, id: sub.id };
 }
 
-/** Saves the capabilities statement onto an existing (draft) subcontractor. */
+/**
+ * Saves the capabilities statement onto an existing (draft) subcontractor.
+ *
+ * This took an id and wrote to it with no check whatsoever, so anyone could
+ * rewrite any crew's trades and headcount.
+ */
 export async function updateSubcontractorCapabilities(
   id: string,
   input: { trades: string[]; crews?: string; fieldStaff?: string; equipment: string[] },
+  inviteToken?: string,
 ) {
+  await assertSubcontractorWrite(id, inviteToken);
   await prisma.subcontractor.update({
     where: { id },
     data: {
@@ -467,15 +447,29 @@ export async function updateSubcontractorCapabilities(
 
 const MAX_DOC_BYTES = 10 * 1024 * 1024; // 10 MB
 
-/** Uploads one compliance/onboarding document, stored as a data URL. */
+/**
+ * Uploads one compliance/onboarding document, stored as a data URL.
+ *
+ * Took a subcontractor id straight off the form and wrote to it, so anyone who
+ * could POST to the page could file a document into any crew's packet — a W-9,
+ * a COI, a signed agreement — under a name they chose themselves. Now the
+ * caller has to be staff, that sub's own login, or hold the invite token bound
+ * to that record, and the name on the upload is derived rather than trusted.
+ */
 export async function uploadSubDocument(formData: FormData) {
   const file = formData.get("file") as File | null;
   const subcontractorId = String(formData.get("subcontractorId") || "");
   const section = String(formData.get("section") || "");
-  const uploadedBy = String(formData.get("uploadedBy") || "subcontractor");
+  const inviteToken = String(formData.get("inviteToken") || "") || null;
   if (!file || !subcontractorId || !section) {
     return { ok: false as const, error: "Missing file or section." };
   }
+
+  await assertSubcontractorWrite(subcontractorId, inviteToken);
+
+  // Who filed it is established here, not claimed by the caller.
+  const actor = await viewer();
+  const uploadedBy = actor ? actor.name || actor.email : "subcontractor";
   if (file.size > MAX_DOC_BYTES) {
     return { ok: false as const, error: "File is over 10 MB." };
   }
@@ -2659,4 +2653,48 @@ export async function readPhotoExif(formData: FormData) {
     lat: facts.lat,
     lng: facts.lng,
   };
+}
+
+/* ------------------------------------------------------------------ *
+ * Invites — the only way into onboarding.
+ * ------------------------------------------------------------------ */
+
+/**
+ * Mint a real invite for a project.
+ *
+ * The link used to be assembled in the browser — `${projectId}-${nonce}` — and
+ * never written down, so nothing could tell a genuine invitation from a string
+ * somebody typed. That left the whole onboarding flow open: create a crew
+ * record, then write to it, with no invitation involved at all.
+ *
+ * A token is now issued server-side from a CSPRNG and stored, which is what
+ * lets the rest of the flow prove a caller was actually invited and to which
+ * job — before they have any login to check.
+ */
+export async function createInvite(input: {
+  projectId: string;
+  email?: string;
+}) {
+  await requireStaff();
+
+  const project = await prisma.project.findUnique({
+    where: { id: input.projectId },
+    select: { id: true, name: true, client: true },
+  });
+  if (!project) return { ok: false as const, error: "Pick a project for this invite." };
+
+  // 32 bytes of CSPRNG, url-safe. Guessing one is not a threat model.
+  const token = randomBytes(32).toString("base64url");
+
+  await prisma.invite.create({
+    data: {
+      token,
+      projectId: project.id,
+      projectName: project.name,
+      customer: project.client,
+      email: input.email?.trim() || null,
+    },
+  });
+
+  return { ok: true as const, token };
 }

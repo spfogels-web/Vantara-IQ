@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+
+import { createInvite } from "@/app/actions";
 import { Check, Copy, Link2, Mail, MessageSquare, Send, ShieldCheck, TriangleAlert } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -71,20 +73,39 @@ export function InviteDialog({
   const [consent, setConsent] = React.useState(false);
   const [copied, setCopied] = React.useState(false);
   const [origin, setOrigin] = React.useState("");
-  // A stable token per dialog session so the same link is shared everywhere.
-  const [nonce, setNonce] = React.useState("");
+  /**
+   * The real, stored invite token — minted by the server when a project is
+   * picked. It used to be assembled here as projectId + a random string and
+   * never written down, so nothing downstream could tell an invitation from a
+   * guess, and the whole onboarding flow was open to anyone.
+   */
+  const [token, setToken] = React.useState("");
+  const [minting, setMinting] = React.useState(false);
+  const [mintError, setMintError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     setOrigin(window.location.origin);
   }, []);
 
-  // New token each time the dialog opens or the project changes.
+  // A fresh invite each time the dialog opens or the project changes, so a
+   // link that was already sent is never silently reused for another crew.
   React.useEffect(() => {
-    if (open) {
-      setNonce(Math.random().toString(36).slice(2, 8));
-      setCopied(false);
-      setConsent(false);
-    }
+    if (!open || !projectId) { setToken(""); return; }
+    let live = true;
+    setCopied(false);
+    setConsent(false);
+    setToken("");
+    setMintError(null);
+    setMinting(true);
+    createInvite({ projectId })
+      .then((res) => {
+        if (!live) return;
+        if (res.ok) setToken(res.token);
+        else setMintError(res.error);
+      })
+      .catch(() => live && setMintError("Could not create the invitation."))
+      .finally(() => live && setMinting(false));
+    return () => { live = false; };
   }, [open, projectId]);
 
   React.useEffect(() => {
@@ -106,8 +127,9 @@ export function InviteDialog({
     return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
   }, [projects]);
 
-  const token = `${projectId}-${nonce}`;
-  const link = origin && projectId ? `${origin}/invite/${token}?project=${projectId}` : "";
+  // No ?project= on the link. The stored invite names the job, so the URL
+  // cannot be edited to point a crew at somebody else's project.
+  const link = origin && token ? `${origin}/invite/${token}` : "";
 
   const greeting = recipientName.trim() ? `Hi ${recipientName.trim().split(" ")[0]}, ` : "";
   const message = project
@@ -189,7 +211,7 @@ export function InviteDialog({
             <div className="flex min-w-0 items-center gap-2 rounded-lg border border-foreground/[0.08] bg-foreground/[0.03] px-2.5 py-1.5">
               <Link2 className="size-3.5 shrink-0 text-muted-foreground" />
               <span className="num min-w-0 flex-1 truncate text-[11.5px] text-foreground">
-                {link || "Select a project…"}
+                {link || (minting ? "Creating invitation…" : mintError ? "—" : "Select a project…")}
               </span>
               <button
                 type="button"
@@ -204,9 +226,14 @@ export function InviteDialog({
                 {copied ? "Copied" : "Copy"}
               </button>
             </div>
-            <span className="text-[11px] text-muted-foreground/80">
-              The link changes with the project — each carries its own assignment.
-            </span>
+            {mintError ? (
+              <span className="text-[11px] text-critical">{mintError}</span>
+            ) : (
+              <span className="text-[11px] text-muted-foreground/80">
+                Each link is issued once, for this project, and stops working after a crew
+                registers with it.
+              </span>
+            )}
           </div>
 
           {/* Recipient + contact */}

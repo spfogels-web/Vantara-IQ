@@ -137,6 +137,12 @@ export default async function ProjectDetailPage({
           </Panel>
       </div>
 
+      {/* The field record sits directly under health: on a job site the last
+          photos are the fastest read of where the work actually is. */}
+      <div className="mb-3">
+        <ProjectPhotos projectId={project.id} photos={photos} canDelete={staff} />
+      </div>
+
       {/* Six numbers in one strip. They read fine side by side, and giving
           them a column of their own was costing the map the width it needs. */}
       {/* What the job is worth, priced off the material list. This is the
@@ -161,6 +167,7 @@ export default async function ProjectDetailPage({
       {/* Material gets the full width. It is the densest thing on the page —
           a job carries dozens of codes — and squeezing it into a sidebar
           column was what made every other panel stretch to match it. */}
+      {staff ? (
       <div className="mb-3">
         <Panel>
           <PanelHeader
@@ -177,13 +184,12 @@ export default async function ProjectDetailPage({
           />
         </Panel>
       </div>
+      ) : null}
 
-      {/* The field record — every project carries one. */}
-      <ProjectPhotos projectId={project.id} photos={photos} canDelete={staff} />
 
       {/* Dailies and the customer close the page. */}
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
-        <div className="xl:col-span-8">
+        <div className={staff ? "xl:col-span-8" : "xl:col-span-12"}>
           <Panel>
             <PanelHeader
               title="Recent dailies"
@@ -220,6 +226,7 @@ export default async function ProjectDetailPage({
           </Panel>
         </div>
 
+        {staff ? (
         <div className="xl:col-span-4">
           <Panel>
             <PanelHeader title="Customer" icon={<Calendar className="size-3.5" />} />
@@ -243,6 +250,7 @@ export default async function ProjectDetailPage({
             </PanelBody>
           </Panel>
         </div>
+        ) : null}
       </div>
     </PageShell>
   );
