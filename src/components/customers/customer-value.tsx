@@ -154,6 +154,15 @@ export function CustomerValueTiles({ customerId }: { customerId: string }) {
         </p>
       ) : null}
 
+      {/* A crew on the job with no card still costs money. The margin above
+          simply cannot see it, which is worth saying out loud. */}
+      {data.unratedCrews.length > 0 ? (
+        <p className="text-[11.5px] text-warning">
+          No rate card on file for {data.unratedCrews.join(", ")} — their work carries a cost the
+          margin above doesn&apos;t include.
+        </p>
+      ) : null}
+
       {/* Work already in the ground that no rate card can price. Louder than
           the material-list warning above, because this is production that has
           happened and cannot be invoiced until the code is right. */}

@@ -721,6 +721,10 @@ export interface TrackedMaterial {
   size: string;
   reelNumber: string;
   furnished: string;
+  /** Work we are actually performing. Excluded lines stay on the list but
+      contribute nothing to the project value. */
+  inScope: boolean;
+  scopeNote: string;
   tone: Tone;
   /** "Microduct" / "Microfiber" — units a crew treats as one, for roll-up. */
   group: string | null;
@@ -799,6 +803,8 @@ export async function getProjectMaterials(projectId: string): Promise<TrackedMat
       size: r.size,
       reelNumber: r.reelNumber,
       furnished: r.furnished,
+      inScope: r.inScope,
+      scopeNote: r.scopeNote,
       tone: materialTone(r.planned, completed),
       group: codeGroupLabel(r.code),
       overPlan: r.planned > 0 && completed > r.planned,
@@ -1107,6 +1113,11 @@ export interface ProjectValuation extends Valuation {
   hasCustomerRates: boolean;
   hasSubRates: boolean;
   /**
+   * Crews on the job with no signed rate card. Their work costs something;
+   * we just cannot say what, so the margin shown excludes them and says so.
+   */
+  unratedCrews: string[];
+  /**
    * The same two rate cards applied to what has actually been billed on
    * dailies, rather than what the material list plans for. Both sides come
    * from real rates — there is no percentage-of-revenue estimate anywhere.
@@ -1144,7 +1155,10 @@ export async function getProjectValuation(projectId: string): Promise<ProjectVal
     select: {
       client: true,
       customerId: true,
-      materials: { select: { code: true, item: true, unit: true, planned: true } },
+      materials: {
+        where: { inScope: true },
+        select: { code: true, item: true, unit: true, planned: true },
+      },
       crews: { select: { id: true, company: true } },
     },
   });
@@ -1168,6 +1182,7 @@ export async function getProjectValuation(projectId: string): Promise<ProjectVal
       plannedCodes: 0,
       hasCustomerRates: false,
       hasSubRates: false,
+      unratedCrews: [],
       billed: {
         revenue: empty,
         subCost: null,
@@ -1206,15 +1221,35 @@ export async function getProjectValuation(projectId: string): Promise<ProjectVal
       })
     : [];
 
-  // One assigned crew means we can cost the job. Several means the split isn't
-  // known, so no sub figure is invented — a guess here would misstate margin.
-  const sub = project.crews.length === 1 ? project.crews[0] : null;
-  const subRates = sub
-    ? await prisma.subcontractorRate.findMany({
-        where: { subcontractorId: sub.id },
-        select: { code: true, description: true, unit: true, rate: true, effectiveDate: true, expirationDate: true },
-      })
-    : [];
+  /**
+   * Cost the plan at the one crew that has a signed card.
+   *
+   * Counting assigned crews was too blunt. Adding a second crew who hasn't been
+   * rated yet blanked the margin on a job that was perfectly costable, because
+   * a crew with no rate card carries no cost information either way. What
+   * creates real ambiguity is two crews who both have cards and no way to know
+   * which does which footage — that still reports nothing rather than guessing
+   * a split.
+   */
+  const crewCards = await prisma.subcontractorRate.findMany({
+    where: { subcontractorId: { in: project.crews.map((c) => c.id) } },
+    select: {
+      subcontractorId: true, code: true, description: true,
+      unit: true, rate: true, effectiveDate: true, expirationDate: true,
+    },
+  });
+
+  const ratesByCrew = new Map<string, typeof crewCards>();
+  for (const r of crewCards) {
+    ratesByCrew.set(r.subcontractorId, [...(ratesByCrew.get(r.subcontractorId) ?? []), r]);
+  }
+
+  const rated = project.crews.filter((c) => (ratesByCrew.get(c.id)?.length ?? 0) > 0);
+  const sub = rated.length === 1 ? rated[0] : null;
+  const subRates = sub ? (ratesByCrew.get(sub.id) ?? []) : [];
+  const unratedCrews = project.crews
+    .filter((c) => (ratesByCrew.get(c.id)?.length ?? 0) === 0)
+    .map((c) => c.company);
 
   const usableSubRates = sub && subRates.length > 0 ? subRates : null;
   const valuation = valueProject(
@@ -1321,6 +1356,7 @@ export async function getProjectValuation(projectId: string): Promise<ProjectVal
     plannedCodes: quantities.length,
     hasCustomerRates: customerRates.length > 0,
     hasSubRates: subRates.length > 0,
+    unratedCrews,
     billed: {
       revenue: billedRevenue,
       subCost: billedSubCost,
@@ -1370,6 +1406,8 @@ export interface CustomerRollup {
    * cannot be invoiced — the most expensive thing on this screen to not know.
    */
   unbillable: { code: string; quantity: number }[];
+  /** Crews on these jobs with no signed rate card, so no cost for their work. */
+  unratedCrews: string[];
   /** Coverage, so a total assembled from half the jobs can't read as complete. */
   projects: number;
   projectsValued: number;
@@ -1420,6 +1458,7 @@ export async function getCustomerRollup(customerId: string): Promise<CustomerRol
     leftToBill: 0,
     ar: { ...EMPTY_AR, counts: { ...EMPTY_AR.counts } },
     unbillable: [],
+    unratedCrews: [],
     projects: 0,
     projectsValued: 0,
     unpricedCodes: 0,
@@ -1446,6 +1485,7 @@ export async function getCustomerRollup(customerId: string): Promise<CustomerRol
   let costedRevenue = 0;
   let projectsCosted = 0;
   const unbillable = new Map<string, number>();
+  const unratedCrews = new Set<string>();
 
   for (const p of projects) {
     const v = await getProjectValuation(p.id);
@@ -1455,6 +1495,7 @@ export async function getCustomerRollup(customerId: string): Promise<CustomerRol
     billedFromDailies += v.billed.revenue.total;
     unpricedCodes += v.revenue.unpriced.length;
     if (v.revenue.total > 0) projectsValued++;
+    for (const c of v.unratedCrews) unratedCrews.add(c);
     for (const u of v.billed.revenue.unpriced) {
       unbillable.set(u.code, (unbillable.get(u.code) ?? 0) + u.quantity);
     }
@@ -1497,6 +1538,7 @@ export async function getCustomerRollup(customerId: string): Promise<CustomerRol
     leftToBill: Math.max(0, contractValue - (customer.priorBilled + billedFromDailies)),
     ar,
     unbillable: [...unbillable.entries()].map(([code, quantity]) => ({ code, quantity })),
+    unratedCrews: [...unratedCrews],
     projects: projects.length,
     projectsValued,
     unpricedCodes,
@@ -1706,7 +1748,10 @@ export async function getCustomerContractValues(): Promise<Record<string, number
       select: {
         customerId: true,
         client: true,
-        materials: { select: { code: true, item: true, unit: true, planned: true } },
+        materials: {
+        where: { inScope: true },
+        select: { code: true, item: true, unit: true, planned: true },
+      },
       },
     }),
     prisma.customerRate.findMany({

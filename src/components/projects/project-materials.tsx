@@ -12,6 +12,8 @@ import {
   FileUp,
   Loader2,
   Sparkles,
+  Eye,
+  EyeOff,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -23,6 +25,7 @@ import { Meter } from "@/components/common/metric";
 import {
   approveAndTrackImport,
   deleteProjectMaterial,
+  setProjectMaterialScope,
   deleteProjectMaterialImport,
   extractProjectMaterials,
   extractProjectMaterialsFromUrl,
@@ -187,6 +190,24 @@ export function ProjectMaterials({
     router.refresh();
   }
 
+  /**
+   * Take a line out of the job, or put it back.
+   *
+   * Asks for a reason on the way out so the exclusion is explainable later —
+   * "aerial" and "customer cancelled" are very different, and a year on nobody
+   * remembers which.
+   */
+  async function toggleScope(id: string, currentlyInScope: boolean) {
+    if (busy) return;
+    const note = currentlyInScope
+      ? (window.prompt("Why is this out of scope? (e.g. aerial — we do underground only)") ?? "").trim()
+      : "";
+    setBusy(true);
+    await setProjectMaterialScope(id, !currentlyInScope, note);
+    setBusy(false);
+    router.refresh();
+  }
+
   const groups = React.useMemo(() => groupMaterialTotals(tracked), [tracked]);
   const totalRows = imports.reduce((n, i) => n + i.rows.length, 0);
 
@@ -242,10 +263,23 @@ export function ProjectMaterials({
         // a single column turns it into a scroll.
         <ul className="grid grid-cols-1 gap-x-2 border-b border-border/70 p-2 lg:grid-cols-2 2xl:grid-cols-3">
           {tracked.map((m) => (
-            <li key={m.id} className="group/mat rounded-lg px-2.5 py-2 hover:bg-foreground/[0.03]">
+            <li
+              key={m.id}
+              className={cn(
+                "group/mat rounded-lg px-2.5 py-2 hover:bg-foreground/[0.03]",
+                // Excluded lines stay visible — the list is the customer's
+                // document — but read as struck from the job.
+                !m.inScope && "opacity-45",
+              )}
+            >
               <div className="flex items-baseline gap-2">
                 {m.code ? (
-                  <span className="num shrink-0 text-[11.5px] font-semibold uppercase text-brand-bright">
+                  <span
+                    className={cn(
+                      "num shrink-0 text-[11.5px] font-semibold uppercase",
+                      m.inScope ? "text-brand-bright" : "text-muted-foreground line-through",
+                    )}
+                  >
                     {m.code}
                   </span>
                 ) : null}
@@ -262,6 +296,29 @@ export function ProjectMaterials({
                 <span className={cn("num shrink-0 text-[11.5px] font-medium", toneStyles[m.tone].text)}>
                   {formatNumber(m.remaining)} {m.unit} left
                 </span>
+                {/* Not-our-scope, rather than delete. The list arrives with
+                    whatever the customer printed — aerial riser guards on an
+                    all-underground job — and work we won't perform is not
+                    revenue, so it drops out of the value while the row stays
+                    on the record. */}
+                <button
+                  type="button"
+                  onClick={() => void toggleScope(m.id, m.inScope)}
+                  disabled={busy}
+                  title={
+                    m.inScope
+                      ? "Exclude — we're not doing this work"
+                      : `Back in scope${m.scopeNote ? ` (excluded: ${m.scopeNote})` : ""}`
+                  }
+                  className={cn(
+                    "focus-ring grid size-5 shrink-0 place-items-center rounded transition",
+                    m.inScope
+                      ? "text-muted-foreground/0 group-hover/mat:text-muted-foreground hover:!text-warning"
+                      : "text-warning",
+                  )}
+                >
+                  {m.inScope ? <EyeOff className="size-3" /> : <Eye className="size-3" />}
+                </button>
                 <button
                   type="button"
                   onClick={() => void removeTracked(m.id)}

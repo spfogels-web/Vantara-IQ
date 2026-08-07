@@ -219,6 +219,17 @@ model ProjectMaterial {
   size           String   @default("")
   reelNumber     String   @default("")
   furnished      String   @default("")
+  /// Whether this line is work we are actually performing.
+  ///
+  /// A material list is the customer's document and arrives with whatever is on
+  /// it — including aerial work like riser guards on a job that is entirely
+  /// underground. Deleting those rows would edit a record we did not write, so
+  /// they stay on the list and drop out of the valuation instead. Out-of-scope
+  /// work is not revenue, and pricing it inflates the job by exactly the amount
+  /// nobody will ever invoice.
+  inScope        Boolean  @default(true)
+  /// Why it is out of scope, so the exclusion is explainable a year later.
+  scopeNote      String   @default("")
   /// The RateImport these rows were approved from, for traceability.
   sourceImportId String   @default("")
   createdAt      DateTime @default(now())

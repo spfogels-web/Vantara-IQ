@@ -1365,6 +1365,19 @@ export async function pushMaterialsToProject(importId: string, projectId: string
   // Clear this import's own rows, and any row on the project already carrying
   // one of the incoming codes — whichever import put it there.
   const codes = rows.map((r) => r.code || "").filter(Boolean);
+
+  // Carry scope decisions across the replacement. Marking riser guards
+  // out-of-scope and then re-uploading a corrected list should not quietly put
+  // them back in the valuation.
+  const priorScope = new Map(
+    (
+      await prisma.projectMaterial.findMany({
+        where: { projectId, inScope: false },
+        select: { code: true, scopeNote: true },
+      })
+    ).map((m) => [m.code.toUpperCase(), m.scopeNote]),
+  );
+
   const replaced = await prisma.projectMaterial.deleteMany({
     where: { projectId, OR: [{ sourceImportId: importId }, { code: { in: codes } }] },
   });
@@ -1386,6 +1399,8 @@ export async function pushMaterialsToProject(importId: string, projectId: string
         size: typeof d.size === "string" ? d.size : "",
         reelNumber: typeof d.reelNumber === "string" ? d.reelNumber : "",
         furnished: typeof d.furnished === "string" ? d.furnished : "",
+        inScope: !priorScope.has((r.code || "").toUpperCase()),
+        scopeNote: priorScope.get((r.code || "").toUpperCase()) ?? "",
         sourceImportId: importId,
       };
     }),
@@ -1461,11 +1476,32 @@ export async function updateProjectMaterial(
   return { ok: true as const };
 }
 
+/**
+ * Mark a material line as work we are or are not performing.
+ *
+ * The list is the customer's document and arrives with whatever is on it —
+ * aerial riser guards on an all-underground job, for one. Excluding the line
+ * keeps the list intact as a record while taking the work out of the valuation,
+ * because revenue nobody will invoice is not revenue.
+ */
+export async function setProjectMaterialScope(id: string, inScope: boolean, note = "") {
+  await requireStaff();
+  const row = await prisma.projectMaterial.update({
+    where: { id },
+    data: { inScope, scopeNote: inScope ? "" : note.trim() },
+  });
+  revalidatePath(`/projects/${row.projectId}`);
+  revalidatePath("/materials");
+  revalidatePath("/customers");
+  return { ok: true as const };
+}
+
 export async function deleteProjectMaterial(id: string) {
   await requireStaff();
   const row = await prisma.projectMaterial.delete({ where: { id } });
   revalidatePath(`/projects/${row.projectId}`);
   revalidatePath("/materials");
+  revalidatePath("/customers");
   return { ok: true as const };
 }
 
