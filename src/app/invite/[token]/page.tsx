@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { BrandLogo } from "@/components/common/brand-logo";
+
 import { getInvite } from "@/data/queries";
 import { InviteOnboarding, type InviteProject } from "@/components/subcontractors/invite-onboarding";
 
@@ -28,8 +30,7 @@ export default async function InvitePage({
   if (!invite) {
     return (
       <div className="mx-auto flex min-h-svh w-full max-w-md flex-col items-center justify-center px-6 text-center">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/nexgen-banner.png" alt="NEXGEN BUILD AI" className="h-10 w-auto object-contain" />
+        <BrandLogo height={44} />
         <h1 className="mt-8 text-[19px] font-semibold tracking-[-0.02em] text-foreground">
           This invitation link isn&apos;t valid
         </h1>

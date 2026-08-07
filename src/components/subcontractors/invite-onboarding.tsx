@@ -7,6 +7,7 @@ import { Check, HardHat, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { initials } from "@/lib/format";
 import { createSubcontractorDraft, updateSubcontractorCapabilities } from "@/app/actions";
+import { BrandLogo } from "@/components/common/brand-logo";
 import { LogoUpload } from "@/components/common/logo-upload";
 import { DocumentCenter } from "@/components/subcontractors/document-center";
 import { AgreementStep } from "@/components/subcontractors/agreement-step";
@@ -117,8 +118,7 @@ export function InviteOnboarding({ token, project }: { token: string; project: I
     <div className="mx-auto flex min-h-svh w-full max-w-5xl flex-col px-4 py-8 sm:px-6 sm:py-12">
       {/* Brand header */}
       <div className="flex items-center justify-between">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/nexgen-banner.png" alt="NEXGEN BUILD AI" className="h-10 w-auto max-w-[180px] object-contain" />
+        <BrandLogo height={44} />
         <Link href="/login" className="text-[12.5px] font-medium text-muted-foreground hover:text-foreground">
           Log in
         </Link>

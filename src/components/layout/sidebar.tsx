@@ -20,7 +20,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { NexgenBanner, NexgenMark } from "@/components/layout/logo";
+import { BrandLogo, BrandMark } from "@/components/common/brand-logo";
 import { FeedbackDialog } from "@/components/layout/feedback-dialog";
 import { useSidebar } from "@/components/layout/sidebar-context";
 
@@ -138,27 +138,17 @@ export function SidebarContent({
           collapsed ? "justify-center px-0" : "gap-2.5 px-4",
         )}
       >
-        {/* The company using the software owns this space, not the software.
-            Their logo when they have uploaded one; the platform mark only as a
-            fallback so a fresh account isn't blank. */}
         <Link
           href={homeHrefFor(role)}
           onClick={onNavigate}
           aria-label="Home"
           className="focus-ring flex min-w-0 items-center gap-2.5 rounded-lg"
         >
-          {logoUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={logoUrl}
-              alt=""
-              className={cn("object-contain", collapsed ? "size-8" : "h-9 max-w-[168px]")}
-            />
-          ) : collapsed ? (
-            <NexgenMark size={30} />
-          ) : (
-            <NexgenBanner />
-          )}
+          {/* The product, not the tenant. Fortitude's own mark sits at the foot
+              of the rail against the account — putting it here made the
+              top-left read as "whose account is this" rather than "what am I
+              looking at", and at that size the shield wasn't legible anyway. */}
+          {collapsed ? <BrandMark size={32} /> : <BrandLogo height={40} priority />}
         </Link>
         {!collapsed && showCollapseButton ? (
           <button
