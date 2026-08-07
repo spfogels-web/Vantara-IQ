@@ -75,11 +75,29 @@ export function ProjectForm({
           <Field label="Project name *">
             <input value={f.name} onChange={(e) => set("name", e.target.value)} placeholder="Windstream White Plains" className={inputClass} />
           </Field>
-          <Field label="Customer">
-            <input list="customer-names" value={f.client} onChange={(e) => set("client", e.target.value)} placeholder="Windstream Communications" className={inputClass} />
-            <datalist id="customer-names">
-              {customerNames.map((n) => <option key={n} value={n} />)}
-            </datalist>
+          {/* Picked, never typed. This was a free-text box with suggestions,
+              and the customer link is made by matching the name exactly — so
+              "Windstream Globe" instead of the record's own name silently left
+              the project with no customer, no rate card, and a value of $0.
+              Three of four projects were in that state. */}
+          <Field label="Customer *">
+            <select
+              value={f.client}
+              onChange={(e) => set("client", e.target.value)}
+              className={cn(inputClass, "appearance-none")}
+            >
+              <option value="">Select a customer…</option>
+              {customerNames.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+            {!f.client ? (
+              <p className="mt-1 text-[11px] text-warning">
+                Without a customer there is no rate card, so this project cannot be valued or billed.
+              </p>
+            ) : null}
           </Field>
           <Field label="Location">
             <input value={f.location} onChange={(e) => set("location", e.target.value)} placeholder="White Plains, SC" className={inputClass} />

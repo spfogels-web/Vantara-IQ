@@ -823,14 +823,38 @@ function projectData(input: ProjectInput) {
   };
 }
 
+/**
+ * Resolve the typed client name to a real customer record.
+ *
+ * Refuses rather than storing null. The customer link is what gives a project
+ * a rate card, and a project without one values at $0 and cannot be invoiced —
+ * silently. Three projects sat in exactly that state because this matched on
+ * an exact name and shrugged when it missed.
+ */
+async function resolveCustomer(
+  client: string,
+): Promise<{ ok: false; error: string } | { ok: true; customer: { id: string } }> {
+  const name = client.trim();
+  if (!name) {
+    return { ok: false, error: "Choose the customer — without one the project has no rate card and cannot be billed." };
+  }
+  const customer = await prisma.customer.findFirst({ where: { name }, select: { id: true } });
+  if (!customer) {
+    return { ok: false, error: `No customer named "${name}". Add them first, or pick an existing one.` };
+  }
+  return { ok: true, customer };
+}
+
 export async function createProject(input: ProjectInput) {
   await requireStaff();
   if (!input.name.trim() || !input.number.trim()) {
     return { ok: false as const, error: "Project number and name are required." };
   }
-  const customer = await prisma.customer.findFirst({ where: { name: input.client } });
+  const resolved = await resolveCustomer(input.client);
+  if (!resolved.ok) return { ok: false as const, error: resolved.error };
+
   const p = await prisma.project.create({
-    data: { ...projectData(input), customerId: customer?.id ?? null },
+    data: { ...projectData(input), customerId: resolved.customer.id },
   });
   revalidatePath("/projects");
   return { ok: true as const, id: p.id };
@@ -838,10 +862,12 @@ export async function createProject(input: ProjectInput) {
 
 export async function updateProject(id: string, input: ProjectInput) {
   await requireStaff();
-  const customer = await prisma.customer.findFirst({ where: { name: input.client } });
+  const resolved = await resolveCustomer(input.client);
+  if (!resolved.ok) return { ok: false as const, error: resolved.error };
+
   await prisma.project.update({
     where: { id },
-    data: { ...projectData(input), customerId: customer?.id ?? null },
+    data: { ...projectData(input), customerId: resolved.customer.id },
   });
   revalidatePath("/projects");
   revalidatePath(`/projects/${id}`);
