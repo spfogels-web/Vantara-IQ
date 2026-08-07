@@ -80,6 +80,7 @@ export function InviteDialog({
    * guess, and the whole onboarding flow was open to anyone.
    */
   const [token, setToken] = React.useState("");
+
   const [minting, setMinting] = React.useState(false);
   const [mintError, setMintError] = React.useState<string | null>(null);
 
@@ -87,14 +88,23 @@ export function InviteDialog({
     setOrigin(window.location.origin);
   }, []);
 
-  // A fresh invite each time the dialog opens or the project changes, so a
-   // link that was already sent is never silently reused for another crew.
+  /**
+   * The link for this job — one, stable, reused.
+   *
+   * It used to be minted fresh every time the dialog opened and spent by the
+   * first crew that registered, so putting three crews on a job meant three
+   * different links and sending the wrong one left two of them stuck. The
+   * same link now works for as many crews as the job needs; what stops a
+   * stranger is that registering only produces a record awaiting approval.
+   */
   React.useEffect(() => {
-    if (!open || !projectId) { setToken(""); return; }
+    if (!open || !projectId) {
+      setToken("");
+      return;
+    }
     let live = true;
     setCopied(false);
     setConsent(false);
-    setToken("");
     setMintError(null);
     setMinting(true);
     createInvite({ projectId })
@@ -103,9 +113,11 @@ export function InviteDialog({
         if (res.ok) setToken(res.token);
         else setMintError(res.error);
       })
-      .catch(() => live && setMintError("Could not create the invitation."))
+      .catch(() => live && setMintError("Could not load the invitation."))
       .finally(() => live && setMinting(false));
-    return () => { live = false; };
+    return () => {
+      live = false;
+    };
   }, [open, projectId]);
 
   React.useEffect(() => {
@@ -230,8 +242,8 @@ export function InviteDialog({
               <span className="text-[11px] text-critical">{mintError}</span>
             ) : (
               <span className="text-[11px] text-muted-foreground/80">
-                Each link is issued once, for this project, and stops working after a crew
-                registers with it.
+                One link per job — send it to every crew you want on it. Each registers
+                separately and lands awaiting your approval.
               </span>
             )}
           </div>

@@ -13,7 +13,9 @@ export const metadata = { title: "Join Fortitude · Vantara IQ" };
  * and read the project from a `?project=` query parameter anyone could edit.
  * Now the token is looked up, and it is what names the job — so a link cannot
  * be retargeted at another project, and a made-up one gets a refusal instead of
- * a working signup form.
+ * a working signup form. The link stays open for as many crews as the job
+ * needs; what stops a stranger is that registering only produces a
+ * PENDING_REVIEW record with no access until Fortitude approves it.
  */
 export default async function InvitePage({
   params,
@@ -32,8 +34,8 @@ export default async function InvitePage({
           This invitation link isn&apos;t valid
         </h1>
         <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
-          It may have already been used to register a crew, or it may have been mistyped. Ask
-          Fortitude Infrastructure for a new link.
+          It may have been mistyped, or withdrawn. Ask Fortitude Infrastructure for the link to
+          your project.
         </p>
         <Link
           href="/login"

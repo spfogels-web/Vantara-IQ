@@ -2158,8 +2158,9 @@ export async function getProjectPhotos(projectId: string): Promise<ProjectPhotoR
  * what the invitation itself already told them (which job, which customer,
  * where), and nothing about the project's money, materials or other crews.
  *
- * Unknown or already-claimed tokens return null so the page can refuse rather
- * than render an onboarding form for a string somebody typed.
+ * The link stays open: a job may take two or three crews, and each registers
+ * through the same link. Only an unknown token is refused, so the page never
+ * renders a signup form for a string somebody typed.
  */
 export async function getInvite(token: string): Promise<{
   projectName: string;
@@ -2170,9 +2171,9 @@ export async function getInvite(token: string): Promise<{
 
   const invite = await prisma.invite.findUnique({
     where: { token },
-    select: { projectId: true, projectName: true, customer: true, subcontractorId: true },
+    select: { projectId: true, projectName: true, customer: true },
   });
-  if (!invite || invite.subcontractorId) return null;
+  if (!invite) return null;
 
   // Read the project directly rather than through getProject, which is scoped
   // to a signed-in viewer and would return nothing here. The invite is the

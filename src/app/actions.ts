@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import * as XLSX from "xlsx";
 
 import { prisma } from "@/lib/prisma";
-import { hashPassword } from "@/lib/auth";
+import { hashPassword, setSessionCookie, signSession } from "@/lib/auth";
 import {
   extractDocument,
   isConfigured,
@@ -380,18 +380,48 @@ export async function createSubcontractorDraft(input: {
   /** What they typed on the account step. Without it there is no login. */
   password?: string;
 }) {
-  // The invitation is the authorization. Without one this endpoint lets anyone
-  // on the internet create crew records in the system, and every later step
-  // that trusts the token has nothing to check against.
+  /**
+   * The link is the invitation, and it stays open.
+   *
+   * It used to be spent by the first crew that registered, which meant putting
+   * three crews on a job took three links and sending the wrong one got two of
+   * them an error. One link per project now, reusable, because that is how
+   * somebody actually invites a job's crews.
+   *
+   * What replaces single-use as the authorization is the session below: the
+   * crew is signed in the moment their account exists, so every later step
+   * proves who it is the same way the rest of the app does. Registering is not
+   * access — a new crew lands in PENDING_REVIEW and can be assigned nothing
+   * until Fortitude approves them.
+   */
   const invite = input.inviteToken
     ? await prisma.invite.findUnique({
         where: { token: input.inviteToken },
-        select: { subcontractorId: true },
+        select: { token: true },
       })
     : null;
   if (!invite) return { ok: false as const, error: "This invitation link is not valid." };
-  if (invite.subcontractorId) {
-    return { ok: false as const, error: "This invitation has already been used." };
+
+  /**
+   * An email can front exactly one login.
+   *
+   * Checked before anything is written. Creating the crew and then quietly
+   * skipping the login leaves a record nobody can sign in to and no hint as to
+   * why: the crew believes they registered, and the office sees a company that
+   * never comes back.
+   */
+  const wantedEmail = input.email.trim().toLowerCase();
+  if (wantedEmail) {
+    const taken = await prisma.user.findUnique({
+      where: { email: wantedEmail },
+      select: { id: true },
+    });
+    if (taken) {
+      return {
+        ok: false as const,
+        error: `${input.email.trim()} already has an account. Sign in with it, or register this crew under a different email.`,
+      };
+    }
   }
 
   const compliance = [
@@ -440,7 +470,7 @@ export async function createSubcontractorDraft(input: {
     try {
       const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
       if (!existing) {
-        await prisma.user.create({
+        const user = await prisma.user.create({
           data: {
             email,
             name: input.name.trim() || input.company.trim(),
@@ -448,11 +478,27 @@ export async function createSubcontractorDraft(input: {
             role: "SUBCONTRACTOR",
             subcontractorId: sub.id,
           },
+          select: { id: true },
         });
         loginCreated = true;
+
+        /**
+         * Sign them in here, not at the end.
+         *
+         * This is what makes a reusable invite link safe. From this point the
+         * rest of onboarding — capabilities, the agreement, documents, badges —
+         * is authorised by their own session, which names exactly one company
+         * and cannot be forwarded to anyone else. The link only ever gets
+         * somebody as far as creating an account.
+         *
+         * It also means they land in their portal already signed in rather
+         * than being asked to log in with the password they set ninety seconds
+         * ago.
+         */
+        await setSessionCookie(await signSession({ userId: user.id, role: "SUBCONTRACTOR" }));
       }
     } catch {
-      // An email already in use is the common case and is not fatal here.
+      // A duplicate email is the common case and is not fatal here.
     }
   }
 
@@ -2740,6 +2786,16 @@ export async function createInvite(input: {
   });
   if (!project) return { ok: false as const, error: "Pick a project for this invite." };
 
+  // One link per project, reused. Minting a fresh token every time the dialog
+  // opened left a trail of live links nobody could account for, and made
+  // inviting three crews look like three different things to send.
+  const open = await prisma.invite.findFirst({
+    where: { projectId: project.id },
+    orderBy: { createdAt: "asc" },
+    select: { token: true },
+  });
+  if (open) return { ok: true as const, token: open.token };
+
   // 32 bytes of CSPRNG, url-safe. Guessing one is not a threat model.
   const token = randomBytes(32).toString("base64url");
 
@@ -3096,3 +3152,4 @@ export async function deleteCrewBadge(id: string, inviteToken?: string) {
 export async function listCrewBadges(subcontractorId: string) {
   return getCrewBadges(subcontractorId);
 }
+
