@@ -10,14 +10,12 @@ import {
   getProjectMaterials,
   getProjectPhotos,
   getProjectRates,
+  getProjectSchedule,
   getRatedCrews,
   getProjectValuation,
 } from "@/data/queries";
-import { cn } from "@/lib/utils";
-import { toneStyles } from "@/lib/tone";
 import {
   formatFeet,
-  formatNumber,
   formatPercent,
 } from "@/lib/format";
 import { ProjectCover } from "@/components/projects/project-cover";
@@ -25,13 +23,12 @@ import { ProjectValue } from "@/components/projects/project-value";
 import { getCurrentUser, isStaff } from "@/lib/auth";
 import { PageShell } from "@/components/common/page-shell";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
-import { HealthRing } from "@/components/common/health-ring";
 import { StatusPill } from "@/components/common/status-pill";
-import { Meter } from "@/components/common/metric";
 import { ProjectHeaderActions, ProjectMapPanel } from "@/components/projects/project-detail-client";
 import { ProjectMaterials } from "@/components/projects/project-materials";
 import { ProjectPhotos } from "@/components/projects/project-photos";
 import { ProjectRatesPanel } from "@/components/projects/project-rates";
+import { ProjectScheduleStrip } from "@/components/projects/project-schedule";
 
 export const dynamic = "force-dynamic";
 
@@ -55,22 +52,20 @@ export default async function ProjectDetailPage({
   const customers = staff ? await getCustomers() : [];
 
   // The valuation is staff-only and throws for a crew by design, so don't ask.
-  const [materialImports, trackedMaterials, valuation, photos, projectRates, ratedCrews] = await Promise.all([
+  const [materialImports, trackedMaterials, valuation, photos, projectRates, ratedCrews, schedule] = await Promise.all([
     getProjectMaterialImports(project.id, project.name),
     getProjectMaterials(project.id),
     staff ? getProjectValuation(project.id) : Promise.resolve(null),
     getProjectPhotos(project.id),
     staff ? getProjectRates(project.id) : Promise.resolve(null),
     staff ? getRatedCrews() : Promise.resolve([]),
+    getProjectSchedule(project.id),
   ]);
 
-  const daysToFinish = Math.ceil(project.remainingFt / Math.max(project.actualFtPerDay, 1));
 
   // Kept for the payment-terms panel; the money now comes from real rate cards.
   const customer = customers.find((c) => c.name === project.client);
 
-  const totalFt = Math.round(project.remainingFt / (1 - project.pctComplete / 100));
-  const installedFt = totalFt - project.remainingFt;
 
   const projectDailies = dailies.filter((d) => d.projectId === project.id);
 
@@ -103,43 +98,19 @@ export default async function ProjectDetailPage({
         />
       </div>
 
-      {/* Status first: health, pace and progress read in one line before
-          anything else on the page. */}
+      {/* Status first. Everything here is measured in route feet — plow and
+          bore — against the contract date, so a day setting pedestals does
+          not read as a day of production. */}
       <div className="mb-3">
-          <Panel>
-            <PanelBody className="flex flex-wrap items-center gap-5">
-              <div className="flex items-center gap-4">
-                <HealthRing score={project.health} size={72} stroke={5} />
-                <div>
-                  <p className="eyebrow">Project health</p>
-                  <div className="mt-1 flex items-center gap-2">
-                    <StatusPill label={project.status} tone={project.tone} />
-                  </div>
-                  <p className={cn("mt-1.5 text-[12.5px] font-medium", toneStyles[project.forecastTone].text)}>
-                    Forecast: {project.forecast}
-                  </p>
-                </div>
-              </div>
-
-              <div className="ml-auto grid grid-cols-2 gap-x-8 gap-y-3 sm:grid-cols-3">
-                <KeyStat label="Complete" value={`${project.pctComplete}%`} />
-                <KeyStat label="Remaining" value={formatFeet(project.remainingFt)} />
-                <KeyStat label="Est. finish" value={`${daysToFinish} days`} />
-                <KeyStat label="Actual pace" value={`${formatNumber(project.actualFtPerDay)} ft/day`} />
-                <KeyStat label="Required pace" value={`${formatNumber(project.requiredFtPerDay)} ft/day`} />
-                <KeyStat label="Crew" value={project.crew} />
-              </div>
-            </PanelBody>
-            <div className="border-t border-border/70 px-4 py-3 sm:px-5">
-              <div className="flex items-baseline justify-between text-[11.5px]">
-                <span className="text-muted-foreground">Progress</span>
-                <span className="num text-muted-foreground">
-                  {formatFeet(installedFt)} of {formatFeet(totalFt)}
-                </span>
-              </div>
-              <Meter value={project.pctComplete / 100} tone={project.tone} className="mt-1.5" />
-            </div>
-          </Panel>
+        <Panel>
+          <PanelBody>
+            <ProjectScheduleStrip
+              projectId={project.id}
+              schedule={schedule}
+              canEdit={staff}
+            />
+          </PanelBody>
+        </Panel>
       </div>
 
       {/* The field record sits directly under health: on a job site the last
@@ -268,15 +239,6 @@ export default async function ProjectDetailPage({
         ) : null}
       </div>
     </PageShell>
-  );
-}
-
-function KeyStat({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="eyebrow">{label}</p>
-      <p className="num mt-0.5 text-[14px] font-semibold text-foreground">{value}</p>
-    </div>
   );
 }
 

@@ -10,6 +10,7 @@ import {
 } from "@/lib/authz";
 import { packetStatus } from "@/lib/vendor-packet";
 import { balanceOf, isPastDue } from "@/lib/billing";
+import { schedulePosition, type SchedulePosition } from "@/lib/schedule";
 import {
   findRate,
   priceQuantities,
@@ -21,6 +22,7 @@ import {
 import {
   codeGroupLabel,
   compareByPriority,
+  isLinearFootageCode,
   normalizeCode,
   isAerialCode,
   isPriorityCode,
@@ -2368,4 +2370,101 @@ export async function getRatedCrews(): Promise<{ id: string; company: string }[]
     orderBy: { company: "asc" },
   });
   return rows;
+}
+
+/* ------------------------------------------------------------------ *
+ * Schedule — where a job stands against its deadline.
+ * ------------------------------------------------------------------ */
+
+export interface ProjectSchedule extends SchedulePosition {
+  /** Codes counted as route: plow and bore only. */
+  linearCodes: number;
+  /** Feet on the list that are real work but do not advance the route. */
+  nonLinearCodes: number;
+}
+
+/**
+ * Progress measured in route feet, against the contract date.
+ *
+ * Only plow and bore count. Pedestals, ground rods, warning signs and ant
+ * control are all billable and none of them move the route forward, so a day
+ * spent setting peds would otherwise read as a day of production. Microfiber
+ * and pull-in-duct are excluded for the same reason from the other direction:
+ * they bill by the foot down ground already opened, and counting them makes a
+ * job look nearly twice as far along as it is.
+ *
+ * Completion comes from the dailies, not from anyone's estimate — and pace is
+ * measured over days a daily was actually filed, so a crew that has not been
+ * released reads as "not started" rather than as failing at 0 ft/day.
+ */
+export async function getProjectSchedule(projectId: string): Promise<ProjectSchedule> {
+  await viewer();
+  await assertProjectAccess(projectId);
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: {
+      deadline: true,
+      materials: {
+        where: { inScope: true },
+        select: { code: true, planned: true },
+      },
+    },
+  });
+
+  const empty: ProjectSchedule = {
+    ...schedulePosition({ plannedFt: 0, completedFt: 0, deadline: null, workDates: [] }),
+    linearCodes: 0,
+    nonLinearCodes: 0,
+  };
+  if (!project) return empty;
+
+  let plannedFt = 0;
+  let linearCodes = 0;
+  let nonLinearCodes = 0;
+  for (const m of project.materials) {
+    if (!m.code || m.planned <= 0) continue;
+    if (isLinearFootageCode(m.code)) {
+      plannedFt += m.planned;
+      linearCodes++;
+    } else {
+      nonLinearCodes++;
+    }
+  }
+
+  // Completion from what has actually been reported, by the same rule.
+  const dailies = await prisma.daily.findMany({
+    where: { projectId },
+    select: { workDate: true, lineItems: true, status: true },
+  });
+
+  let completedFt = 0;
+  const workDates = new Set<string>();
+  for (const d of dailies) {
+    // Denied work is not production. Everything else has been reported by the
+    // crew and is progress on the ground whether or not the paperwork is
+    // approved yet.
+    if (d.status === "Denied") continue;
+    const items = Array.isArray(d.lineItems) ? (d.lineItems as unknown[]) : [];
+    let dayFt = 0;
+    for (const raw of items) {
+      const li = raw as { code?: unknown; quantity?: unknown };
+      if (typeof li?.code !== "string") continue;
+      if (!isLinearFootageCode(li.code)) continue;
+      dayFt += typeof li.quantity === "number" ? li.quantity : 0;
+    }
+    completedFt += dayFt;
+    if (dayFt > 0 && d.workDate) workDates.add(d.workDate);
+  }
+
+  return {
+    ...schedulePosition({
+      plannedFt,
+      completedFt,
+      deadline: project.deadline || null,
+      workDates: [...workDates],
+    }),
+    linearCodes,
+    nonLinearCodes,
+  };
 }

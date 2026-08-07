@@ -2804,3 +2804,26 @@ export async function copyRatesToProject(projectId: string, subcontractorId: str
   revalidatePath("/customers");
   return { ok: true as const, count: written };
 }
+
+/**
+ * Set or clear the contract completion date.
+ *
+ * Everything schedule-related hangs off this: required pace, projected finish,
+ * whether the job is behind. Clearing it removes those figures rather than
+ * leaving stale ones on screen, because a required pace against a date nobody
+ * is working to is worse than no figure.
+ */
+export async function setProjectDeadline(projectId: string, deadline: string) {
+  await requireStaff();
+  await assertProjectAccess(projectId);
+
+  const value = deadline.trim();
+  if (value && !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return { ok: false as const, error: "Enter the date as YYYY-MM-DD." };
+  }
+
+  await prisma.project.update({ where: { id: projectId }, data: { deadline: value } });
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/projects");
+  return { ok: true as const };
+}

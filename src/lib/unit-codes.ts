@@ -12,7 +12,17 @@
  * quietly mis-bill "place cable" as "pull cable in duct".
  */
 
-/** The codes that carry most underground production, in the order crews think of them. */
+/**
+ * The codes that carry Fortitude's invoicing, in the order crews think of them.
+ *
+ * Deliberately a named list rather than "anything starting with B". A B prefix
+ * is buried work, but a material list carries plenty of buried work Fortitude
+ * does not do — splice closures, distribution hubs, all-inclusive pricing
+ * lines. Pulling those in would inflate a job with work nobody is going to
+ * build. These families are the majority of what gets billed; the handful
+ * outside them are added here by name when they turn up, which is a decision
+ * someone makes once rather than a rule that quietly widens.
+ */
 export const PRIORITY_UNDERGROUND_CODES = [
   "BFO12",
   "BFO24",
@@ -21,11 +31,16 @@ export const PRIORITY_UNDERGROUND_CODES = [
   "BMFAF",
   "BFOV",
   "BM5F1",
-  "BDO",
   "BD5MPF",
   "BD4MPF",
   "BM60",
   "BM61",
+  "BM2",
+  "BM26",
+  "BM53",
+  // Handholes and the BDO pedestal: not on every list, but ours when they are.
+  "BHF",
+  "BDO",
 ] as const;
 
 /** Uppercase, strip whitespace — "bm61(2)f " and "BM61(2)F" are the same code. */
@@ -134,15 +149,29 @@ function isRiserGuardCode(code: string): boolean {
  * list came up short and its value with it. A list of families can only ever be
  * as current as the last sheet somebody read.
  */
+/**
+ * Work that appears on our lists and is not ours to build.
+ *
+ * Riser guards are aerial. Microfiber — the RI codes — is blown through duct
+ * we place, but somebody else blows it; we are not installing it, so it is not
+ * our revenue and pulling it in overstates a job by the length of the whole
+ * route. Charles Hart carries $12,700 of it.
+ *
+ * A default, not a rule: any line can be put back in scope on the project, and
+ * if the arrangement changes this list is the one thing to edit.
+ */
+export function isOutOfScopeCode(code: string): boolean {
+  const c = normalizeCode(code);
+  return isRiserGuardCode(c) || isRibbonInDuctCode(c);
+}
+
 export function isPriorityCode(code: string): boolean {
   const c = normalizeCode(code);
   if (!c) return false;
-  if (isAerialCode(c) || isPoleMounted(c) || isRiserGuardCode(c)) return false;
+  if (isAerialCode(c) || isPoleMounted(c) || isOutOfScopeCode(c)) return false;
   // Labour, equipment and hourly lines are not material at all.
   if (isLabourOrEquipmentCode(c)) return false;
-  if (/^B/.test(c)) return true;
-  // Kept for anything historically classified that does not start with B.
-  return priorityFamily(c) !== null || isRibbonInDuctCode(c);
+  return priorityFamily(c) !== null;
 }
 
 /**
@@ -245,14 +274,43 @@ export function isAdderCode(code: string): boolean {
   return /\(D\)$/.test(c) || /^(BFO|BM6[01]|BFCR|BFCV|BFD)[^)]*D$/.test(c);
 }
 
+/**
+ * Work that runs through duct already in the ground.
+ *
+ * BFO12RI blows microfiber through microduct that BFOV placed; BFO12I pulls
+ * cable into duct already there. Both bill by the foot and neither covers new
+ * ground — on Charles Hart the RI codes total 12,700 ft against 12,735 ft of
+ * microduct, because they are the same route walked twice. Counting them as
+ * linear progress makes a job look nearly twice as far along as it is.
+ */
+export function isInDuctCode(code: string): boolean {
+  const c = normalizeCode(code);
+  return /^BFO/.test(c) && /(RI|I)(?![A-Z])/.test(c);
+}
+
 export function productionMethod(code: string): ProductionMethod {
   const c = normalizeCode(code);
   // An adder rides on footage already counted — pricing it again is right,
   // counting the feet again is not.
   if (isAdderCode(c)) return "other";
+  // Same reasoning: a second pass down a route already opened.
+  if (isInDuctCode(c)) return "other";
   if (/^BM6[01]/.test(c)) return "bore";
   if (/^BFO/.test(c)) return "plow";
   return "other";
+}
+
+/**
+ * Feet of route this code covers — plow and bore only.
+ *
+ * The linear measure of a job. Pedestals, ground rods, warning signs and ant
+ * control are all real work and all billable, but none of them advance the
+ * route, so counting them toward pace would make a day spent setting peds look
+ * like a day of production.
+ */
+export function isLinearFootageCode(code: string): boolean {
+  const m = productionMethod(code);
+  return m === "plow" || m === "bore";
 }
 
 /**

@@ -139,6 +139,10 @@ model Project {
   health           Int               @default(80)
   pctComplete      Int               @default(0)
   crew             String            @default("Unassigned")
+  /// Contract completion date, YYYY-MM-DD. Everything schedule-related is
+  /// computed from this against a five-day production week — a required pace
+  /// worked out on calendar days is quietly 30% too low.
+  deadline         String            @default("")
   updatedAt        String            @default("")
   mapUrl           String?
   mapOriginalUrl   String?
