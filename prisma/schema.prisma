@@ -150,6 +150,7 @@ model Project {
   materials        ProjectMaterial[]
   materialImports  RateImport[]
   invoices         Invoice[]
+  photos           ProjectPhoto[]
   sheets           DailySheet[]
   /// Crews assigned to this job. This relation is what a subcontractor's
   /// access is decided by, so it is a real foreign key rather than a list of
@@ -484,6 +485,66 @@ model Payment {
   createdAt  DateTime @default(now())
 
   @@index([invoiceId])
+}
+
+/// Where a photo's time and place came from.
+///
+/// This is the difference between a record and a story. A photo taken through
+/// the app carries the device's own position at the moment of capture. A photo
+/// chosen from the library was taken somewhere else, at some other time, and
+/// stamping it with where the phone is *now* would manufacture evidence — so
+/// its location comes from the file's own EXIF or it has none at all.
+enum CaptureSource {
+  CAMERA
+  LIBRARY
+}
+
+/// A field photo or video on a project — evidence, and direction for the crew.
+///
+/// Two jobs in one record. As-built evidence has to be defensible: what was
+/// built, where, and when, in a form that settles a dispute months later. A
+/// direction shot is the opposite — it points a crew at a specific spot before
+/// the work happens. Same capture path, different intent, so `purpose` says
+/// which rather than leaving a gallery nobody can search.
+model ProjectPhoto {
+  id        String  @id @default(cuid())
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String
+  /// Blob URL. Unguessable, but the store is public-read — fine for a job-site
+  /// photo, and the reason contracts do not live here.
+  url       String
+  mediaType String  @default("")
+  sizeBytes Int     @default(0)
+  /// PHOTO | VIDEO
+  kind      String  @default("PHOTO")
+
+  source CaptureSource @default(LIBRARY)
+
+  /// When the shutter fired, as distinct from when the file was uploaded —
+  /// a crew photographing yesterday's work today is normal, and createdAt
+  /// would quietly date the evidence wrong.
+  capturedAt       DateTime?
+  /// "camera" | "exif" | "file" — how capturedAt was established, so a weak
+  /// source is visible rather than presented with the same authority as a
+  /// real one.
+  capturedAtSource String    @default("")
+
+  lat            Float?
+  lng            Float?
+  /// Metres of uncertainty the device reported. A 2,000 m fix is a cell-tower
+  /// guess and should not be drawn on a map like a survey point.
+  accuracyM      Float?
+  /// "device" | "exif" — never inferred, never filled in from the project.
+  locationSource String  @default("")
+
+  caption String @default("")
+  /// RECORD (evidence of work) | DIRECTION (instruction for the crew)
+  purpose String @default("RECORD")
+
+  uploadedBy String   @default("")
+  createdAt  DateTime @default(now())
+
+  @@index([projectId, createdAt])
 }
 
 /// One project-specific onboarding invite link.

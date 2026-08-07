@@ -22,6 +22,7 @@ import { priceQuantities } from "@/lib/pricing";
 import { addDays, balanceOf, daysFromTerms, invoiceMoney, weekOf } from "@/lib/billing";
 import { isLabourOrEquipmentCode } from "@/lib/unit-codes";
 import { packetStatus } from "@/lib/vendor-packet";
+import { readExif } from "@/lib/exif";
 import { describeFileRejection } from "@/lib/document-storage";
 import { getCustomerRollup, getVendorPacket } from "@/data/queries";
 import {
@@ -2517,5 +2518,145 @@ export async function uploadRateSheet(formData: FormData) {
     moved: moved.slice(0, 12),
     moreMoved: Math.max(0, moved.length - 12),
     codes: codes.length,
+  };
+}
+
+/* ------------------------------------------------------------------ *
+ * Project photos — timestamped, located field record.
+ * ------------------------------------------------------------------ */
+
+/**
+ * Record a photo or video that has already been uploaded to Blob.
+ *
+ * The client does the upload (Blob direct, so a phone video isn't capped by the
+ * serverless body limit) and hands back the URL plus what it observed at the
+ * moment of capture. This writes the record and decides nothing it wasn't told:
+ * a location arrives with a source, or it doesn't arrive.
+ */
+export async function saveProjectPhoto(input: {
+  projectId: string;
+  url: string;
+  mediaType: string;
+  sizeBytes: number;
+  kind: "PHOTO" | "VIDEO";
+  source: "CAMERA" | "LIBRARY";
+  capturedAt?: string | null;
+  capturedAtSource?: string;
+  lat?: number | null;
+  lng?: number | null;
+  accuracyM?: number | null;
+  locationSource?: string;
+  caption?: string;
+  purpose?: "RECORD" | "DIRECTION";
+}) {
+  const user = await requireUser();
+  await assertProjectAccess(input.projectId);
+
+  if (!input.url.trim()) return { ok: false as const, error: "No file was uploaded." };
+
+  // A coordinate is only stored with a stated origin. Anything else is a
+  // number on a record that nobody can account for later.
+  const hasFix =
+    typeof input.lat === "number" &&
+    typeof input.lng === "number" &&
+    Number.isFinite(input.lat) &&
+    Number.isFinite(input.lng) &&
+    Math.abs(input.lat) <= 90 &&
+    Math.abs(input.lng) <= 180 &&
+    (input.locationSource === "device" || input.locationSource === "exif");
+
+  const captured = input.capturedAt ? new Date(input.capturedAt) : null;
+
+  const photo = await prisma.projectPhoto.create({
+    data: {
+      projectId: input.projectId,
+      url: input.url,
+      mediaType: input.mediaType || "",
+      sizeBytes: Math.max(0, Math.round(input.sizeBytes || 0)),
+      kind: input.kind === "VIDEO" ? "VIDEO" : "PHOTO",
+      source: input.source === "CAMERA" ? "CAMERA" : "LIBRARY",
+      capturedAt: captured && !Number.isNaN(captured.getTime()) ? captured : null,
+      capturedAtSource: input.capturedAtSource ?? "",
+      lat: hasFix ? input.lat : null,
+      lng: hasFix ? input.lng : null,
+      accuracyM: hasFix && typeof input.accuracyM === "number" ? input.accuracyM : null,
+      locationSource: hasFix ? (input.locationSource as string) : "",
+      caption: input.caption?.trim() ?? "",
+      purpose: input.purpose === "DIRECTION" ? "DIRECTION" : "RECORD",
+      uploadedBy: user.name || user.email,
+    },
+  });
+
+  revalidatePath(`/projects/${input.projectId}`);
+  return { ok: true as const, id: photo.id };
+}
+
+/**
+ * Edit what a photo is for, or what it shows.
+ *
+ * The caption and the purpose are the only editable parts. Where and when it
+ * was taken are observations, not opinions — letting those be retyped would
+ * turn the record into something nobody can rely on.
+ */
+export async function updateProjectPhoto(
+  id: string,
+  patch: { caption?: string; purpose?: "RECORD" | "DIRECTION" },
+) {
+  const photo = await prisma.projectPhoto.findUnique({
+    where: { id },
+    select: { projectId: true },
+  });
+  if (!photo) return { ok: false as const, error: "Photo not found." };
+  await requireUser();
+  await assertProjectAccess(photo.projectId);
+
+  await prisma.projectPhoto.update({
+    where: { id },
+    data: {
+      ...(patch.caption != null ? { caption: patch.caption.trim() } : {}),
+      ...(patch.purpose ? { purpose: patch.purpose } : {}),
+    },
+  });
+  revalidatePath(`/projects/${photo.projectId}`);
+  return { ok: true as const };
+}
+
+/** Staff only — a crew should not be able to remove evidence of the work. */
+export async function deleteProjectPhoto(id: string) {
+  await requireStaff();
+  const photo = await prisma.projectPhoto.findUnique({
+    where: { id },
+    select: { projectId: true },
+  });
+  if (!photo) return { ok: false as const, error: "Photo not found." };
+
+  await prisma.projectPhoto.delete({ where: { id } });
+  revalidatePath(`/projects/${photo.projectId}`);
+  return { ok: true as const };
+}
+
+/**
+ * Read the time and place out of an uploaded image's own EXIF.
+ *
+ * Only for files chosen from the library. A photo from the camera roll was
+ * taken somewhere else at some other time, and stamping it with where the phone
+ * is now would put a coordinate on the record that never had anything to do
+ * with the picture.
+ */
+export async function readPhotoExif(formData: FormData) {
+  await requireUser();
+  const file = formData.get("file") as File | null;
+  if (!file) return { ok: false as const, error: "No file." };
+
+  // The metadata lives in the first APP1 segment, so a slice is enough — no
+  // reason to pull a phone video's worth of bytes through a server action.
+  const head = Buffer.from(await file.slice(0, 256 * 1024).arrayBuffer());
+  const facts = readExif(new Uint8Array(head));
+
+  return {
+    ok: true as const,
+    capturedAt: facts.capturedAt ? facts.capturedAt.toISOString() : null,
+    lat: facts.lat,
+    lng: facts.lng,
   };
 }

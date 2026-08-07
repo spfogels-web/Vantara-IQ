@@ -2058,3 +2058,62 @@ export async function getDocuments(): Promise<DocumentDetail[]> {
     })),
   }));
 }
+
+/* ------------------------------------------------------------------ *
+ * Project photos — the field record.
+ * ------------------------------------------------------------------ */
+
+export interface ProjectPhotoRow {
+  id: string;
+  url: string;
+  mediaType: string;
+  sizeBytes: number;
+  kind: "PHOTO" | "VIDEO";
+  source: "CAMERA" | "LIBRARY";
+  capturedAt: string | null;
+  capturedAtSource: string;
+  lat: number | null;
+  lng: number | null;
+  accuracyM: number | null;
+  locationSource: string;
+  caption: string;
+  purpose: "RECORD" | "DIRECTION";
+  uploadedBy: string;
+  createdAt: string;
+}
+
+/**
+ * Every photo on a project, newest first.
+ *
+ * Ordered by when the shutter fired where that is known, falling back to upload
+ * time — a crew photographing Tuesday's work on Thursday should file under
+ * Tuesday, which is the whole point of keeping the two dates apart.
+ */
+export async function getProjectPhotos(projectId: string): Promise<ProjectPhotoRow[]> {
+  await viewer();
+  await assertProjectAccess(projectId);
+
+  const rows = await prisma.projectPhoto.findMany({
+    where: { projectId },
+    orderBy: [{ capturedAt: "desc" }, { createdAt: "desc" }],
+  });
+
+  return rows.map((r) => ({
+    id: r.id,
+    url: r.url,
+    mediaType: r.mediaType,
+    sizeBytes: r.sizeBytes,
+    kind: r.kind === "VIDEO" ? "VIDEO" : "PHOTO",
+    source: r.source === "CAMERA" ? "CAMERA" : "LIBRARY",
+    capturedAt: r.capturedAt?.toISOString() ?? null,
+    capturedAtSource: r.capturedAtSource,
+    lat: r.lat,
+    lng: r.lng,
+    accuracyM: r.accuracyM,
+    locationSource: r.locationSource,
+    caption: r.caption,
+    purpose: r.purpose === "DIRECTION" ? "DIRECTION" : "RECORD",
+    uploadedBy: r.uploadedBy,
+    createdAt: r.createdAt.toISOString(),
+  }));
+}

@@ -8,6 +8,7 @@ import {
   getProject,
   getProjectMaterialImports,
   getProjectMaterials,
+  getProjectPhotos,
   getProjectValuation,
 } from "@/data/queries";
 import { cn } from "@/lib/utils";
@@ -27,6 +28,7 @@ import { StatusPill } from "@/components/common/status-pill";
 import { Meter } from "@/components/common/metric";
 import { ProjectHeaderActions, ProjectMapPanel } from "@/components/projects/project-detail-client";
 import { ProjectMaterials } from "@/components/projects/project-materials";
+import { ProjectPhotos } from "@/components/projects/project-photos";
 
 export const dynamic = "force-dynamic";
 
@@ -50,10 +52,11 @@ export default async function ProjectDetailPage({
   const customers = staff ? await getCustomers() : [];
 
   // The valuation is staff-only and throws for a crew by design, so don't ask.
-  const [materialImports, trackedMaterials, valuation] = await Promise.all([
+  const [materialImports, trackedMaterials, valuation, photos] = await Promise.all([
     getProjectMaterialImports(project.id, project.name),
     getProjectMaterials(project.id),
     staff ? getProjectValuation(project.id) : Promise.resolve(null),
+    getProjectPhotos(project.id),
   ]);
 
   const daysToFinish = Math.ceil(project.remainingFt / Math.max(project.actualFtPerDay, 1));
@@ -174,6 +177,9 @@ export default async function ProjectDetailPage({
           />
         </Panel>
       </div>
+
+      {/* The field record — every project carries one. */}
+      <ProjectPhotos projectId={project.id} photos={photos} canDelete={staff} />
 
       {/* Dailies and the customer close the page. */}
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
