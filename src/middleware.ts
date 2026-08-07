@@ -25,7 +25,7 @@ const SESSION_COOKIE = "vq_session";
  * requires a session for the one operation that matters (minting an upload
  * token) and verifies the callback's signature for the other.
  */
-const PUBLIC_PREFIXES = ["/login", "/invite", "/api/blob"];
+const PUBLIC_PREFIXES = ["/login", "/invite", "/api/blob", "/api/agreement"];
 
 /** What a subcontractor login is allowed to reach. */
 const SUB_ALLOWED_PREFIXES = ["/dailies", "/projects", "/company", "/support", "/settings"];

@@ -26,13 +26,53 @@ export type SubDoc = {
   createdAt: string;
 };
 
+/**
+ * What a crew has to supply, broken out one item per row.
+ *
+ * `required` blocks submission; `canFollow` marks the ones that realistically
+ * arrive later — a COI comes from an insurance agent on their timetable, and
+ * locking a sub out of finishing their account while they wait for a broker to
+ * email a certificate just means the account never gets finished. Those are
+ * chased after submission instead, and they still block *work* rather than
+ * signup.
+ */
 export const DOC_SECTIONS = [
-  { key: "w9", label: "W-9", detail: "Signed W-9 tax form.", required: true },
-  { key: "insurance", label: "Insurance (COI) & agreements", detail: "Certificate of insurance, workers' comp, signed subcontract.", required: true },
-  { key: "payment", label: "Payment / ACH", detail: "Voided check or ACH authorization for pay applications.", required: true },
-  { key: "capabilities", label: "Capabilities statement", detail: "Crews, equipment and trade capabilities (PDF).", required: true },
-  { key: "license", label: "Business license & certifications", detail: "State license, DOT, safety certs.", required: false },
-  { key: "other", label: "Other documents", detail: "Anything else Fortitude requests.", required: false },
+  {
+    key: "agreement",
+    label: "Signed subcontractor agreement",
+    detail: "Download the agreement, sign it, and upload the signed copy.",
+    required: true,
+    canFollow: false,
+  },
+  { key: "w9", label: "W-9", detail: "Signed W-9 tax form.", required: true, canFollow: false },
+  {
+    key: "payment",
+    label: "Payment / ACH",
+    detail: "Voided check or signed ACH authorization.",
+    required: true,
+    canFollow: false,
+  },
+  {
+    key: "insurance",
+    label: "Certificate of insurance (COI)",
+    detail: "General liability and workers' comp, naming Fortitude as additional insured.",
+    required: true,
+    canFollow: true,
+  },
+  {
+    key: "license",
+    label: "Business license & certifications",
+    detail: "State license, DOT number, safety certifications.",
+    required: false,
+    canFollow: true,
+  },
+  {
+    key: "other",
+    label: "Other documents",
+    detail: "Anything else Fortitude requests.",
+    required: false,
+    canFollow: true,
+  },
 ] as const;
 
 const ACCEPT = ".pdf,.jpg,.jpeg,.png,.webp,.gif,.doc,.docx,.xls,.xlsx,.csv,.heic";
@@ -77,6 +117,12 @@ export function DocumentCenter({
     await deleteSubDocument(id);
   }
 
+  // Two different questions. "Can they submit" only looks at the items that
+  // must be in hand now; "are they cleared to work" looks at everything
+  // required, including the ones allowed to arrive later.
+  const submitBlockers = DOC_SECTIONS.filter(
+    (s) => s.required && !s.canFollow && !docs.some((d) => d.section === s.key),
+  );
   const requiredDone = DOC_SECTIONS.filter((s) => s.required).every((s) =>
     docs.some((d) => d.section === s.key),
   );
@@ -96,6 +142,20 @@ export function DocumentCenter({
 
       {error ? <p className="text-[12px] text-critical">{error}</p> : null}
 
+      {/* Say plainly what stands between them and submitting, as distinct from
+          what stands between them and starting work. */}
+      {submitBlockers.length > 0 ? (
+        <p className="rounded-lg border border-critical/25 bg-critical/[0.06] px-3 py-2 text-[11.5px] text-foreground">
+          Still needed before you can submit:{" "}
+          {submitBlockers.map((s) => s.label).join(", ")}.
+        </p>
+      ) : !requiredDone ? (
+        <p className="rounded-lg border border-warning/25 bg-warning/[0.06] px-3 py-2 text-[11.5px] text-foreground">
+          You can submit now. Your certificate of insurance can follow — work can&apos;t start
+          until it&apos;s on file, but your account will be under review in the meantime.
+        </p>
+      ) : null}
+
       {DOC_SECTIONS.map((section) => {
         const sectionDocs = docs.filter((d) => d.section === section.key);
         const has = sectionDocs.length > 0;
@@ -113,11 +173,23 @@ export function DocumentCenter({
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <p className="text-[13px] font-medium text-foreground">{section.label}</p>
-                  {section.required ? (
-                    <span className="rounded bg-foreground/[0.06] px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      Required
+                  {/* "Can follow" is the honest label for a COI: required to
+                      work, not required to finish signing up. Saying only
+                      "Required" would make a sub think they are stuck waiting
+                      on their insurance agent before they can even submit. */}
+                  {section.required && !section.canFollow ? (
+                    <span className="rounded bg-critical/10 px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide text-critical">
+                      Required now
                     </span>
-                  ) : null}
+                  ) : section.required ? (
+                    <span className="rounded bg-warning/10 px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide text-warning">
+                      Can follow
+                    </span>
+                  ) : (
+                    <span className="rounded bg-foreground/[0.06] px-1.5 py-0.5 text-[9.5px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      Optional
+                    </span>
+                  )}
                 </div>
                 <p className="text-[11px] text-muted-foreground">{section.detail}</p>
               </div>

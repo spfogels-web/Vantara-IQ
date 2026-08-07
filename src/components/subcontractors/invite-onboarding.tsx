@@ -2,13 +2,14 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Check, HardHat, MapPin, Zap } from "lucide-react";
+import { Check, HardHat, MapPin } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { initials } from "@/lib/format";
 import { createSubcontractorDraft, updateSubcontractorCapabilities } from "@/app/actions";
 import { LogoUpload } from "@/components/common/logo-upload";
 import { DocumentCenter } from "@/components/subcontractors/document-center";
+import { AgreementStep } from "@/components/subcontractors/agreement-step";
 
 export type InviteProject = {
   name: string;
@@ -29,10 +30,15 @@ const TRADES = [
   "Splicing",
 ];
 
+/** Multi-line placeholder, kept out of JSX where a raw newline breaks it. */
+const EQUIPMENT_PLACEHOLDER = ["Directional drill", "Mini excavator", "Vac trailer"].join(
+  String.fromCharCode(10),
+);
+
 const inputClass =
   "w-full rounded-lg border border-foreground/[0.1] bg-foreground/[0.03] px-3 py-2.5 text-[13px] text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-brand/40";
 
-type Step = "account" | "onboard" | "done";
+type Step = "account" | "capabilities" | "agreement" | "documents" | "done";
 
 export function InviteOnboarding({ project }: { token: string; project: InviteProject }) {
   const [step, setStep] = React.useState<Step>("account");
@@ -40,6 +46,7 @@ export function InviteOnboarding({ project }: { token: string; project: InvitePr
   const [saving, setSaving] = React.useState(false);
   const [account, setAccount] = React.useState({ company: "", name: "", email: "", password: "" });
   const [caps, setCaps] = React.useState({ crews: "", fieldStaff: "", equipment: "", trades: [] as string[] });
+  const [agreementDownloaded, setAgreementDownloaded] = React.useState(false);
 
   const setA = (k: keyof typeof account) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setAccount((f) => ({ ...f, [k]: e.target.value }));
@@ -63,14 +70,15 @@ export function InviteOnboarding({ project }: { token: string; project: InvitePr
       });
       if (res.ok) {
         setSubId(res.id);
-        setStep("onboard");
+        setStep("capabilities");
       }
     } finally {
       setSaving(false);
     }
   }
 
-  async function finish() {
+  /** Save the capabilities statement and move on — this is no longer the end. */
+  async function saveCapabilities() {
     if (!subId || !capsValid || saving) return;
     setSaving(true);
     try {
@@ -80,7 +88,7 @@ export function InviteOnboarding({ project }: { token: string; project: InvitePr
         fieldStaff: caps.fieldStaff,
         equipment: caps.equipment.split("\n").map((s) => s.trim()).filter(Boolean),
       });
-      setStep("done");
+      setStep("agreement");
     } finally {
       setSaving(false);
     }
@@ -90,14 +98,8 @@ export function InviteOnboarding({ project }: { token: string; project: InvitePr
     <div className="mx-auto flex min-h-svh w-full max-w-5xl flex-col px-4 py-8 sm:px-6 sm:py-12">
       {/* Brand header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2.5">
-          <span className="brand-gradient glow-brand grid size-8 place-items-center rounded-lg text-white">
-            <Zap className="size-4" strokeWidth={2.4} />
-          </span>
-          <span className="text-[15px] font-semibold tracking-[-0.02em] text-foreground">
-            VANTARA <span className="text-brand-bright">IQ</span>
-          </span>
-        </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/nexgen-banner.png" alt="NEXGEN BUILD AI" className="h-10 w-auto max-w-[180px] object-contain" />
         <Link href="/login" className="text-[12.5px] font-medium text-muted-foreground hover:text-foreground">
           Log in
         </Link>
@@ -183,10 +185,10 @@ export function InviteOnboarding({ project }: { token: string; project: InvitePr
             </p>
           </div>
         </div>
-      ) : step === "onboard" && subId ? (
-        <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {/* Capabilities */}
-          <div className="surface flex flex-col p-5">
+      ) : step === "capabilities" && subId ? (
+        <div className="mt-6">
+          <StepBar current={2} />
+          <div className="surface mt-4 flex flex-col p-5">
             <h2 className="flex items-center gap-1.5 text-[15px] font-semibold text-foreground">
               <HardHat className="size-4 text-brand-bright" /> Capabilities statement
             </h2>
@@ -202,7 +204,7 @@ export function InviteOnboarding({ project }: { token: string; project: InvitePr
               </div>
             </div>
 
-            <div className="mt-3">
+            <div className="mt-4">
               <span className="mb-1.5 block text-[11.5px] font-medium text-muted-foreground">
                 Trades &amp; capabilities<span className="ml-0.5 text-critical">*</span>
               </span>
@@ -216,17 +218,20 @@ export function InviteOnboarding({ project }: { token: string; project: InvitePr
                       onClick={() => toggleTrade(t)}
                       className={cn(
                         "focus-ring rounded-full border px-2.5 py-1 text-[11.5px] font-medium transition-colors",
-                        on ? "border-brand/40 bg-brand/10 text-brand-bright" : "border-border/70 bg-foreground/[0.02] text-muted-foreground hover:text-foreground",
+                        on
+                          ? "border-brand/40 bg-brand/10 text-brand-bright"
+                          : "border-border/70 bg-foreground/[0.02] text-muted-foreground hover:text-foreground",
                       )}
                     >
-                      {on ? <Check className="mr-1 inline size-3" /> : null}{t}
+                      {on ? <Check className="mr-1 inline size-3" /> : null}
+                      {t}
                     </button>
                   );
                 })}
               </div>
             </div>
 
-            <div className="mt-3 grid grid-cols-2 gap-3">
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label="Number of crews *">
                 <input value={caps.crews} onChange={setC("crews")} inputMode="numeric" placeholder="3" className={inputClass} />
               </Field>
@@ -236,27 +241,80 @@ export function InviteOnboarding({ project }: { token: string; project: InvitePr
             </div>
             <div className="mt-3">
               <Field label="Equipment available" hint="One per line">
-                <textarea value={caps.equipment} onChange={setC("equipment")} rows={3} placeholder={"Directional drill\nMini excavator\nVac trailer"} className={cn(inputClass, "resize-none")} />
+                <textarea value={caps.equipment} onChange={setC("equipment")} rows={3} placeholder={EQUIPMENT_PLACEHOLDER} className={cn(inputClass, "resize-none")} />
               </Field>
             </div>
 
             <button
               type="button"
-              onClick={() => void finish()}
+              onClick={() => void saveCapabilities()}
               disabled={!capsValid || saving}
-              className="brand-gradient focus-ring mt-auto inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2.5 text-[13px] font-semibold text-white disabled:opacity-40"
+              className="brand-gradient focus-ring mt-5 inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2.5 text-[13px] font-semibold text-white disabled:opacity-40"
             >
-              {saving ? "Submitting…" : "Submit for review"}
+              {saving ? "Saving…" : "Continue"}
             </button>
           </div>
-
-          {/* Document center */}
-          <div className="surface p-5">
-            <div className="mb-3">
-              <h2 className="text-[15px] font-semibold text-foreground">Required documents</h2>
-              <p className="text-[11.5px] text-muted-foreground">Upload each item — Fortitude reviews and downloads them.</p>
+        </div>
+      ) : step === "agreement" && subId ? (
+        <div className="mt-6">
+          <StepBar current={3} />
+          <div className="mt-4">
+            <AgreementStep
+              companyName={account.company}
+              downloaded={agreementDownloaded}
+              onDownloaded={() => setAgreementDownloaded(true)}
+            />
+          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setStep("documents")}
+              className="brand-gradient focus-ring inline-flex items-center gap-1.5 rounded-lg px-4 py-2.5 text-[13px] font-semibold text-white"
+            >
+              Continue to documents
+            </button>
+            <button
+              type="button"
+              onClick={() => setStep("capabilities")}
+              className="focus-ring rounded-lg border border-border px-3 py-2.5 text-[12.5px] text-muted-foreground hover:text-foreground"
+            >
+              Back
+            </button>
+          </div>
+        </div>
+      ) : step === "documents" && subId ? (
+        <div className="mt-6">
+          <StepBar current={4} />
+          <div className="surface mt-4 p-5">
+            <h2 className="text-[15px] font-semibold text-foreground">Your documents</h2>
+            <p className="mt-1 text-[12px] text-muted-foreground">
+              Upload each item below. Anything marked <span className="text-foreground">can follow</span>{" "}
+              — a COI usually comes from your agent — can be sent later; you can still submit your
+              account now.
+            </p>
+            <div className="mt-4">
+              <DocumentCenter subcontractorId={subId} initialDocs={[]} uploadedBy="subcontractor" />
             </div>
-            <DocumentCenter subcontractorId={subId} initialDocs={[]} uploadedBy="subcontractor" />
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setStep("done")}
+              className="brand-gradient focus-ring inline-flex items-center gap-1.5 rounded-lg px-4 py-2.5 text-[13px] font-semibold text-white"
+            >
+              Submit for review
+            </button>
+            <button
+              type="button"
+              onClick={() => setStep("agreement")}
+              className="focus-ring rounded-lg border border-border px-3 py-2.5 text-[12.5px] text-muted-foreground hover:text-foreground"
+            >
+              Back
+            </button>
+            <span className="text-[11.5px] text-muted-foreground">
+              You can keep uploading from your portal after submitting.
+            </span>
           </div>
         </div>
       ) : (
@@ -302,5 +360,51 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
       </span>
       {children}
     </label>
+  );
+}
+
+/**
+ * Where the crew is in onboarding.
+ *
+ * Four named steps rather than a bare progress bar, because "what do I still
+ * have to do" is the question being asked, and a percentage does not answer it.
+ */
+function StepBar({ current }: { current: number }) {
+  const steps = ["Account", "Capabilities", "Agreement", "Documents"];
+  return (
+    <ol className="flex flex-wrap items-center gap-x-2 gap-y-2">
+      {steps.map((label, i) => {
+        const n = i + 1;
+        const done = n < current;
+        const active = n === current;
+        return (
+          <li key={label} className="flex items-center gap-2">
+            <span
+              className={cn(
+                "grid size-6 shrink-0 place-items-center rounded-full text-[11px] font-semibold transition-colors",
+                done
+                  ? "bg-success/15 text-success ring-1 ring-inset ring-success/30"
+                  : active
+                    ? "brand-gradient text-white"
+                    : "bg-foreground/[0.06] text-muted-foreground",
+              )}
+            >
+              {done ? <Check className="size-3.5" /> : n}
+            </span>
+            <span
+              className={cn(
+                "text-[12px]",
+                active ? "font-semibold text-foreground" : "text-muted-foreground",
+              )}
+            >
+              {label}
+            </span>
+            {n < steps.length ? (
+              <span className="mx-1 hidden h-px w-6 bg-foreground/[0.12] sm:block" />
+            ) : null}
+          </li>
+        );
+      })}
+    </ol>
   );
 }
