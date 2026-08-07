@@ -38,7 +38,8 @@ import { InviteDialog } from "@/components/subcontractors/invite-dialog";
 import { SubcontractorForm } from "@/components/subcontractors/subcontractor-form";
 import { SubRateCard } from "@/components/subcontractors/sub-rate-card";
 import { DocumentCenter, type SubDoc } from "@/components/subcontractors/document-center";
-import { approveSubcontractor, deleteSubcontractor, listSubDocuments } from "@/app/actions";
+import { BadgeSection } from "@/components/subcontractors/badge-section";
+import { approveSubcontractor, deleteSubcontractor, listCrewBadges, listSubDocuments } from "@/app/actions";
 
 const complianceTone: Record<ComplianceStatus, "success" | "warning" | "critical" | "neutral"> = {
   valid: "success",
@@ -309,6 +310,7 @@ function SubDetail({
   const router = useRouter();
   const [approving, setApproving] = React.useState(false);
   const [docs, setDocs] = React.useState<SubDoc[] | null>(null);
+  const [badges, setBadges] = React.useState<Awaited<ReturnType<typeof listCrewBadges>> | null>(null);
   const [confirmDelete, setConfirmDelete] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
   const [deleteError, setDeleteError] = React.useState<string | null>(null);
@@ -339,8 +341,12 @@ function SubDetail({
   React.useEffect(() => {
     let active = true;
     setDocs(null);
+    setBadges(null);
     listSubDocuments(s.id).then((d) => {
       if (active) setDocs(d);
+    });
+    listCrewBadges(s.id).then((b) => {
+      if (active) setBadges(b);
     });
     return () => {
       active = false;
@@ -653,6 +659,12 @@ function SubDetail({
           )}
         </PanelBody>
       </Panel>
+
+      {/* Who this crew can send to the yard. Fortitude clears them; the crew
+          only supplies the documents. */}
+      {badges === null ? null : (
+        <BadgeSection subcontractorId={s.id} badges={badges} canReview />
+      )}
 
       {/* Scorecard */}
       {active ? (

@@ -77,6 +77,9 @@ export function InviteOnboarding({ token, project }: { token: string; project: I
         email: account.email,
         projectName: project?.name,
         inviteToken: token,
+        // The password they just set. Without this they finish onboarding
+        // with no way to sign in.
+        password: account.password,
       });
       if (res.ok) {
         setSubId(res.id);

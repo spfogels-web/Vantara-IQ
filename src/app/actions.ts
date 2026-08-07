@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import * as XLSX from "xlsx";
 
 import { prisma } from "@/lib/prisma";
+import { hashPassword } from "@/lib/auth";
 import {
   extractDocument,
   isConfigured,
@@ -24,8 +25,9 @@ import { addDays, balanceOf, daysFromTerms, invoiceMoney, weekOf } from "@/lib/b
 import { isLabourOrEquipmentCode } from "@/lib/unit-codes";
 import { packetStatus } from "@/lib/vendor-packet";
 import { readExif } from "@/lib/exif";
+import { badgeReadiness } from "@/lib/badge";
 import { describeFileRejection } from "@/lib/document-storage";
-import { getCustomerRollup, getVendorPacket } from "@/data/queries";
+import { getCrewBadges, getCustomerRollup, getVendorPacket } from "@/data/queries";
 import {
   assertOwnSubcontractor,
   assertProjectAccess,
@@ -375,6 +377,8 @@ export async function createSubcontractorDraft(input: {
   email: string;
   projectName?: string;
   inviteToken?: string;
+  /** What they typed on the account step. Without it there is no login. */
+  password?: string;
 }) {
   // The invitation is the authorization. Without one this endpoint lets anyone
   // on the internet create crew records in the system, and every later step
@@ -418,7 +422,41 @@ export async function createSubcontractorDraft(input: {
     },
   });
   if (input.inviteToken) await bindInviteToSubcontractor(input.inviteToken, sub.id);
-  return { ok: true as const, id: sub.id };
+
+  /**
+   * Create the login they just set a password for.
+   *
+   * The form asked for a password, checked it was eight characters, and threw
+   * it away — the crew finished onboarding believing they had an account and
+   * then could not sign in. Everything in the portal, including their own
+   * documents, was unreachable until somebody noticed and made a login by hand.
+   *
+   * Failing to create it must not lose the onboarding: the record and its
+   * documents are the valuable part, and staff can always issue a login.
+   */
+  let loginCreated = false;
+  const email = input.email.trim().toLowerCase();
+  if (input.password && input.password.length >= 8 && email) {
+    try {
+      const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+      if (!existing) {
+        await prisma.user.create({
+          data: {
+            email,
+            name: input.name.trim() || input.company.trim(),
+            passwordHash: await hashPassword(input.password),
+            role: "SUBCONTRACTOR",
+            subcontractorId: sub.id,
+          },
+        });
+        loginCreated = true;
+      }
+    } catch {
+      // An email already in use is the common case and is not fatal here.
+    }
+  }
+
+  return { ok: true as const, id: sub.id, loginCreated };
 }
 
 /**
@@ -2826,4 +2864,235 @@ export async function setProjectDeadline(projectId: string, deadline: string) {
   revalidatePath(`/projects/${projectId}`);
   revalidatePath("/projects");
   return { ok: true as const };
+}
+
+/* ------------------------------------------------------------------ *
+ * Yard badges — who is cleared to collect material.
+ * ------------------------------------------------------------------ */
+
+/** Identity photos are images, and a phone camera shot is a couple of MB. */
+const MAX_BADGE_BYTES = 8 * 1024 * 1024;
+
+/** Add or rename a person on the pickup list. */
+export async function saveCrewBadge(input: {
+  id?: string;
+  subcontractorId: string;
+  personName: string;
+  phone?: string;
+  licenseExpires?: string;
+  inviteToken?: string;
+}) {
+  await assertSubcontractorWrite(input.subcontractorId, input.inviteToken);
+
+  const personName = input.personName.trim();
+  if (!personName) return { ok: false as const, error: "Whose badge is this?" };
+  const expires = (input.licenseExpires ?? "").trim();
+  if (expires && !/^\d{4}-\d{2}-\d{2}$/.test(expires)) {
+    return { ok: false as const, error: "Enter the licence expiry as YYYY-MM-DD." };
+  }
+
+  if (input.id) {
+    const existing = await prisma.crewBadge.findUnique({
+      where: { id: input.id },
+      select: { subcontractorId: true },
+    });
+    if (!existing || existing.subcontractorId !== input.subcontractorId) {
+      return { ok: false as const, error: "That badge belongs to another crew." };
+    }
+    await prisma.crewBadge.update({
+      where: { id: input.id },
+      data: { personName, phone: input.phone?.trim() ?? "", licenseExpires: expires },
+    });
+    revalidatePath("/subcontractors");
+    revalidatePath("/portal");
+    return { ok: true as const, id: input.id };
+  }
+
+  const badge = await prisma.crewBadge.create({
+    data: {
+      subcontractorId: input.subcontractorId,
+      personName,
+      phone: input.phone?.trim() ?? "",
+      licenseExpires: expires,
+    },
+    select: { id: true },
+  });
+  revalidatePath("/subcontractors");
+  revalidatePath("/portal");
+  return { ok: true as const, id: badge.id };
+}
+
+/**
+ * Attach a photo of an identity document.
+ *
+ * Held in the database rather than the Blob store. Blob is public-read here —
+ * unguessable URLs and no access control — which is fine for a photo of a
+ * pedestal and not fine for somebody's Social Security card. This row is only
+ * ever reachable through a query that has already checked who is asking.
+ *
+ * One document per kind: re-uploading a licence front replaces it, so a stale
+ * image cannot sit alongside its replacement and be shown at the gate.
+ */
+export async function uploadBadgeDocument(formData: FormData) {
+  const badgeId = String(formData.get("badgeId") || "");
+  const kind = String(formData.get("kind") || "");
+  const inviteToken = String(formData.get("inviteToken") || "") || null;
+  const file = formData.get("file") as File | null;
+
+  if (!file || !badgeId || !kind) return { ok: false as const, error: "Missing file." };
+  if (!["LICENSE_FRONT", "LICENSE_BACK", "SSN_CARD", "PASSPORT"].includes(kind)) {
+    return { ok: false as const, error: "Unknown document type." };
+  }
+  if (file.size > MAX_BADGE_BYTES) {
+    return { ok: false as const, error: "That image is over 8 MB — take it again at a lower size." };
+  }
+  // Images only. A PDF of a licence is unusual enough that it is more likely a
+  // mistake, and refusing keeps this to one thing the viewer can render.
+  const mediaType = file.type || "";
+  if (!mediaType.startsWith("image/")) {
+    return { ok: false as const, error: "Upload a photo — JPG, PNG or HEIC." };
+  }
+
+  const badge = await prisma.crewBadge.findUnique({
+    where: { id: badgeId },
+    select: { subcontractorId: true, status: true },
+  });
+  if (!badge) return { ok: false as const, error: "Badge not found." };
+  await assertSubcontractorWrite(badge.subcontractorId, inviteToken);
+
+  const buf = Buffer.from(await file.arrayBuffer());
+  const dataUrl = `data:${mediaType};base64,${buf.toString("base64")}`;
+  const actor = await viewer();
+
+  await prisma.badgeDocument.upsert({
+    where: { badgeId_kind: { badgeId, kind: kind as never } },
+    create: {
+      badgeId,
+      kind: kind as never,
+      fileName: file.name,
+      mediaType,
+      sizeBytes: file.size,
+      dataUrl,
+      uploadedBy: actor ? actor.name || actor.email : "subcontractor",
+    },
+    update: {
+      fileName: file.name,
+      mediaType,
+      sizeBytes: file.size,
+      dataUrl,
+      uploadedBy: actor ? actor.name || actor.email : "subcontractor",
+    },
+  });
+
+  // A badge that was already decided goes back in the queue when its documents
+  // change — otherwise a cleared badge could quietly acquire a different licence.
+  if (badge.status === "APPROVED" || badge.status === "REJECTED") {
+    await prisma.crewBadge.update({ where: { id: badgeId }, data: { status: "SUBMITTED" } });
+  }
+
+  revalidatePath("/subcontractors");
+  revalidatePath("/portal");
+  return { ok: true as const };
+}
+
+export async function deleteBadgeDocument(id: string, inviteToken?: string) {
+  const doc = await prisma.badgeDocument.findUnique({
+    where: { id },
+    select: { badge: { select: { subcontractorId: true } } },
+  });
+  if (!doc) return { ok: false as const, error: "Not found." };
+  await assertSubcontractorWrite(doc.badge.subcontractorId, inviteToken ?? null);
+
+  await prisma.badgeDocument.delete({ where: { id } });
+  revalidatePath("/subcontractors");
+  revalidatePath("/portal");
+  return { ok: true as const };
+}
+
+/** Send a badge for review, once the documents are actually on file. */
+export async function submitCrewBadge(id: string, inviteToken?: string) {
+  const badge = await prisma.crewBadge.findUnique({
+    where: { id },
+    select: {
+      subcontractorId: true,
+      licenseExpires: true,
+      documents: { select: { kind: true } },
+    },
+  });
+  if (!badge) return { ok: false as const, error: "Badge not found." };
+  await assertSubcontractorWrite(badge.subcontractorId, inviteToken ?? null);
+
+  const ready = badgeReadiness(badge.documents, badge.licenseExpires);
+  if (!ready.complete) {
+    return { ok: false as const, error: `Still needed: ${ready.missing.join(", ")}.` };
+  }
+
+  await prisma.crewBadge.update({ where: { id }, data: { status: "SUBMITTED" } });
+  revalidatePath("/subcontractors");
+  revalidatePath("/portal");
+  return { ok: true as const };
+}
+
+/**
+ * Fortitude's decision on a badge.
+ *
+ * Staff only, and a refusal or revocation carries a reason — a crew told "no"
+ * with no explanation cannot fix anything, and the yard needs to know why
+ * somebody who used to be on the list is not.
+ */
+export async function reviewCrewBadge(
+  id: string,
+  decision: "APPROVED" | "REJECTED" | "REVOKED",
+  note = "",
+) {
+  const user = await requireStaff();
+  if (decision !== "APPROVED" && !note.trim()) {
+    return { ok: false as const, error: "Say why, so the crew can fix it." };
+  }
+
+  const badge = await prisma.crewBadge.findUnique({
+    where: { id },
+    select: { licenseExpires: true, documents: { select: { kind: true } } },
+  });
+  if (!badge) return { ok: false as const, error: "Badge not found." };
+
+  if (decision === "APPROVED") {
+    const ready = badgeReadiness(badge.documents, badge.licenseExpires);
+    if (!ready.complete) {
+      return { ok: false as const, error: `Cannot clear this badge — ${ready.missing.join(", ")}.` };
+    }
+  }
+
+  await prisma.crewBadge.update({
+    where: { id },
+    data: {
+      status: decision,
+      reviewNote: note.trim(),
+      reviewedBy: user.name || user.email,
+      reviewedAt: new Date(),
+    },
+  });
+  revalidatePath("/subcontractors");
+  revalidatePath("/portal");
+  return { ok: true as const };
+}
+
+/** Remove a badge and the identity documents behind it. */
+export async function deleteCrewBadge(id: string, inviteToken?: string) {
+  const badge = await prisma.crewBadge.findUnique({
+    where: { id },
+    select: { subcontractorId: true },
+  });
+  if (!badge) return { ok: false as const, error: "Badge not found." };
+  await assertSubcontractorWrite(badge.subcontractorId, inviteToken ?? null);
+
+  await prisma.crewBadge.delete({ where: { id } });
+  revalidatePath("/subcontractors");
+  revalidatePath("/portal");
+  return { ok: true as const };
+}
+
+/** Badges for one crew, for the office panel. Staff-or-own inside. */
+export async function listCrewBadges(subcontractorId: string) {
+  return getCrewBadges(subcontractorId);
 }

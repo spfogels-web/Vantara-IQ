@@ -9,6 +9,7 @@ import {
   visibleProjectIds,
 } from "@/lib/authz";
 import { packetStatus } from "@/lib/vendor-packet";
+import { badgeReadiness } from "@/lib/badge";
 import { balanceOf, isPastDue } from "@/lib/billing";
 import { schedulePosition, type SchedulePosition } from "@/lib/schedule";
 import {
@@ -2467,4 +2468,100 @@ export async function getProjectSchedule(projectId: string): Promise<ProjectSche
     linearCodes,
     nonLinearCodes,
   };
+}
+
+/* ------------------------------------------------------------------ *
+ * Yard badges.
+ * ------------------------------------------------------------------ */
+
+export interface CrewBadgeView {
+  id: string;
+  personName: string;
+  phone: string;
+  status: string;
+  licenseExpires: string;
+  reviewNote: string;
+  reviewedBy: string;
+  reviewedAt: string | null;
+  documents: {
+    id: string;
+    kind: string;
+    fileName: string;
+    mediaType: string;
+    sizeBytes: number;
+    /** The image itself. Only ever sent to someone this query has cleared. */
+    dataUrl: string;
+    uploadedBy: string;
+    createdAt: string;
+  }[];
+  readiness: ReturnType<typeof badgeReadiness>;
+}
+
+/**
+ * Badges for one crew, with the identity images attached.
+ *
+ * `assertOwnSubcontractor` is the whole security boundary here: it lets staff
+ * through and lets that crew see its own, and refuses everyone else. These rows
+ * carry photographs of driving licences and Social Security cards, so a crew
+ * reading another crew's badges would be considerably worse than reading their
+ * rates.
+ */
+export async function getCrewBadges(subcontractorId: string): Promise<CrewBadgeView[]> {
+  await assertOwnSubcontractor(subcontractorId);
+
+  const rows = await prisma.crewBadge.findMany({
+    where: { subcontractorId },
+    orderBy: { createdAt: "asc" },
+    include: { documents: { orderBy: { kind: "asc" } } },
+  });
+
+  return rows.map((b) => ({
+    id: b.id,
+    personName: b.personName,
+    phone: b.phone,
+    status: b.status,
+    licenseExpires: b.licenseExpires,
+    reviewNote: b.reviewNote,
+    reviewedBy: b.reviewedBy,
+    reviewedAt: b.reviewedAt?.toISOString().slice(0, 10) ?? null,
+    documents: b.documents.map((d) => ({
+      id: d.id,
+      kind: d.kind,
+      fileName: d.fileName,
+      mediaType: d.mediaType,
+      sizeBytes: d.sizeBytes,
+      dataUrl: d.dataUrl,
+      uploadedBy: d.uploadedBy,
+      createdAt: d.createdAt.toISOString().slice(0, 10),
+    })),
+    readiness: badgeReadiness(b.documents, b.licenseExpires),
+  }));
+}
+
+/**
+ * Everyone waiting on a badge decision, for the office.
+ *
+ * Deliberately withholds the images — this is a work queue, and pulling every
+ * licence photo into a list view would put them in memory and on the wire for
+ * no reason. Open the crew to see the documents.
+ */
+export async function getPendingBadges(): Promise<
+  { id: string; company: string; personName: string; status: string; since: string }[]
+> {
+  await requireStaff();
+  const rows = await prisma.crewBadge.findMany({
+    where: { status: "SUBMITTED" },
+    orderBy: { updatedAt: "asc" },
+    select: {
+      id: true, personName: true, status: true, updatedAt: true,
+      subcontractor: { select: { company: true } },
+    },
+  });
+  return rows.map((b) => ({
+    id: b.id,
+    company: b.subcontractor.company,
+    personName: b.personName,
+    status: b.status,
+    since: b.updatedAt.toISOString().slice(0, 10),
+  }));
 }

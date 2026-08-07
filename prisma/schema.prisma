@@ -277,6 +277,7 @@ model Subcontractor {
   tone           String    @default("neutral")
   /// Jobs this crew is assigned to — the authority on what they can see.
   projects       Project[] @relation("ProjectCrews")
+  badges         CrewBadge[]
   compliance     Json      @default("[]")
   complianceTone String    @default("neutral")
   scorecard      Json      @default("{}")
@@ -365,6 +366,77 @@ model SubDocument {
   dataUrl         String
   uploadedBy      String        @default("subcontractor")
   createdAt       DateTime      @default(now())
+}
+
+enum BadgeStatus {
+  /// The crew is still uploading.
+  DRAFT
+  /// Sent to Fortitude, waiting on a decision.
+  SUBMITTED
+  /// Cleared to collect material.
+  APPROVED
+  REJECTED
+  /// Was cleared, no longer is.
+  REVOKED
+}
+
+enum BadgeDocKind {
+  LICENSE_FRONT
+  LICENSE_BACK
+  SSN_CARD
+  PASSPORT
+}
+
+/// One named person cleared to collect material from the yard.
+///
+/// A badge is per person, not per company: the yard needs to know that the man
+/// in front of them is the man on the list, which is why it carries a photo ID
+/// and not just a company name.
+model CrewBadge {
+  id              String        @id @default(cuid())
+  subcontractor   Subcontractor @relation(fields: [subcontractorId], references: [id], onDelete: Cascade)
+  subcontractorId String
+  personName      String
+  phone           String        @default("")
+  status          BadgeStatus   @default(DRAFT)
+  /// Licence expiry as YYYY-MM-DD. A badge stops being valid when the licence
+  /// behind it does, which nobody remembers to check by hand.
+  licenseExpires  String        @default("")
+  reviewNote      String        @default("")
+  reviewedBy      String        @default("")
+  reviewedAt      DateTime?
+  documents       BadgeDocument[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([subcontractorId, status])
+}
+
+/// A photo of an identity document, held for badge verification.
+///
+/// Deliberately stored in the database rather than object storage. The Blob
+/// store this app uses elsewhere is public-read — unguessable URLs and no
+/// access control — which is an acceptable trade for a photograph of a
+/// pedestal and an unacceptable one for somebody's Social Security card or
+/// passport. Here the row is only ever reachable through a query that has
+/// already checked who is asking.
+///
+/// One document per kind per badge: re-uploading a licence front replaces it,
+/// so an expired image cannot sit alongside its replacement.
+model BadgeDocument {
+  id         String       @id @default(cuid())
+  badge      CrewBadge    @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+  badgeId    String
+  kind       BadgeDocKind
+  fileName   String
+  mediaType  String       @default("")
+  sizeBytes  Int          @default(0)
+  dataUrl    String
+  uploadedBy String       @default("")
+  createdAt  DateTime     @default(now())
+
+  @@unique([badgeId, kind])
+  @@index([badgeId])
 }
 
 model Daily {

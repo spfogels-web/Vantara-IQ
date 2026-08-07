@@ -1,10 +1,11 @@
 import { redirect } from "next/navigation";
 
-import { getDocuments, getVendorPacket } from "@/data/queries";
+import { getCrewBadges, getDocuments, getVendorPacket } from "@/data/queries";
 import { getCurrentUser } from "@/lib/auth";
 import { PageShell } from "@/components/common/page-shell";
 import { VendorPacketForm } from "@/components/subcontractors/vendor-packet-form";
 import { DocumentList } from "@/components/documents/document-list";
+import { BadgeSection } from "@/components/subcontractors/badge-section";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Company profile · Vantara IQ" };
@@ -22,9 +23,10 @@ export default async function CompanyProfilePage() {
   if (!me) redirect("/login");
   if (!me.subcontractorId) redirect("/subcontractors");
 
-  const [packet, docs] = await Promise.all([
+  const [packet, docs, badges] = await Promise.all([
     getVendorPacket(me.subcontractorId),
     getDocuments(),
+    getCrewBadges(me.subcontractorId),
   ]);
   if (!packet) redirect("/dailies");
 
@@ -39,6 +41,14 @@ export default async function CompanyProfilePage() {
             looking for their signed rates or their agreement, not to re-edit
             their EIN — so the thing they came for goes first. */}
         <DocumentList docs={docs} />
+
+        {/* Who can collect material. A crew clears nobody themselves — they
+            put the documents up and Fortitude decides. */}
+        <BadgeSection
+          subcontractorId={me.subcontractorId}
+          badges={badges}
+          canReview={false}
+        />
 
         <VendorPacketForm packet={packet} />
       </div>
