@@ -11,6 +11,7 @@ import {
 import { packetStatus } from "@/lib/vendor-packet";
 import { balanceOf, isPastDue } from "@/lib/billing";
 import {
+  findRate,
   priceQuantities,
   valueProject,
   type PricingResult,
@@ -20,6 +21,7 @@ import {
 import {
   codeGroupLabel,
   compareByPriority,
+  normalizeCode,
   isAerialCode,
   isPriorityCode,
   productionMethod,
@@ -1113,6 +1115,11 @@ export interface ProjectValuation extends Valuation {
   hasCustomerRates: boolean;
   hasSubRates: boolean;
   /**
+   * Where the cost side came from: a crew's signed card, or the job's own
+   * budgeted rates. A plan and a contract are not the same claim.
+   */
+  subCostSource: "crew" | "planned" | null;
+  /**
    * Crews on the job with no signed rate card. Their work costs something;
    * we just cannot say what, so the margin shown excludes them and says so.
    */
@@ -1182,6 +1189,7 @@ export async function getProjectValuation(projectId: string): Promise<ProjectVal
       plannedCodes: 0,
       hasCustomerRates: false,
       hasSubRates: false,
+      subCostSource: null,
       unratedCrews: [],
       billed: {
         revenue: empty,
@@ -1251,12 +1259,33 @@ export async function getProjectValuation(projectId: string): Promise<ProjectVal
     .filter((c) => (ratesByCrew.get(c.id)?.length ?? 0) === 0)
     .map((c) => c.company);
 
-  const usableSubRates = sub && subRates.length > 0 ? subRates : null;
+  /**
+   * Fall back to the job's own budgeted rates when no assigned crew has a
+   * signed card.
+   *
+   * A job has to be priceable the day the material list lands, which is long
+   * before anyone is assigned to it. Without this the cost side sits blank on
+   * every unassigned job and there is no margin to decide on. The two stay
+   * distinguishable — a budget must never be mistaken for what a company
+   * actually signed.
+   */
+  const plannedRates = await prisma.projectRate.findMany({
+    where: { projectId },
+    select: { code: true, description: true, unit: true, rate: true },
+  });
+
+  const crewCard = sub && subRates.length > 0 ? subRates : null;
+  const usableSubRates = crewCard ?? (plannedRates.length > 0 ? plannedRates : null);
+  const subCostSource: "crew" | "planned" | null = crewCard
+    ? "crew"
+    : plannedRates.length > 0
+      ? "planned"
+      : null;
   const valuation = valueProject(
     quantities,
     customerRates,
     usableSubRates,
-    sub?.company ?? null,
+    sub?.company ?? (subCostSource === "planned" ? "Planned rates" : null),
   );
 
   // What has actually been billed, from the dailies' own line items. Priced
@@ -1356,6 +1385,7 @@ export async function getProjectValuation(projectId: string): Promise<ProjectVal
     plannedCodes: quantities.length,
     hasCustomerRates: customerRates.length > 0,
     hasSubRates: subRates.length > 0,
+    subCostSource,
     unratedCrews,
     billed: {
       revenue: billedRevenue,
@@ -2156,4 +2186,186 @@ export async function getInvite(token: string): Promise<{
     client: project?.client ?? invite.customer,
     location: project?.location ?? "",
   };
+}
+
+/* ------------------------------------------------------------------ *
+ * Rates on one job — what we bill and what we pay, side by side.
+ * ------------------------------------------------------------------ */
+
+export interface ProjectRateLine {
+  code: string;
+  description: string;
+  unit: string;
+  planned: number;
+  /** What the customer pays us. Null when the code isn't on their card. */
+  customerRate: number | null;
+  /** What we pay this crew. Null when it isn't on theirs — the gap to fill. */
+  subRate: number | null;
+  /** The sub-rate row's id, so a cell can be edited in place. */
+  subRateId: string | null;
+  /** Per unit, and across the planned quantity. */
+  spread: number | null;
+  plannedRevenue: number | null;
+  plannedCost: number | null;
+}
+
+export interface ProjectRates {
+  crew: { id: string; company: string } | null;
+  /**
+   * Whether the pay column is a crew's signed card or the job's own budget.
+   * Editing writes to whichever it is, so a budget never silently rewrites
+   * what a company signed.
+   */
+  source: "crew" | "planned";
+  /** Crews on the job with no card — why the pay column may be empty. */
+  unratedCrews: string[];
+  /** More than one rated crew: which card applies isn't knowable here. */
+  ambiguous: boolean;
+  lines: ProjectRateLine[];
+  totals: { revenue: number; cost: number; margin: number | null };
+  missingCustomerRates: number;
+  missingSubRates: number;
+}
+
+/**
+ * The rate picture for one job, restricted to the codes it actually uses.
+ *
+ * A full card is thousands of lines; a job is twenty. Sending a crew their
+ * rates, or adjusting one before you do, means working from the codes on this
+ * material list — so that is what this returns, both sides against each other,
+ * with anything unpriced named rather than shown as zero.
+ */
+export async function getProjectRates(projectId: string): Promise<ProjectRates> {
+  // Reads what we bill against what we pay — the spread. Staff only, and not
+  // merely hidden in the page.
+  await requireStaff();
+  await assertProjectAccess(projectId);
+
+  const empty: ProjectRates = {
+    crew: null, source: "planned", unratedCrews: [], ambiguous: false, lines: [],
+    totals: { revenue: 0, cost: 0, margin: null },
+    missingCustomerRates: 0, missingSubRates: 0,
+  };
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: {
+      customerId: true,
+      client: true,
+      materials: {
+        where: { inScope: true },
+        select: { code: true, item: true, unit: true, planned: true },
+      },
+      crews: { select: { id: true, company: true } },
+    },
+  });
+  if (!project) return empty;
+
+  const customerId =
+    project.customerId ??
+    (await prisma.customer.findFirst({ where: { name: project.client }, select: { id: true } }))?.id ??
+    null;
+
+  const customerRates = customerId
+    ? await prisma.customerRate.findMany({
+        where: { customerId },
+        select: { code: true, description: true, unit: true, rate: true, effectiveDate: true, expirationDate: true },
+      })
+    : [];
+
+  // Same rule the valuation uses: cost at the one crew that has a card.
+  const cards = await prisma.subcontractorRate.findMany({
+    where: { subcontractorId: { in: project.crews.map((c) => c.id) } },
+    select: {
+      id: true, subcontractorId: true, code: true, description: true,
+      unit: true, rate: true, effectiveDate: true, expirationDate: true,
+    },
+  });
+  const byCrew = new Map<string, typeof cards>();
+  for (const r of cards) byCrew.set(r.subcontractorId, [...(byCrew.get(r.subcontractorId) ?? []), r]);
+
+  const rated = project.crews.filter((c) => (byCrew.get(c.id)?.length ?? 0) > 0);
+  const crew = rated.length === 1 ? rated[0] : null;
+
+  // No crew with a card? Price the cost side off the job's own budget, so a
+  // margin exists to decide on before anyone is assigned.
+  const planned = await prisma.projectRate.findMany({
+    where: { projectId },
+    select: { id: true, code: true, description: true, unit: true, rate: true },
+  });
+  const usingCrew = Boolean(crew);
+  const subRates = crew ? (byCrew.get(crew.id) ?? []) : planned;
+
+  const lines: ProjectRateLine[] = [];
+  let revenue = 0;
+  let cost = 0;
+  let missingCustomerRates = 0;
+  let missingSubRates = 0;
+
+  for (const m of project.materials) {
+    if (!m.code || m.planned <= 0) continue;
+
+    const cr = findRate(m.code, customerRates);
+    const sr = findRate(m.code, subRates);
+    const srRow = sr
+      ? subRates.find((r) => normalizeCode(r.code) === normalizeCode(m.code))
+      : null;
+
+    if (!cr) missingCustomerRates++;
+    if (!sr) missingSubRates++;
+
+    const plannedRevenue = cr ? m.planned * cr.rate : null;
+    const plannedCost = sr ? m.planned * sr.rate : null;
+    if (plannedRevenue !== null) revenue += plannedRevenue;
+    if (plannedCost !== null) cost += plannedCost;
+
+    lines.push({
+      code: m.code,
+      description: cr?.description || m.item,
+      unit: cr?.unit || m.unit,
+      planned: m.planned,
+      customerRate: cr?.rate ?? null,
+      subRate: sr?.rate ?? null,
+      subRateId: srRow?.id ?? null,
+      spread: cr && sr ? Math.round((cr.rate - sr.rate) * 100) / 100 : null,
+      plannedRevenue,
+      plannedCost,
+    });
+  }
+
+  // Biggest money first — that is the line worth arguing about.
+  lines.sort((a, b) => (b.plannedRevenue ?? 0) - (a.plannedRevenue ?? 0));
+
+  return {
+    crew,
+    source: usingCrew ? "crew" : "planned",
+    unratedCrews: project.crews
+      .filter((c) => (byCrew.get(c.id)?.length ?? 0) === 0)
+      .map((c) => c.company),
+    ambiguous: rated.length > 1,
+    lines,
+    totals: {
+      revenue: Math.round(revenue * 100) / 100,
+      cost: Math.round(cost * 100) / 100,
+      margin: subRates.length > 0 ? Math.round((revenue - cost) * 100) / 100 : null,
+    },
+    missingCustomerRates,
+    missingSubRates,
+  };
+}
+
+/**
+ * Crews that have a rate card on file, for seeding a job's budget from one.
+ *
+ * Only company and id cross over — this is a picker, not a window into another
+ * crew's file.
+ */
+export async function getRatedCrews(): Promise<{ id: string; company: string }[]> {
+  await requireStaff();
+  const rows = await prisma.subcontractor.findMany({
+    where: { rates: { some: {} } },
+    select: { id: true, company: true },
+    orderBy: { company: "asc" },
+  });
+  return rows;
 }

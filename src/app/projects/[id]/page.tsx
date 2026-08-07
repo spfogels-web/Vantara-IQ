@@ -9,6 +9,8 @@ import {
   getProjectMaterialImports,
   getProjectMaterials,
   getProjectPhotos,
+  getProjectRates,
+  getRatedCrews,
   getProjectValuation,
 } from "@/data/queries";
 import { cn } from "@/lib/utils";
@@ -29,6 +31,7 @@ import { Meter } from "@/components/common/metric";
 import { ProjectHeaderActions, ProjectMapPanel } from "@/components/projects/project-detail-client";
 import { ProjectMaterials } from "@/components/projects/project-materials";
 import { ProjectPhotos } from "@/components/projects/project-photos";
+import { ProjectRatesPanel } from "@/components/projects/project-rates";
 
 export const dynamic = "force-dynamic";
 
@@ -52,11 +55,13 @@ export default async function ProjectDetailPage({
   const customers = staff ? await getCustomers() : [];
 
   // The valuation is staff-only and throws for a crew by design, so don't ask.
-  const [materialImports, trackedMaterials, valuation, photos] = await Promise.all([
+  const [materialImports, trackedMaterials, valuation, photos, projectRates, ratedCrews] = await Promise.all([
     getProjectMaterialImports(project.id, project.name),
     getProjectMaterials(project.id),
     staff ? getProjectValuation(project.id) : Promise.resolve(null),
     getProjectPhotos(project.id),
+    staff ? getProjectRates(project.id) : Promise.resolve(null),
+    staff ? getRatedCrews() : Promise.resolve([]),
   ]);
 
   const daysToFinish = Math.ceil(project.remainingFt / Math.max(project.actualFtPerDay, 1));
@@ -167,6 +172,16 @@ export default async function ProjectDetailPage({
       {/* Material gets the full width. It is the densest thing on the page —
           a job carries dozens of codes — and squeezing it into a sidebar
           column was what made every other panel stretch to match it. */}
+      {staff && projectRates ? (
+        <div className="mb-3">
+          <ProjectRatesPanel
+            projectId={project.id}
+            rates={projectRates}
+            crews={ratedCrews}
+          />
+        </div>
+      ) : null}
+
       {staff ? (
       <div className="mb-3">
         <Panel>

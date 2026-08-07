@@ -2698,3 +2698,90 @@ export async function createInvite(input: {
 
   return { ok: true as const, token };
 }
+
+/* ------------------------------------------------------------------ *
+ * Project pay rates — what a job is budgeted to cost, before a crew.
+ * ------------------------------------------------------------------ */
+
+/**
+ * Set what this job is budgeted to pay on one code.
+ *
+ * Separate from a subcontractor's card on purpose. That is what a company
+ * signed and is what they get paid; this is a plan, used to cost a job the day
+ * the material list lands rather than waiting for someone to be assigned.
+ * Keeping them apart is what stops a budget figure becoming an invoice figure.
+ */
+export async function setProjectRate(
+  projectId: string,
+  input: { code: string; rate: number; description?: string; unit?: string },
+) {
+  await requireStaff();
+  await assertProjectAccess(projectId);
+
+  const code = input.code.trim().toUpperCase();
+  if (!code) return { ok: false as const, error: "Unit code is required." };
+  if (!Number.isFinite(input.rate) || input.rate < 0) {
+    return { ok: false as const, error: "Enter a rate of zero or more." };
+  }
+
+  await prisma.projectRate.upsert({
+    where: { projectId_code: { projectId, code } },
+    create: {
+      projectId,
+      code,
+      rate: input.rate,
+      description: input.description ?? "",
+      unit: input.unit ?? "",
+    },
+    update: { rate: input.rate },
+  });
+
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/customers");
+  return { ok: true as const };
+}
+
+/** Drop a budgeted rate, so the code reports unpriced rather than at zero. */
+export async function deleteProjectRate(projectId: string, code: string) {
+  await requireStaff();
+  await assertProjectAccess(projectId);
+  await prisma.projectRate.deleteMany({
+    where: { projectId, code: code.trim().toUpperCase() },
+  });
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/customers");
+  return { ok: true as const };
+}
+
+/**
+ * Copy a crew's whole signed card onto this job as its budget.
+ *
+ * The usual starting point: budget the job at what the crew you expect to use
+ * already charges, then move the lines that differ.
+ */
+export async function copyRatesToProject(projectId: string, subcontractorId: string) {
+  await requireStaff();
+  await assertProjectAccess(projectId);
+
+  const rates = await prisma.subcontractorRate.findMany({
+    where: { subcontractorId },
+    select: { code: true, description: true, unit: true, rate: true },
+  });
+  if (rates.length === 0) return { ok: false as const, error: "That crew has no rates on file." };
+
+  let written = 0;
+  for (const r of rates) {
+    const code = r.code.trim().toUpperCase();
+    if (!code) continue;
+    await prisma.projectRate.upsert({
+      where: { projectId_code: { projectId, code } },
+      create: { projectId, code, rate: r.rate, description: r.description, unit: r.unit },
+      update: { rate: r.rate },
+    });
+    written++;
+  }
+
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/customers");
+  return { ok: true as const, count: written };
+}

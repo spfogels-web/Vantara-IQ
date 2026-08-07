@@ -151,6 +151,7 @@ model Project {
   materialImports  RateImport[]
   invoices         Invoice[]
   photos           ProjectPhoto[]
+  rates            ProjectRate[]
   sheets           DailySheet[]
   /// Crews assigned to this job. This relation is what a subcontractor's
   /// access is decided by, so it is a real foreign key rather than a list of
@@ -485,6 +486,30 @@ model Payment {
   createdAt  DateTime @default(now())
 
   @@index([invoiceId])
+}
+
+/// What we expect to pay on one job, before a crew is chosen.
+///
+/// A job has to be priceable the day the material list lands, which is long
+/// before anyone is assigned to it. These are the budgeted rates: the cost side
+/// of the valuation falls back to them when no assigned crew has a signed card,
+/// so a margin exists to decide on rather than a row of dashes.
+///
+/// Deliberately separate from SubcontractorRate. That table is what a specific
+/// company signed and is what they get paid; this is a plan. Merging them would
+/// let a budget figure quietly become the number on an invoice.
+model ProjectRate {
+  id          String   @id @default(cuid())
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId   String
+  code        String
+  description String   @default("")
+  unit        String   @default("")
+  rate        Float    @default(0)
+  createdAt   DateTime @default(now())
+
+  @@unique([projectId, code])
+  @@index([projectId])
 }
 
 /// Where a photo's time and place came from.
