@@ -1341,6 +1341,13 @@ export async function getProjectValuation(projectId: string): Promise<ProjectVal
 export interface CustomerRollup {
   /** Every project's material list priced at this customer's rate card. */
   contractValue: number;
+  /**
+   * Revenue from only the jobs that also have a crew cost, so margin is a
+   * like-for-like figure. A job with no crew assigned has no cost yet, not a
+   * cost of zero, and including its revenue would inflate the spread.
+   */
+  costedRevenue: number;
+  projectsCosted: number;
   /** The same lists priced at the crews' cards. Null until a crew is assigned. */
   baselineSubCost: number | null;
   baselineNetProfit: number | null;
@@ -1402,6 +1409,8 @@ export async function getCustomerRollup(customerId: string): Promise<CustomerRol
 
   const empty: CustomerRollup = {
     contractValue: 0,
+    costedRevenue: 0,
+    projectsCosted: 0,
     baselineSubCost: null,
     baselineNetProfit: null,
     baselineNetProfitPct: null,
@@ -1434,6 +1443,8 @@ export async function getCustomerRollup(customerId: string): Promise<CustomerRol
   let billedFromDailies = 0;
   let unpricedCodes = 0;
   let projectsValued = 0;
+  let costedRevenue = 0;
+  let projectsCosted = 0;
   const unbillable = new Map<string, number>();
 
   for (const p of projects) {
@@ -1449,6 +1460,8 @@ export async function getCustomerRollup(customerId: string): Promise<CustomerRol
     }
     if (subCost !== null) {
       subCostTotal += subCost;
+      costedRevenue += v.revenue.total;
+      projectsCosted++;
       anySubCost = true;
     }
 
@@ -1463,15 +1476,21 @@ export async function getCustomerRollup(customerId: string): Promise<CustomerRol
     });
   }
 
+  // Margin is worked out only over the jobs that have both sides. Subtracting
+  // one project's sub cost from three projects' revenue reads as a spectacular
+  // margin and is arithmetic on two different populations — a job with no crew
+  // assigned has no cost yet, not a cost of zero.
   const baselineSubCost = anySubCost ? subCostTotal : null;
-  const baselineNetProfit = baselineSubCost !== null ? contractValue - baselineSubCost : null;
+  const baselineNetProfit = baselineSubCost !== null ? costedRevenue - baselineSubCost : null;
 
   return {
     contractValue,
+    costedRevenue,
+    projectsCosted,
     baselineSubCost,
     baselineNetProfit,
     baselineNetProfitPct:
-      baselineNetProfit !== null && contractValue > 0 ? baselineNetProfit / contractValue : null,
+      baselineNetProfit !== null && costedRevenue > 0 ? baselineNetProfit / costedRevenue : null,
     billedToDate: customer.priorBilled + billedFromDailies,
     priorBilled: customer.priorBilled,
     billedFromDailies,

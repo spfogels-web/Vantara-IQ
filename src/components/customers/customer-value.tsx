@@ -129,9 +129,13 @@ export function CustomerValueTiles({ customerId }: { customerId: string }) {
           value={data.baselineNetProfit !== null ? formatCompactCurrency(data.baselineNetProfit) : "—"}
           exact={data.baselineNetProfit !== null ? formatCurrency(data.baselineNetProfit) : undefined}
           hint={
-            data.baselineNetProfitPct !== null
-              ? `${formatCompactCurrency(data.baselineSubCost ?? 0)} sub cost · ${formatPercent(data.baselineNetProfitPct, 1)}`
-              : "needs a crew rate card"
+            data.baselineNetProfitPct === null
+              ? "needs a crew rate card"
+              : data.projectsCosted < data.projectsValued
+                ? // Only the jobs with a crew on them are in this figure. Say
+                  // so, or it reads as the margin on the whole book.
+                  `${formatPercent(data.baselineNetProfitPct, 1)} on ${data.projectsCosted} of ${data.projectsValued} jobs`
+                : `${formatCompactCurrency(data.baselineSubCost ?? 0)} sub cost · ${formatPercent(data.baselineNetProfitPct, 1)}`
           }
           tone={
             data.baselineNetProfit === null
