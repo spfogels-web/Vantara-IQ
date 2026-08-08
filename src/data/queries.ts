@@ -5,6 +5,7 @@ import {
   assertOwnSubcontractor,
   assertProjectAccess,
   requireStaff,
+  requireUser,
   viewer,
   visibleProjectIds,
 } from "@/lib/authz";
@@ -2607,4 +2608,123 @@ export async function getPendingBadges(): Promise<
     status: b.status,
     since: b.updatedAt.toISOString().slice(0, 10),
   }));
+}
+
+/* ------------------------------------------------------------------ *
+ * Crew pay statements.
+ * ------------------------------------------------------------------ */
+
+export interface SubInvoiceRow {
+  id: string;
+  number: string;
+  company: string;
+  subcontractorId: string;
+  project: string;
+  periodStart: string;
+  periodEnd: string;
+  status: string;
+  subtotal: number;
+  issuedAt: string | null;
+  acceptedAt: string | null;
+  acceptedBy: string;
+  disputeNote: string;
+  disputedAt: string | null;
+  disputedBy: string;
+  resolutionNote: string;
+  dailyCount: number;
+  /** Every priced unit, so the crew can check the statement against their sheets. */
+  lines: {
+    id: string;
+    dailyId: string;
+    workDate: string;
+    code: string;
+    description: string;
+    unit: string;
+    quantity: number;
+    rate: number;
+    amount: number;
+  }[];
+}
+
+function toSubInvoiceRow(r: {
+  id: string; number: string; subcontractorId: string; projectName: string;
+  periodStart: string; periodEnd: string; status: string; subtotal: number;
+  issuedAt: Date | null; acceptedAt: Date | null; acceptedBy: string;
+  disputeNote: string; disputedAt: Date | null; disputedBy: string;
+  resolutionNote: string;
+  subcontractor: { company: string };
+  lines: {
+    id: string; dailyId: string; workDate: string; code: string;
+    description: string; unit: string; quantity: number; rate: number; amount: number;
+  }[];
+}): SubInvoiceRow {
+  return {
+    id: r.id,
+    number: r.number,
+    company: r.subcontractor.company,
+    subcontractorId: r.subcontractorId,
+    project: r.projectName,
+    periodStart: r.periodStart,
+    periodEnd: r.periodEnd,
+    status: r.status,
+    subtotal: r.subtotal,
+    // Minute precision on the acceptance: the date alone is not much of a
+    // record, and the second is noise.
+    issuedAt: r.issuedAt?.toISOString().slice(0, 10) ?? null,
+    acceptedAt: r.acceptedAt?.toISOString().slice(0, 16).replace("T", " ") ?? null,
+    acceptedBy: r.acceptedBy,
+    disputeNote: r.disputeNote,
+    disputedAt: r.disputedAt?.toISOString().slice(0, 16).replace("T", " ") ?? null,
+    disputedBy: r.disputedBy,
+    resolutionNote: r.resolutionNote,
+    dailyCount: new Set(r.lines.map((l) => l.dailyId).filter(Boolean)).size,
+    lines: r.lines,
+  };
+}
+
+const SUB_INVOICE_SELECT = {
+  id: true, number: true, subcontractorId: true, projectName: true,
+  periodStart: true, periodEnd: true, status: true, subtotal: true,
+  issuedAt: true, acceptedAt: true, acceptedBy: true,
+  disputeNote: true, disputedAt: true, disputedBy: true, resolutionNote: true,
+  subcontractor: { select: { company: true } },
+  lines: {
+    orderBy: [{ workDate: "asc" as const }, { code: "asc" as const }],
+    select: {
+      id: true, dailyId: true, workDate: true, code: true,
+      description: true, unit: true, quantity: true, rate: true, amount: true,
+    },
+  },
+};
+
+/**
+ * A crew's own pay statements.
+ *
+ * Drafts are withheld: a statement still being built is not a figure anybody
+ * should be reading, least of all the person being asked to agree to it. They
+ * see it when it is sent.
+ */
+export async function getMySubInvoices(): Promise<SubInvoiceRow[]> {
+  const user = await requireUser();
+  if (!user.subcontractorId) return [];
+
+  const rows = await prisma.subInvoice.findMany({
+    where: {
+      subcontractorId: user.subcontractorId,
+      status: { in: ["ISSUED", "ACCEPTED", "DISPUTED", "PAID"] },
+    },
+    orderBy: [{ periodEnd: "desc" }, { number: "desc" }],
+    select: SUB_INVOICE_SELECT,
+  });
+  return rows.map(toSubInvoiceRow);
+}
+
+/** Every crew's statements, for the office. */
+export async function getSubInvoices(): Promise<SubInvoiceRow[]> {
+  await requireStaff();
+  const rows = await prisma.subInvoice.findMany({
+    orderBy: [{ periodEnd: "desc" }, { number: "desc" }],
+    select: SUB_INVOICE_SELECT,
+  });
+  return rows.map(toSubInvoiceRow);
 }

@@ -156,6 +156,7 @@ model Project {
   invoices         Invoice[]
   photos           ProjectPhoto[]
   rates            ProjectRate[]
+  subInvoices      SubInvoice[]
   sheets           DailySheet[]
   /// Crews assigned to this job. This relation is what a subcontractor's
   /// access is decided by, so it is a real foreign key rather than a list of
@@ -279,6 +280,7 @@ model Subcontractor {
   projects       Project[] @relation("ProjectCrews")
   badges         CrewBadge[]
   ach            AchAuthorization?
+  payStatements  SubInvoice[]
   compliance     Json      @default("[]")
   complianceTone String    @default("neutral")
   scorecard      Json      @default("{}")
@@ -367,6 +369,85 @@ model SubDocument {
   dataUrl         String
   uploadedBy      String        @default("subcontractor")
   createdAt       DateTime      @default(now())
+}
+
+/// Where a crew's pay statement stands.
+enum SubInvoiceStatus {
+  /// Building as their dailies are approved.
+  DRAFT
+  /// Sent to the crew, waiting on them.
+  ISSUED
+  /// The crew agreed the figures. Timestamped.
+  ACCEPTED
+  /// The crew says something is wrong, with a reason.
+  DISPUTED
+  PAID
+  VOID
+}
+
+/// What Fortitude owes one crew for one week on one job.
+///
+/// The mirror of the customer invoice, and deliberately a separate record: the
+/// customer's is what we bill, this is what the work costs, and the difference
+/// between them is our margin. Sharing a table would put a crew one query away
+/// from the number they must never see.
+///
+/// Priced at the crew's own signed card, at the rate in force on the work date.
+model SubInvoice {
+  id              String           @id @default(cuid())
+  number          String           @unique
+  subcontractor   Subcontractor    @relation(fields: [subcontractorId], references: [id], onDelete: Cascade)
+  subcontractorId String
+  project         Project?         @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  projectId       String?
+  projectName     String           @default("")
+  periodStart     String           @default("")
+  periodEnd       String           @default("")
+  status          SubInvoiceStatus @default(DRAFT)
+  /// What we owe, from the lines. Frozen once issued.
+  subtotal        Float            @default(0)
+  issuedAt        DateTime?
+
+  /// The record of them agreeing: who, and exactly when.
+  acceptedAt   DateTime?
+  acceptedBy   String    @default("")
+  /// Their reason when they don't agree — required, because "denied" alone
+  /// tells the office nothing to act on.
+  disputeNote  String    @default("")
+  disputedAt   DateTime?
+  disputedBy   String    @default("")
+
+  /// Fortitude's note back, when a dispute is settled.
+  resolutionNote String   @default("")
+  lines          SubInvoiceLine[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([subcontractorId, status])
+  @@index([projectId])
+}
+
+/// One priced unit of a crew's own production.
+///
+/// The rate lives on the line rather than being looked up, so a card edited in
+/// March cannot restate what a crew already accepted in January.
+model SubInvoiceLine {
+  id           String     @id @default(cuid())
+  invoice      SubInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoiceId    String
+  /// The daily this came from. A plain id — deleting a daily must not silently
+  /// remove a line from a statement a crew has accepted.
+  dailyId      String     @default("")
+  workDate     String     @default("")
+  code         String     @default("")
+  description  String     @default("")
+  unit         String     @default("")
+  quantity     Float      @default(0)
+  rate         Float      @default(0)
+  amount       Float      @default(0)
+
+  @@index([invoiceId])
+  @@index([dailyId])
 }
 
 /// Who looked at something sensitive, and when.

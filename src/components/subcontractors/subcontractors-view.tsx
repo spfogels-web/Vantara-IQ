@@ -39,7 +39,8 @@ import { SubcontractorForm } from "@/components/subcontractors/subcontractor-for
 import { SubRateCard } from "@/components/subcontractors/sub-rate-card";
 import { DocumentCenter, type SubDoc } from "@/components/subcontractors/document-center";
 import { BadgeSection } from "@/components/subcontractors/badge-section";
-import { approveSubcontractor, deleteSubcontractor, listCrewBadges, listSubDocuments } from "@/app/actions";
+import { SubPayPanel } from "@/components/subcontractors/sub-pay-panel";
+import { approveSubcontractor, deleteSubcontractor, listCrewBadges, listSubDocuments, listSubInvoices } from "@/app/actions";
 
 const complianceTone: Record<ComplianceStatus, "success" | "warning" | "critical" | "neutral"> = {
   valid: "success",
@@ -311,6 +312,7 @@ function SubDetail({
   const [approving, setApproving] = React.useState(false);
   const [docs, setDocs] = React.useState<SubDoc[] | null>(null);
   const [badges, setBadges] = React.useState<Awaited<ReturnType<typeof listCrewBadges>> | null>(null);
+  const [payStatements, setPayStatements] = React.useState<Awaited<ReturnType<typeof listSubInvoices>>>([]);
   const [confirmDelete, setConfirmDelete] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
   const [deleteError, setDeleteError] = React.useState<string | null>(null);
@@ -347,6 +349,9 @@ function SubDetail({
     });
     listCrewBadges(s.id).then((b) => {
       if (active) setBadges(b);
+    });
+    listSubInvoices().then((p) => {
+      if (active) setPayStatements(p);
     });
     return () => {
       active = false;
@@ -662,6 +667,9 @@ function SubDetail({
 
       {/* Who this crew can send to the yard. Fortitude clears them; the crew
           only supplies the documents. */}
+      {/* What we owe them, and their answer to it. */}
+      <SubPayPanel subcontractorId={s.id} invoices={payStatements} />
+
       {badges === null ? null : (
         <BadgeSection subcontractorId={s.id} badges={badges} canReview />
       )}

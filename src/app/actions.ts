@@ -38,8 +38,14 @@ import {
   type FileResult,
   type UnfileResult,
 } from "@/lib/auto-invoice";
+import {
+  fileApprovedDailyForSub,
+  unfileDailyForSub,
+  type SubFileResult,
+  type SubUnfileResult,
+} from "@/lib/sub-pay";
 import { describeFileRejection } from "@/lib/document-storage";
-import { getCrewBadges, getCustomerRollup, getVendorPacket } from "@/data/queries";
+import { getCrewBadges, getCustomerRollup, getSubInvoices, getVendorPacket } from "@/data/queries";
 import {
   assertOwnSubcontractor,
   assertProjectAccess,
@@ -1818,19 +1824,25 @@ export async function reviewDaily(input: {
    * The approval stands and the reason comes back for someone to act on.
    */
   let billing: FileResult | UnfileResult | null = null;
+  let crewPay: SubFileResult | SubUnfileResult | null = null;
   if (input.decision === "APPROVED") {
+    // Both sides of the same event: what the customer is billed, and what the
+    // crew is owed. They are separate records because the difference between
+    // them is our margin, and a crew reaches one and never the other.
     billing = await fileApprovedDaily(daily.id);
+    crewPay = await fileApprovedDailyForSub(daily.id);
   } else {
-    // Denied work cannot sit on an invoice. It comes off a draft; if it is
-    // already on a sent invoice that needs a credit, not a quiet edit.
+    // Denied work cannot sit on either. It comes off a draft; anything already
+    // issued needs a credit or a conversation, not a quiet edit.
     billing = await unfileDaily(daily.id);
+    crewPay = await unfileDailyForSub(daily.id);
   }
 
   revalidatePath("/dailies");
   revalidatePath("/invoicing");
   revalidatePath("/customers");
   if (daily.projectId) revalidatePath(`/projects/${daily.projectId}`);
-  return { ok: true as const, billing };
+  return { ok: true as const, billing, crewPay };
 }
 
 /**
@@ -3324,4 +3336,228 @@ export async function revealBankDetails(subcontractorId: string) {
       error: "Stored details could not be decrypted — the encryption key has changed or the record was altered.",
     };
   }
+}
+
+/* ------------------------------------------------------------------ *
+ * Crew pay statements — what we owe, and their agreement to it.
+ * ------------------------------------------------------------------ */
+
+/**
+ * Send a statement to the crew for agreement.
+ *
+ * The figures freeze here. From this point the crew has seen them, so a line
+ * cannot be added or removed without telling them — which is the whole point of
+ * asking them to accept.
+ */
+export async function issueSubInvoice(id: string) {
+  await requireStaff();
+  const inv = await prisma.subInvoice.findUnique({
+    where: { id },
+    select: { status: true, lines: { select: { id: true } } },
+  });
+  if (!inv) return { ok: false as const, error: "Statement not found." };
+  if (inv.status !== "DRAFT") return { ok: false as const, error: "Only a draft can be sent." };
+  if (inv.lines.length === 0) return { ok: false as const, error: "Nothing on this statement to send." };
+
+  await prisma.subInvoice.update({
+    where: { id },
+    data: { status: "ISSUED", issuedAt: new Date() },
+  });
+  revalidatePath("/subcontractors");
+  revalidatePath("/pay");
+  return { ok: true as const };
+}
+
+/**
+ * The crew agrees the figures.
+ *
+ * This is the record the whole statement exists to produce: who agreed, and
+ * exactly when. Only the crew the statement belongs to can do it — staff
+ * accepting on a crew's behalf would make the timestamp worthless.
+ */
+export async function acceptSubInvoice(id: string) {
+  const user = await requireUser();
+
+  const inv = await prisma.subInvoice.findUnique({
+    where: { id },
+    select: { subcontractorId: true, status: true, number: true },
+  });
+  if (!inv) return { ok: false as const, error: "Statement not found." };
+
+  if (user.subcontractorId !== inv.subcontractorId) {
+    return {
+      ok: false as const,
+      error: "Only the crew this statement belongs to can accept it.",
+    };
+  }
+  if (inv.status !== "ISSUED" && inv.status !== "DISPUTED") {
+    return { ok: false as const, error: "This statement isn't waiting on you." };
+  }
+
+  const at = new Date();
+  await prisma.subInvoice.update({
+    where: { id },
+    data: {
+      status: "ACCEPTED",
+      acceptedAt: at,
+      acceptedBy: user.name || user.email,
+      // Accepting settles any earlier dispute; the note stays as history.
+      disputedAt: null,
+    },
+  });
+
+  await prisma.accessLog.create({
+    data: {
+      action: "subinvoice.accepted",
+      actorUserId: user.id,
+      actorEmail: user.email,
+      subjectId: id,
+      detail: `Accepted ${inv.number}`,
+    },
+  }).catch(() => undefined);
+
+  revalidatePath("/pay");
+  revalidatePath("/subcontractors");
+  return { ok: true as const, acceptedAt: at.toISOString() };
+}
+
+/**
+ * The crew says something is wrong.
+ *
+ * A reason is required. "Denied" on its own tells the office nothing to act on,
+ * and the crew ends up explaining it on the phone anyway — which is the thing
+ * this is meant to replace.
+ */
+export async function disputeSubInvoice(id: string, note: string) {
+  const user = await requireUser();
+
+  if (!note.trim()) {
+    return { ok: false as const, error: "Say what's wrong with it — which day, which code, what it should be." };
+  }
+
+  const inv = await prisma.subInvoice.findUnique({
+    where: { id },
+    select: { subcontractorId: true, status: true, number: true },
+  });
+  if (!inv) return { ok: false as const, error: "Statement not found." };
+  if (user.subcontractorId !== inv.subcontractorId) {
+    return { ok: false as const, error: "Only the crew this statement belongs to can dispute it." };
+  }
+  if (inv.status !== "ISSUED") {
+    return { ok: false as const, error: "This statement isn't waiting on you." };
+  }
+
+  await prisma.subInvoice.update({
+    where: { id },
+    data: {
+      status: "DISPUTED",
+      disputeNote: note.trim(),
+      disputedAt: new Date(),
+      disputedBy: user.name || user.email,
+    },
+  });
+
+  revalidatePath("/pay");
+  revalidatePath("/subcontractors");
+  return { ok: true as const };
+}
+
+/**
+ * Staff answer a dispute by putting the statement back for another look.
+ *
+ * Corrections happen on the dailies, not here — a statement is priced from
+ * approved production, so the way to change a figure is to fix the daily and
+ * let it re-file. This reopens the statement so that can happen.
+ */
+export async function reopenSubInvoice(id: string, note: string) {
+  await requireStaff();
+  const inv = await prisma.subInvoice.findUnique({ where: { id }, select: { status: true } });
+  if (!inv) return { ok: false as const, error: "Statement not found." };
+  if (inv.status === "PAID") return { ok: false as const, error: "That statement has been paid." };
+
+  await prisma.subInvoice.update({
+    where: { id },
+    data: { status: "DRAFT", issuedAt: null, resolutionNote: note.trim() },
+  });
+  revalidatePath("/pay");
+  revalidatePath("/subcontractors");
+  return { ok: true as const };
+}
+
+/** Mark an accepted statement as paid. */
+export async function markSubInvoicePaid(id: string) {
+  await requireStaff();
+  const inv = await prisma.subInvoice.findUnique({ where: { id }, select: { status: true } });
+  if (!inv) return { ok: false as const, error: "Statement not found." };
+  if (inv.status !== "ACCEPTED") {
+    return { ok: false as const, error: "Wait for the crew to accept it before paying it." };
+  }
+  await prisma.subInvoice.update({ where: { id }, data: { status: "PAID" } });
+  revalidatePath("/pay");
+  revalidatePath("/subcontractors");
+  return { ok: true as const };
+}
+
+/**
+ * Catch up statements for work approved before this existed.
+ *
+ * Same filing as approval, so a daily cannot be paid twice.
+ */
+export async function generateSubInvoices(subcontractorId: string) {
+  await requireStaff();
+  const crew = await prisma.subcontractor.findUnique({
+    where: { id: subcontractorId },
+    select: { company: true, rates: { select: { id: true }, take: 1 } },
+  });
+  if (!crew) return { ok: false as const, error: "Crew not found." };
+  if (crew.rates.length === 0) {
+    return { ok: false as const, error: "No signed rate card for this crew — their work can't be priced." };
+  }
+
+  const dailies = await prisma.daily.findMany({
+    where: { subcontractor: crew.company, status: "Approved" },
+    select: { id: true },
+    orderBy: { workDate: "asc" },
+  });
+
+  const statements = new Set<string>();
+  const unpriced = new Set<string>();
+  let filed = 0;
+  let lines = 0;
+  let skipped = 0;
+
+  for (const d of dailies) {
+    const res = await fileApprovedDailyForSub(d.id);
+    if (res.ok) {
+      filed++;
+      lines += res.lines ?? 0;
+      if (res.invoiceNumber) statements.add(res.invoiceNumber);
+    } else if (!res.reason?.startsWith("Already on")) {
+      skipped++;
+    }
+    for (const c of res.unpriced ?? []) unpriced.add(c);
+  }
+
+  revalidatePath("/subcontractors");
+  revalidatePath("/pay");
+
+  if (filed === 0) {
+    return {
+      ok: false as const,
+      error: "Nothing new to pay — every approved daily is already on a statement.",
+    };
+  }
+  return {
+    ok: true as const,
+    created: statements.size,
+    filed,
+    lines,
+    skipped,
+    unpriced: [...unpriced],
+  };
+}
+
+/** This crew's pay statements, for the office panel. Staff only inside. */
+export async function listSubInvoices() {
+  return getSubInvoices();
 }
