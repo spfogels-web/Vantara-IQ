@@ -6,7 +6,7 @@ import { revalidatePath } from "next/cache";
 import * as XLSX from "xlsx";
 
 import { prisma } from "@/lib/prisma";
-import { hashPassword, setSessionCookie, signSession } from "@/lib/auth";
+import { hashPassword, isStaff, setSessionCookie, signSession } from "@/lib/auth";
 import {
   extractDocument,
   isConfigured,
@@ -1803,6 +1803,33 @@ export async function reviewDaily(input: {
     return { ok: false as const, error: "Say why it's being denied — the crew needs to know what to fix." };
   }
 
+  /**
+   * No photos, no approval.
+   *
+   * Approving is what turns a daily into money — it bills the customer and it
+   * puts the crew on a pay statement. Doing that on a sheet with no evidence
+   * behind it means claiming footage nobody can show, which is exactly the
+   * claim that gets queried months later when the photos no longer exist.
+   *
+   * A crew can still file without them: submitting is not the problem, and a
+   * dead phone should not stop the day being recorded. They add the photos
+   * afterwards — the sheet stays open for that even though its numbers lock.
+   */
+  if (input.decision === "APPROVED") {
+    const sheet = await prisma.dailySheet.findFirst({
+      where: { dailyId: input.dailyId },
+      select: { photos: true },
+    });
+    const count = Array.isArray(sheet?.photos) ? (sheet.photos as unknown[]).length : 0;
+    if (count === 0) {
+      return {
+        ok: false as const,
+        error:
+          "No field photos on this daily. Ask the crew to add them — the sheet stays open for photos after it's filed — then approve it.",
+      };
+    }
+  }
+
   const daily = await prisma.daily.update({
     where: { id: input.dailyId },
     data: {
@@ -3560,4 +3587,45 @@ export async function generateSubInvoices(subcontractorId: string) {
 /** This crew's pay statements, for the office panel. Staff only inside. */
 export async function listSubInvoices() {
   return getSubInvoices();
+}
+
+/**
+ * Add photos to a daily that has already been filed.
+ *
+ * The one thing a crew can still change after submitting. Its numbers are the
+ * submission and freeze the moment it is filed; the evidence behind them does
+ * not, because Fortitude cannot approve a daily with no photos and a crew
+ * often cannot take them until they are back in signal.
+ *
+ * Only the photos are written. Passing the whole sheet back would mean
+ * trusting a client that has just been told its numbers are read-only.
+ */
+export async function updateDailyPhotos(sheetId: string, photos: unknown) {
+  const user = await requireUser();
+
+  const sheet = await prisma.dailySheet.findUnique({
+    where: { id: sheetId },
+    select: { id: true, projectId: true, dailyId: true },
+  });
+  if (!sheet) return { ok: false as const, error: "Sheet not found." };
+  if (sheet.projectId) await assertProjectAccess(sheet.projectId);
+  else if (!isStaff(user.role)) return { ok: false as const, error: "Not your sheet." };
+
+  const list = Array.isArray(photos) ? photos : [];
+  await prisma.dailySheet.update({
+    where: { id: sheetId },
+    data: { photos: asJson(list) },
+  });
+
+  // Keep the Daily's own count in step — it is what the review queue reads.
+  if (sheet.dailyId) {
+    await prisma.daily.update({
+      where: { id: sheet.dailyId },
+      data: { photos: list.length },
+    }).catch(() => undefined);
+  }
+
+  revalidatePath("/dailies");
+  if (sheet.projectId) revalidatePath(`/projects/${sheet.projectId}`);
+  return { ok: true as const, count: list.length };
 }

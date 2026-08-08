@@ -18,7 +18,12 @@ import {
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { saveDailySheet, submitDailySheet, type SheetPayload } from "@/app/actions";
+import {
+  saveDailySheet,
+  submitDailySheet,
+  updateDailyPhotos,
+  type SheetPayload,
+} from "@/app/actions";
 import { SheetPhotos, parsePhotos, type SheetPhoto } from "@/components/dailies/sheet-photos";
 import { isPdfUrl } from "@/components/projects/project-detail-client";
 import {
@@ -322,6 +327,32 @@ export function DailyBillingSheet({
    */
   const locked = saved?.status === "SUBMITTED" && !canReview;
 
+  /**
+   * Photos added after filing, not yet written.
+   *
+   * Tracked separately from the sheet's own dirty state because everything else
+   * is frozen — this is the only thing that can still change, and it needs its
+   * own way to be saved.
+   */
+  const [savingPhotos, setSavingPhotos] = React.useState(false);
+  const submittedPhotoCount = React.useRef<number | null>(null);
+  if (locked && submittedPhotoCount.current === null) {
+    submittedPhotoCount.current = photos.length;
+  }
+  const photosDirty =
+    locked && submittedPhotoCount.current !== null && photos.length !== submittedPhotoCount.current;
+
+  async function savePhotos() {
+    if (!sheetId) return;
+    setSavingPhotos(true);
+    const res = await updateDailyPhotos(sheetId, photos);
+    setSavingPhotos(false);
+    if (res.ok) {
+      submittedPhotoCount.current = photos.length;
+      router.refresh();
+    }
+  }
+
   const payload = React.useCallback(
     (): SheetPayload => ({
       id: sheetId,
@@ -432,8 +463,26 @@ export function DailyBillingSheet({
             <Printer className="size-3.5" /> Print
           </Button>
           {locked ? (
-            // A filed daily is a closed record — read and print only.
-            <span className="text-[11.5px] text-muted-foreground">Submitted · read only</span>
+            // The numbers are closed; the photos are not. Fortitude cannot
+            // approve a daily with no evidence, and a crew is often out of
+            // signal until well after they file.
+            <>
+              <span className="text-[11.5px] text-muted-foreground">
+                Submitted · numbers locked
+              </span>
+              {photosDirty ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => void savePhotos()}
+                  disabled={savingPhotos}
+                  className="h-8 gap-1.5 rounded-lg bg-warning px-2.5 text-[12px] font-semibold text-black hover:opacity-90 disabled:opacity-50"
+                >
+                  {savingPhotos ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
+                  Save photos
+                </Button>
+              ) : null}
+            </>
           ) : (
             <>
               <Button
@@ -488,7 +537,8 @@ export function DailyBillingSheet({
         <div className="min-w-[1420px] print:min-w-0">
           {/* Everything except the photo strip is frozen once filed. A disabled
               fieldset switches off every control inside it in one place, so no
-              individual input has to remember. */}
+              individual input has to remember — and the strip sits outside it,
+              between the two halves below. */}
           <fieldset disabled={locked} className="contents">
           {/* ── Masthead ─────────────────────────────────────────── */}
           <div className="flex items-end justify-between gap-4 border-b border-border px-3 pb-2 pt-3">
@@ -964,7 +1014,13 @@ export function DailyBillingSheet({
             />
           </div>
 
+          </fieldset>
+
           {/* ── Field photos ────────────────────────────────────── */}
+          {/* Outside the lock on purpose. The numbers freeze the moment a sheet
+              is filed — that is what makes it a submission — but a crew can
+              still photograph what they built afterwards, and must, because
+              Fortitude cannot approve a daily with no evidence behind it. */}
           {project ? (
             <SheetPhotos
               projectId={project.id}
@@ -972,6 +1028,8 @@ export function DailyBillingSheet({
               onChange={setPhotos}
             />
           ) : null}
+
+          <fieldset disabled={locked} className="contents">
 
           {/* ── Job map + as-built redline ───────────────────────── */}
           {project ? (
