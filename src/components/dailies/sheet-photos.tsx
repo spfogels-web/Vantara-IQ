@@ -116,13 +116,35 @@ export function SheetPhotos({
 
   return (
     <div className="border-t border-border">
-      <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2.5">
-        <div>
-          <p className="text-[9px] font-bold uppercase tracking-[0.1em] text-muted-foreground print:text-[7px]">
+      <div
+        className={cn(
+          "flex flex-wrap items-center gap-2 border-b border-border px-3 py-3 transition-colors",
+          // Amber while empty, quiet once there is evidence on the sheet. A
+          // banner that never stops shouting stops being read.
+          photos.length === 0 && "border-warning/30 bg-warning/[0.06] print:bg-transparent",
+        )}
+      >
+        <div className="min-w-0">
+          <p className="flex items-center gap-1.5 text-[13px] font-bold uppercase tracking-[0.08em] text-foreground print:text-[8px]">
             Field photos
+            <span
+              aria-hidden="true"
+              className="text-[16px] font-black leading-none text-warning print:text-black"
+            >
+              *
+            </span>
+            {photos.length === 0 ? (
+              <span className="rounded bg-warning/20 px-1.5 py-0.5 text-[9.5px] font-bold tracking-normal text-warning print:hidden">
+                REQUIRED
+              </span>
+            ) : (
+              <span className="rounded bg-success/15 px-1.5 py-0.5 text-[9.5px] font-bold tracking-normal text-success print:hidden">
+                {photos.length} ON FILE
+              </span>
+            )}
           </p>
-          <p className="text-[11px] text-muted-foreground print:hidden">
-            Peds, handholes and as-built evidence — stamped when the daily is filed.
+          <p className="mt-0.5 text-[12px] text-muted-foreground print:hidden">
+            Peds, handholes and as-built evidence — stamped with the time and place they were taken.
           </p>
         </div>
 
@@ -172,9 +194,23 @@ export function SheetPhotos({
       {error ? <p className="px-3 py-2 text-[11.5px] text-critical print:hidden">{error}</p> : null}
 
       {photos.length === 0 ? (
-        <p className="px-3 py-6 text-center text-[12px] text-muted-foreground">
-          No photos on this daily yet.
-        </p>
+        <button
+          type="button"
+          onClick={() => shootRef.current?.click()}
+          className="focus-ring flex w-full flex-col items-center gap-2 border-b border-dashed border-warning/40 bg-warning/[0.03] px-3 py-8 text-center transition hover:bg-warning/[0.07] print:hidden"
+        >
+          <Camera className="size-7 text-warning" />
+          <span className="text-[14px] font-semibold text-foreground">
+            No photos on this daily yet
+          </span>
+          <span className="max-w-sm text-[12px] text-muted-foreground">
+            Photograph what you built — peds, handholes, bores, restoration. This is the evidence
+            behind the footage you are billing, and a daily without it is the one that gets queried.
+          </span>
+          <span className="mt-1 inline-flex h-9 items-center gap-1.5 rounded-lg bg-warning px-3.5 text-[12.5px] font-semibold text-black">
+            <Camera className="size-3.5" /> Take a photo now
+          </span>
+        </button>
       ) : (
         <ul className="grid grid-cols-2 gap-3 p-3 sm:grid-cols-3 lg:grid-cols-4 print:grid-cols-3">
           {photos.map((p) => (
