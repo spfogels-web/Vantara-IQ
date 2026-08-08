@@ -137,6 +137,7 @@ export default async function ProjectDetailPage({
           projectId={project.id}
           initialMapUrl={project.mapUrl}
           initialMarkups={project.markups}
+          canEdit={staff}
         />
       </div>
 

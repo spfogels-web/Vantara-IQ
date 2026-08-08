@@ -8,7 +8,7 @@ import { ImagePlus, Loader2, Map as MapIcon, Maximize2, Pencil, PenLine, Trash2,
 
 import { deleteProject, saveProjectMapUrl, saveProjectPhotoUrl, uploadProjectMap } from "@/app/actions";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
-import { MapMarkupEditor } from "@/components/projects/map-markup";
+import { MapMarkupEditor, MapRedlinePreview, parseShapes } from "@/components/projects/map-markup";
 
 /** A map is a PDF whether it's a Blob https URL ending in .pdf or a data: URL. */
 export function isPdfUrl(u: string) {
@@ -80,14 +80,30 @@ export function ProjectHeaderActions({ projectId, photoUrl }: { projectId: strin
   );
 }
 
+/**
+ * The project map, and the office's master as-built over it.
+ *
+ * Editing is staff-only, and that is a correctness rule rather than a
+ * permission preference. The redline is one field on the project: the editor
+ * loads the whole set of shapes and writes the whole set back, so two crews on
+ * one job would not merely see each other's marks — whichever saved second
+ * would erase the first's work with no warning and no history.
+ *
+ * A crew's own redline belongs on their daily, where it is already private to
+ * them and already attached to the production being billed. Here they get the
+ * master plan read-only, which is what it is for: direction, not a canvas.
+ */
 export function ProjectMapPanel({
   projectId,
   initialMapUrl,
   initialMarkups,
+  canEdit,
 }: {
   projectId: string;
   initialMapUrl?: string | null;
   initialMarkups?: unknown;
+  /** Fortitude staff. A crew reads this map; it never redraws it. */
+  canEdit: boolean;
 }) {
   const router = useRouter();
   const [mapUrl, setMapUrl] = React.useState<string | null | undefined>(initialMapUrl);
@@ -135,13 +151,22 @@ export function ProjectMapPanel({
   }
 
   const isPdf = mapUrl ? isPdfUrl(mapUrl) : false;
+  const markups = React.useMemo(() => parseShapes(initialMarkups), [initialMarkups]);
 
   return (
     <>
       <Panel>
-        <PanelHeader title="Project map" description="Upload the construction map, then redline the as-built." icon={<MapIcon className="size-3.5" />}>
+        <PanelHeader
+          title="Project map"
+          description={
+            canEdit
+              ? "Upload the construction map, then redline the as-built."
+              : "The plan for this job. Redline your own work on your daily sheet."
+          }
+          icon={<MapIcon className="size-3.5" />}
+        >
           <div className="flex items-center gap-2">
-            {mapUrl ? (
+            {mapUrl && canEdit ? (
               <button
                 type="button"
                 onClick={() => setRedlining(true)}
@@ -160,7 +185,12 @@ export function ProjectMapPanel({
                 <Maximize2 className="size-3.5" /> Full size
               </a>
             ) : null}
-            <label className="focus-ring inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg bg-brand px-2.5 text-[12px] font-semibold text-white hover:bg-brand-bright">
+            {/* Replacing the construction map is an office job. A crew doing it
+                by accident swaps the drawing under everyone else's feet. */}
+            <label
+              hidden={!canEdit}
+              className="focus-ring inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg bg-brand px-2.5 text-[12px] font-semibold text-white hover:bg-brand-bright"
+            >
               {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Upload className="size-3.5" />}
               {mapUrl ? "Replace" : "Upload"}
               <input
@@ -179,7 +209,18 @@ export function ProjectMapPanel({
         </PanelHeader>
         <PanelBody>
           {error ? <p className="mb-2 text-[12px] text-critical">{error}</p> : null}
-          {mapUrl ? (
+          {mapUrl && markups.length > 0 ? (
+            // The redline was only ever visible inside the editor, so anybody
+            // who could not open it — every crew, now — saw a blank plan. The
+            // overlay costs a client-side render of the pages, which is why it
+            // is only paid for when there is something to draw.
+            <MapRedlinePreview
+              mapUrl={mapUrl}
+              isPdf={isPdf}
+              shapes={markups}
+              className="rounded-lg border border-border/60 p-1"
+            />
+          ) : mapUrl ? (
             isPdf ? (
               <object data={mapUrl} type="application/pdf" className="h-[78vh] w-full rounded-lg border border-border/60">
                 <p className="p-4 text-[12px] text-muted-foreground">
@@ -203,7 +244,7 @@ export function ProjectMapPanel({
         </PanelBody>
       </Panel>
 
-      {redlining && mapUrl ? (
+      {redlining && mapUrl && canEdit ? (
         <MapMarkupEditor
           projectId={projectId}
           mapUrl={mapUrl}
