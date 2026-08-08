@@ -2894,7 +2894,8 @@ export async function saveCrewBadge(input: {
       data: { personName, phone: input.phone?.trim() ?? "", licenseExpires: expires },
     });
     revalidatePath("/subcontractors");
-    revalidatePath("/portal");
+    revalidatePath("/badges");
+  revalidatePath("/company");
     return { ok: true as const, id: input.id };
   }
 
@@ -2908,7 +2909,8 @@ export async function saveCrewBadge(input: {
     select: { id: true },
   });
   revalidatePath("/subcontractors");
-  revalidatePath("/portal");
+  revalidatePath("/badges");
+  revalidatePath("/company");
   return { ok: true as const, id: badge.id };
 }
 
@@ -2981,7 +2983,8 @@ export async function uploadBadgeDocument(formData: FormData) {
   }
 
   revalidatePath("/subcontractors");
-  revalidatePath("/portal");
+  revalidatePath("/badges");
+  revalidatePath("/company");
   return { ok: true as const };
 }
 
@@ -2995,7 +2998,8 @@ export async function deleteBadgeDocument(id: string, inviteToken?: string) {
 
   await prisma.badgeDocument.delete({ where: { id } });
   revalidatePath("/subcontractors");
-  revalidatePath("/portal");
+  revalidatePath("/badges");
+  revalidatePath("/company");
   return { ok: true as const };
 }
 
@@ -3019,7 +3023,8 @@ export async function submitCrewBadge(id: string, inviteToken?: string) {
 
   await prisma.crewBadge.update({ where: { id }, data: { status: "SUBMITTED" } });
   revalidatePath("/subcontractors");
-  revalidatePath("/portal");
+  revalidatePath("/badges");
+  revalidatePath("/company");
   return { ok: true as const };
 }
 
@@ -3063,7 +3068,8 @@ export async function reviewCrewBadge(
     },
   });
   revalidatePath("/subcontractors");
-  revalidatePath("/portal");
+  revalidatePath("/badges");
+  revalidatePath("/company");
   return { ok: true as const };
 }
 
@@ -3078,7 +3084,8 @@ export async function deleteCrewBadge(id: string, inviteToken?: string) {
 
   await prisma.crewBadge.delete({ where: { id } });
   revalidatePath("/subcontractors");
-  revalidatePath("/portal");
+  revalidatePath("/badges");
+  revalidatePath("/company");
   return { ok: true as const };
 }
 

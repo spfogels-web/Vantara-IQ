@@ -66,25 +66,7 @@ export function BadgeSection({
 }) {
   const router = useRouter();
   const [adding, setAdding] = React.useState(false);
-  const [name, setName] = React.useState("");
-  const [phone, setPhone] = React.useState("");
-  const [busy, setBusy] = React.useState<string | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
-
-  async function add(e: React.FormEvent) {
-    e.preventDefault();
-    if (!name.trim()) return;
-    setBusy("add");
-    setError(null);
-    const res = await saveCrewBadge({ subcontractorId, personName: name, phone, inviteToken });
-    setBusy(null);
-    if (res.ok) {
-      setName("");
-      setPhone("");
-      setAdding(false);
-      router.refresh();
-    } else setError(res.error);
-  }
+  const [error] = React.useState<string | null>(null);
 
   const cleared = badges.filter((b) => b.status === "APPROVED" && !b.readiness.expired).length;
 
@@ -106,41 +88,15 @@ export function BadgeSection({
       </PanelHeader>
 
       {adding ? (
-        <form onSubmit={add} className="flex flex-wrap items-end gap-2 border-b border-border/70 p-3">
-          <label className="flex flex-col gap-0.5">
-            <span className="text-[10.5px] uppercase tracking-wider text-muted-foreground">Name</span>
-            <input
-              value={name}
-              autoFocus
-              onChange={(e) => setName(e.target.value)}
-              placeholder="As printed on the licence"
-              className="w-56 rounded-lg border border-border/70 bg-foreground/[0.03] px-2.5 py-1.5 text-[12.5px] text-foreground outline-none focus:border-brand/60"
-            />
-          </label>
-          <label className="flex flex-col gap-0.5">
-            <span className="text-[10.5px] uppercase tracking-wider text-muted-foreground">Phone</span>
-            <input
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="Optional"
-              className="num w-40 rounded-lg border border-border/70 bg-foreground/[0.03] px-2.5 py-1.5 text-[12.5px] text-foreground outline-none focus:border-brand/60"
-            />
-          </label>
-          <button
-            type="submit"
-            disabled={busy === "add" || !name.trim()}
-            className="focus-ring inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand px-3 text-[12px] font-semibold text-white hover:bg-brand-bright disabled:opacity-40"
-          >
-            {busy === "add" ? <Loader2 className="size-3.5 animate-spin" /> : null} Add
-          </button>
-          <button
-            type="button"
-            onClick={() => setAdding(false)}
-            className="focus-ring inline-flex h-8 items-center rounded-lg border border-border px-2.5 text-[12px] text-muted-foreground hover:text-foreground"
-          >
-            Cancel
-          </button>
-        </form>
+        <AddPersonForm
+          subcontractorId={subcontractorId}
+          inviteToken={inviteToken}
+          onCancel={() => setAdding(false)}
+          onAdded={() => {
+            setAdding(false);
+            router.refresh();
+          }}
+        />
       ) : null}
 
       {error ? (
@@ -571,3 +527,277 @@ function DocSlot({
 }
 
 export { ALL_BADGE_DOCS };
+
+/* ------------------------------------------------------------------ *
+ * Adding a person.
+ * ------------------------------------------------------------------ */
+
+/**
+ * The whole badge, filled in at once.
+ *
+ * The documents are on screen from the moment the form opens, beside the name
+ * rather than after it. Somebody adding a driver needs to know a licence and a
+ * second document are wanted before they start — finding that out afterwards,
+ * in a row that only appeared once they pressed Add, means a trip back to the
+ * truck.
+ *
+ * Files are held in the browser until the badge is created, because an upload
+ * needs something to attach to. Creating the badge on the first keystroke would
+ * leave a trail of empty people every time somebody changed their mind.
+ */
+function AddPersonForm({
+  subcontractorId,
+  inviteToken,
+  onCancel,
+  onAdded,
+}: {
+  subcontractorId: string;
+  inviteToken?: string;
+  onCancel: () => void;
+  onAdded: () => void;
+}) {
+  const [name, setName] = React.useState("");
+  const [phone, setPhone] = React.useState("");
+  const [expires, setExpires] = React.useState("");
+  const [staged, setStaged] = React.useState<Partial<Record<BadgeDocKind, File>>>({});
+  const [busy, setBusy] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const hasLicence = Boolean(staged.LICENSE_FRONT && staged.LICENSE_BACK);
+  const hasIdentity = Boolean(staged.SSN_CARD || staged.PASSPORT);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim() || busy) return;
+
+    setBusy("Creating…");
+    setError(null);
+    const created = await saveCrewBadge({
+      subcontractorId,
+      personName: name,
+      phone,
+      licenseExpires: expires,
+      inviteToken,
+    });
+    if (!created.ok) {
+      setBusy(null);
+      setError(created.error);
+      return;
+    }
+
+    // Upload what was staged. A failure here is reported but does not undo the
+    // person — the badge exists, and the missing document can go on it below.
+    const entries = Object.entries(staged).filter(([, f]) => f) as [BadgeDocKind, File][];
+    for (const [kind, file] of entries) {
+      setBusy(`Uploading ${kind.replace(/_/g, " ").toLowerCase()}…`);
+      const fd = new FormData();
+      fd.set("file", file);
+      fd.set("badgeId", created.id);
+      fd.set("kind", kind);
+      if (inviteToken) fd.set("inviteToken", inviteToken);
+      const res = await uploadBadgeDocument(fd);
+      if (!res.ok) {
+        setBusy(null);
+        setError(`${res.error} ${name.trim()} was added — the rest can go on their badge below.`);
+        onAdded();
+        return;
+      }
+    }
+
+    setBusy(null);
+    onAdded();
+  }
+
+  const fieldClass =
+    "rounded-lg border border-border/70 bg-foreground/[0.03] px-2.5 py-2 text-[12.5px] text-foreground outline-none focus:border-brand/60";
+
+  return (
+    <form onSubmit={submit} className="flex flex-col gap-3 border-b border-border/70 bg-foreground/[0.015] p-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <label className="flex flex-col gap-1">
+          <span className="text-[11px] font-medium text-muted-foreground">
+            Name<span className="ml-0.5 text-critical">*</span>
+          </span>
+          <input
+            value={name}
+            autoFocus
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Exactly as printed on the licence"
+            className={fieldClass}
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-[11px] font-medium text-muted-foreground">Phone</span>
+          <input
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="Optional"
+            className={cn(fieldClass, "num")}
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-[11px] font-medium text-muted-foreground">Licence expires</span>
+          <input
+            type="date"
+            value={expires}
+            onChange={(e) => setExpires(e.target.value)}
+            className={cn(fieldClass, "num")}
+          />
+        </label>
+      </div>
+
+      {/* On screen from the start, so what is wanted is known before the name
+          is typed rather than after. */}
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <DocGroup title="Driving licence" note="Both sides" done={hasLicence}>
+          {LICENSE_DOCS.map((spec) => (
+            <StagedSlot
+              key={spec.kind}
+              spec={spec}
+              file={staged[spec.kind]}
+              required
+              onPick={(file) => setStaged((s) => ({ ...s, [spec.kind]: file }))}
+              onClear={() => setStaged((s) => ({ ...s, [spec.kind]: undefined }))}
+            />
+          ))}
+        </DocGroup>
+        <DocGroup title="Proof of name" note="Either one — not both" done={hasIdentity}>
+          {IDENTITY_DOCS.map((spec) => (
+            <StagedSlot
+              key={spec.kind}
+              spec={spec}
+              file={staged[spec.kind]}
+              required={!hasIdentity}
+              dimmed={hasIdentity && !staged[spec.kind]}
+              onPick={(file) => setStaged((s) => ({ ...s, [spec.kind]: file }))}
+              onClear={() => setStaged((s) => ({ ...s, [spec.kind]: undefined }))}
+            />
+          ))}
+        </DocGroup>
+      </div>
+
+      {error ? <p className="text-[11.5px] text-critical">{error}</p> : null}
+
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="submit"
+          disabled={Boolean(busy) || !name.trim()}
+          className="focus-ring inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand px-3.5 text-[12.5px] font-semibold text-white hover:bg-brand-bright disabled:opacity-40"
+        >
+          {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
+          {busy ?? "Add person"}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={Boolean(busy)}
+          className="focus-ring inline-flex h-9 items-center rounded-lg border border-border px-3 text-[12.5px] text-muted-foreground hover:text-foreground disabled:opacity-40"
+        >
+          Cancel
+        </button>
+        {/* Adding somebody without their documents is allowed: a name on the
+            list now, with photos when they are next in the office, beats not
+            recording them at all. */}
+        {!busy && (!hasLicence || !hasIdentity) ? (
+          <span className="text-[11px] text-muted-foreground">
+            You can add them now and photograph the documents later.
+          </span>
+        ) : null}
+      </div>
+    </form>
+  );
+}
+
+/**
+ * A document slot for a person who does not exist yet.
+ *
+ * Shows the chosen photo straight from the file rather than after a round trip,
+ * so a crew can see the licence is in frame and readable before committing —
+ * an unreadable photo is the commonest reason a badge comes back.
+ */
+function StagedSlot({
+  spec,
+  file,
+  required,
+  dimmed,
+  onPick,
+  onClear,
+}: {
+  spec: { kind: BadgeDocKind; label: string; hint: string };
+  file?: File;
+  required: boolean;
+  dimmed?: boolean;
+  onPick: (f: File) => void;
+  onClear: () => void;
+}) {
+  const ref = React.useRef<HTMLInputElement>(null);
+  const [preview, setPreview] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!file) {
+      setPreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(file);
+    setPreview(url);
+    // An object URL pins the file in memory until it is released.
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+
+  return (
+    <div>
+      <input
+        ref={ref}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          e.target.value = "";
+          if (f) onPick(f);
+        }}
+      />
+
+      {preview ? (
+        <div className="overflow-hidden rounded-lg border border-success/30">
+          <button type="button" onClick={() => ref.current?.click()} className="focus-ring block w-full">
+            <span className="relative block aspect-[8/5] bg-foreground/[0.05]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={preview} alt={spec.label} className="size-full object-cover" />
+              <span className="absolute right-1.5 top-1.5 grid size-5 place-items-center rounded-full bg-success text-white shadow">
+                <Check className="size-3" />
+              </span>
+            </span>
+          </button>
+          <div className="flex items-center justify-between gap-1 px-2 py-1.5">
+            <span className="truncate text-[11px] font-medium text-foreground">{spec.label}</span>
+            <button
+              type="button"
+              onClick={onClear}
+              className="focus-ring shrink-0 text-[10px] text-muted-foreground hover:text-critical"
+            >
+              Remove
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => ref.current?.click()}
+          className={cn(
+            "focus-ring flex w-full flex-col items-center justify-center gap-1 rounded-lg border border-dashed px-2 py-5 text-center transition",
+            required
+              ? "border-warning/50 bg-warning/[0.04] hover:border-warning"
+              : "border-border hover:border-brand/40",
+            dimmed && "opacity-45",
+          )}
+        >
+          <Camera className="size-4 text-muted-foreground" />
+          <span className="text-[10.5px] font-medium text-foreground">{spec.label}</span>
+          <span className="text-[9.5px] text-muted-foreground/80">{spec.hint}</span>
+        </button>
+      )}
+    </div>
+  );
+}
