@@ -222,7 +222,45 @@ function TaskRowItem({ task: t, canManage }: { task: TaskRow; canManage: boolean
 
   return (
     <li className={cn("p-3", t.overdue && "bg-critical/[0.02]")}>
-      <div className="flex flex-wrap items-start gap-2">
+      <div className="flex items-start gap-3">
+        {/* The photograph, in the list. Recognising a task by the thing itself
+            is faster than reading a title, and it is the reason the photo was
+            taken. */}
+        {t.previewUrl ? (
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="focus-ring group/thumb relative size-14 shrink-0 overflow-hidden rounded-xl border border-border/70"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={t.previewUrl}
+              alt=""
+              loading="lazy"
+              className="size-full object-cover transition duration-300 group-hover/thumb:scale-110"
+            />
+            {t.photoCount > 1 ? (
+              <span className="num absolute bottom-0 right-0 rounded-tl-md bg-black/70 px-1 text-[9px] font-semibold text-white">
+                {t.photoCount}
+              </span>
+            ) : null}
+            {t.hasResolution ? (
+              <span className="absolute left-0.5 top-0.5 grid size-4 place-items-center rounded-full bg-success text-white">
+                <Check className="size-2.5" />
+              </span>
+            ) : null}
+          </button>
+        ) : (
+          <span
+            className={cn(
+              "grid size-14 shrink-0 place-items-center rounded-xl border border-dashed",
+              t.overdue ? "border-critical/30" : "border-border/60",
+            )}
+          >
+            <Camera className="size-4 text-muted-foreground/40" />
+          </span>
+        )}
+
         <span className={cn("mt-1.5 size-2 shrink-0 rounded-full", st.dot)} />
 
         <button
@@ -408,6 +446,7 @@ function TaskPhotos({
 }) {
   const [busy, setBusy] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [viewing, setViewing] = React.useState<number | null>(null);
   const problemRef = React.useRef<HTMLInputElement>(null);
   const fixRef = React.useRef<HTMLInputElement>(null);
 
@@ -456,8 +495,12 @@ function TaskPhotos({
     }
   }
 
-  const problem = detail?.photos.filter((p) => p.kind === "PROBLEM") ?? [];
-  const fixed = detail?.photos.filter((p) => p.kind === "RESOLUTION") ?? [];
+  const all = detail?.photos ?? [];
+  const problem = all.filter((p) => p.kind === "PROBLEM");
+  const fixed = all.filter((p) => p.kind === "RESOLUTION");
+  // The viewer walks the whole set, not one group, so the fault and the fix are
+  // one arrow key apart.
+  const indexOf = (id: string) => all.findIndex((p) => p.id === id);
 
   return (
     <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
@@ -468,6 +511,7 @@ function TaskPhotos({
         photos={problem}
         busy={busy === "PROBLEM"}
         onPick={() => problemRef.current?.click()}
+        onOpen={(i) => setViewing(indexOf(problem[i].id))}
         onDelete={async (id) => { await deleteTaskPhoto(id); onChanged(); }}
       />
       <PhotoGroup
@@ -477,6 +521,7 @@ function TaskPhotos({
         photos={fixed}
         busy={busy === "RESOLUTION"}
         onPick={() => fixRef.current?.click()}
+        onOpen={(i) => setViewing(indexOf(fixed[i].id))}
         onDelete={async (id) => { await deleteTaskPhoto(id); onChanged(); }}
       />
 
@@ -498,6 +543,15 @@ function TaskPhotos({
       />
 
       {error ? <p className="text-[11.5px] text-critical lg:col-span-2">{error}</p> : null}
+
+      {viewing !== null && all[viewing] ? (
+        <PhotoLightbox
+          photos={all}
+          index={viewing}
+          onClose={() => setViewing(null)}
+          onMove={setViewing}
+        />
+      ) : null}
     </div>
   );
 }
@@ -510,6 +564,7 @@ function PhotoGroup({
   busy,
   onPick,
   onDelete,
+  onOpen,
 }: {
   title: string;
   note: string;
@@ -518,25 +573,50 @@ function PhotoGroup({
   busy: boolean;
   onPick: () => void;
   onDelete: (id: string) => void;
+  onOpen: (index: number) => void;
 }) {
+  const amber = tone === "warning";
+
   return (
-    <div className={cn(
-      "rounded-xl border p-2.5",
-      tone === "warning" ? "border-warning/25 bg-warning/[0.02]" : "border-success/25 bg-success/[0.02]",
-    )}>
-      <div className="mb-2 flex items-center gap-1.5">
-        <span className={cn("text-[11.5px] font-semibold", tone === "warning" ? "text-warning" : "text-success")}>
-          {title}
+    <div
+      className={cn(
+        "overflow-hidden rounded-2xl border",
+        amber
+          ? "border-warning/25 bg-gradient-to-b from-warning/[0.07] to-transparent"
+          : "border-success/25 bg-gradient-to-b from-success/[0.07] to-transparent",
+      )}
+    >
+      <div className="flex items-center gap-2 px-3 py-2.5">
+        <span
+          className={cn(
+            "grid size-7 shrink-0 place-items-center rounded-lg",
+            amber ? "bg-warning/15 text-warning" : "bg-success/15 text-success",
+          )}
+        >
+          {amber ? <TriangleAlert className="size-3.5" /> : <Check className="size-3.5" />}
         </span>
-        <span className="text-[10.5px] text-muted-foreground">· {note}</span>
+        <div className="min-w-0">
+          <p className={cn("text-[12.5px] font-semibold", amber ? "text-warning" : "text-success")}>
+            {title}
+          </p>
+          <p className="text-[10.5px] text-muted-foreground">{note}</p>
+        </div>
+        <span className="num ml-auto text-[11px] text-muted-foreground">
+          {photos.length ? `${photos.length}` : ""}
+        </span>
         <button
           type="button"
           onClick={onPick}
           disabled={busy}
-          className="focus-ring ml-auto inline-flex h-7 items-center gap-1 rounded border border-border px-2 text-[11px] font-medium text-foreground hover:bg-foreground/[0.05] disabled:opacity-40"
+          className={cn(
+            "focus-ring inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[11.5px] font-semibold transition disabled:opacity-40",
+            amber
+              ? "bg-warning text-black hover:opacity-90"
+              : "bg-success text-white hover:opacity-90",
+          )}
         >
-          {busy ? <Loader2 className="size-3 animate-spin" /> : <Camera className="size-3" />}
-          Photo
+          {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Camera className="size-3.5" />}
+          {photos.length ? "Add" : "Photo"}
         </button>
       </div>
 
@@ -544,34 +624,56 @@ function PhotoGroup({
         <button
           type="button"
           onClick={onPick}
-          className="focus-ring flex w-full flex-col items-center gap-1 rounded-lg border border-dashed border-border px-2 py-5 text-center hover:border-brand/40"
+          className="group/empty flex w-full flex-col items-center gap-2 px-3 pb-5 pt-2 text-center"
         >
-          <Camera className="size-4 text-muted-foreground" />
-          <span className="text-[10.5px] text-muted-foreground">Nothing yet</span>
+          <span
+            className={cn(
+              "grid h-28 w-full place-items-center rounded-xl border border-dashed transition",
+              amber
+                ? "border-warning/30 group-hover/empty:border-warning/60 group-hover/empty:bg-warning/[0.04]"
+                : "border-success/30 group-hover/empty:border-success/60 group-hover/empty:bg-success/[0.04]",
+            )}
+          >
+            <Camera className="size-6 text-muted-foreground/60 transition group-hover/empty:text-muted-foreground" />
+          </span>
+          <span className="text-[11px] text-muted-foreground">
+            {amber ? "Show what you found" : "Show it's sorted"}
+          </span>
         </button>
       ) : (
-        <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {photos.map((p) => (
-            <li key={p.id} className="overflow-hidden rounded-lg border border-border/70">
-              <a href={p.url} target="_blank" rel="noreferrer" className="block">
+        <ul className="grid grid-cols-2 gap-2 px-3 pb-3 sm:grid-cols-3">
+          {photos.map((p, i) => (
+            <li key={p.id} className="group/ph relative overflow-hidden rounded-xl border border-border/60">
+              <button type="button" onClick={() => onOpen(i)} className="focus-ring block w-full">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={p.url} alt={p.caption || title} className="aspect-[4/3] w-full object-cover" />
-              </a>
-              <div className="px-1.5 py-1">
-                <p className="num text-[9.5px] text-muted-foreground">{p.createdAt}</p>
-                {p.lat != null && p.lng != null ? (
-                  <p className="num flex items-center gap-0.5 text-[9px] text-muted-foreground/80">
-                    <MapPin className="size-2" /> {formatCoords(p.lat, p.lng)}
-                  </p>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => onDelete(p.id)}
-                  className="focus-ring mt-0.5 text-[9.5px] text-muted-foreground hover:text-critical"
-                >
-                  Remove
-                </button>
-              </div>
+                <img
+                  src={p.url}
+                  alt={p.caption || title}
+                  loading="lazy"
+                  className="aspect-[4/3] w-full object-cover transition duration-300 group-hover/ph:scale-[1.04]"
+                />
+                {/* The stamp sits on the image rather than under it — the point
+                    of a job-site photo is where and when, and a caption line
+                    below pushes the grid taller for information nobody reads. */}
+                <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent px-2 pb-1.5 pt-5 text-left">
+                  <span className="num block text-[9.5px] font-medium text-white/90">
+                    {p.createdAt}
+                  </span>
+                  {p.lat != null && p.lng != null ? (
+                    <span className="num flex items-center gap-0.5 text-[8.5px] text-white/70">
+                      <MapPin className="size-2" /> {formatCoords(p.lat, p.lng)}
+                    </span>
+                  ) : null}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onDelete(p.id)}
+                title="Remove"
+                className="focus-ring absolute right-1.5 top-1.5 grid size-6 place-items-center rounded-lg bg-black/55 text-white/80 opacity-0 backdrop-blur-sm transition hover:bg-critical hover:text-white group-hover/ph:opacity-100"
+              >
+                <Trash2 className="size-3" />
+              </button>
             </li>
           ))}
         </ul>
@@ -579,6 +681,111 @@ function PhotoGroup({
     </div>
   );
 }
+
+/**
+ * Full-size viewer.
+ *
+ * A thumbnail is enough to know a photo exists and not enough to judge what it
+ * shows — which is the entire reason the photo was taken. Arrow keys move
+ * through the set, because comparing the fault against the fix means going back
+ * and forth between them.
+ */
+function PhotoLightbox({
+  photos,
+  index,
+  onClose,
+  onMove,
+}: {
+  photos: NonNullable<Detail>["photos"];
+  index: number;
+  onClose: () => void;
+  onMove: (next: number) => void;
+}) {
+  const photo = photos[index];
+
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+      if (e.key === "ArrowRight") onMove((index + 1) % photos.length);
+      if (e.key === "ArrowLeft") onMove((index - 1 + photos.length) % photos.length);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [index, photos.length, onClose, onMove]);
+
+  if (!photo) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex flex-col bg-black/90 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="flex items-center gap-2 px-4 py-3"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <span
+          className={cn(
+            "rounded px-2 py-0.5 text-[10.5px] font-semibold",
+            photo.kind === "PROBLEM" ? "bg-warning/20 text-warning" : "bg-success/20 text-success",
+          )}
+        >
+          {photo.kind === "PROBLEM" ? "The problem" : "What was done"}
+        </span>
+        <span className="num text-[11.5px] text-white/70">{photo.createdAt}</span>
+        {photo.lat != null && photo.lng != null ? (
+          <a
+            href={`https://www.google.com/maps/search/?api=1&query=${photo.lat},${photo.lng}`}
+            target="_blank"
+            rel="noreferrer"
+            className="focus-ring num inline-flex items-center gap-1 rounded text-[11.5px] text-white/70 hover:text-white"
+          >
+            <MapPin className="size-3" /> {formatCoords(photo.lat, photo.lng)}
+          </a>
+        ) : null}
+        <span className="ml-auto text-[11.5px] text-white/50">
+          {index + 1} of {photos.length}
+          {photo.uploadedBy ? ` · ${photo.uploadedBy}` : ""}
+        </span>
+        <button
+          type="button"
+          onClick={onClose}
+          className="focus-ring grid size-8 place-items-center rounded-lg text-white/70 hover:bg-white/10 hover:text-white"
+        >
+          <X className="size-4" />
+        </button>
+      </div>
+
+      <div className="flex min-h-0 flex-1 items-center justify-center px-4 pb-4" onClick={onClose}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={photo.url}
+          alt={photo.caption || photo.kind}
+          onClick={(e) => e.stopPropagation()}
+          className="max-h-full max-w-full rounded-xl object-contain"
+        />
+      </div>
+
+      {photos.length > 1 ? (
+        <div className="flex items-center justify-center gap-2 pb-4" onClick={(e) => e.stopPropagation()}>
+          {photos.map((p, i) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => onMove(i)}
+              className={cn(
+                "size-1.5 rounded-full transition",
+                i === index ? "w-5 bg-white" : "bg-white/35 hover:bg-white/60",
+              )}
+              aria-label={`Photo ${i + 1}`}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 
 /* ------------------------------------------------------------------ *
  * The thread.

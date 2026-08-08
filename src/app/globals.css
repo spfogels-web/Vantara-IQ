@@ -449,6 +449,33 @@
     color: var(--selection-fg);
   }
 
+  /* Native dropdowns.
+
+     The closed control is ours to style, but the open list is drawn by the
+     operating system, which knows nothing about the theme — on a dark page it
+     came up white text on white. Setting the colours on the option elements
+     themselves is what the browser actually reads when it paints that list.
+
+     color-scheme is the other half: it tells the platform to draw the whole
+     widget, scrollbar and all, in the right mode rather than defaulting to
+     light. */
+  select {
+    color-scheme: light dark;
+  }
+  .dark select {
+    color-scheme: dark;
+  }
+  select option,
+  select optgroup {
+    background-color: var(--popover);
+    color: var(--popover-foreground);
+  }
+  select optgroup {
+    font-weight: 600;
+    /* The group label is a heading, not a choice — it should not read as one. */
+    color: color-mix(in oklab, var(--popover-foreground) 62%, transparent);
+  }
+
   /* Scrollbars: present but recessive */
   * {
     scrollbar-width: thin;

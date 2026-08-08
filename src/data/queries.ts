@@ -1109,7 +1109,8 @@ export async function getNavBadges(): Promise<Record<string, number>> {
       prisma.daily.count({
         where: {
           status: { in: ["Submitted", "In review"] },
-          subcontractor: user.subcontractorName ?? " ",
+          // No company name means nothing of theirs to count, not everything.
+          subcontractor: user.subcontractorName ?? "__no_company__",
         },
       }),
       // Anything not yet cleared for the yard — a badge in draft, waiting on
@@ -2748,6 +2749,17 @@ export interface TaskRow {
   createdAt: string;
   /** Past its due date and not finished. */
   overdue: boolean;
+  /**
+   * A thumbnail for the list, and how many there are.
+   *
+   * The problem shot leads where there is one — that is what somebody scanning
+   * a list recognises a task by, faster than reading its title. Two small
+   * fields on the row beat opening every task to find out whether it even has
+   * a photograph.
+   */
+  previewUrl: string | null;
+  photoCount: number;
+  hasResolution: boolean;
 }
 
 const TASK_SELECT = {
@@ -2758,6 +2770,8 @@ const TASK_SELECT = {
   assigneeUser: { select: { name: true, email: true } },
   assigneeSub: { select: { company: true } },
   project: { select: { name: true } },
+  // Just the URL and kind — the list needs one image, not every record.
+  photos: { select: { url: true, kind: true }, orderBy: { createdAt: "asc" as const } },
 };
 
 function toTaskRow(t: {
@@ -2768,6 +2782,7 @@ function toTaskRow(t: {
   assigneeUser: { name: string; email: string } | null;
   assigneeSub: { company: string } | null;
   project: { name: string } | null;
+  photos: { url: string; kind: string }[];
 }): TaskRow {
   const today = new Date().toISOString().slice(0, 10);
   const done = t.status === "DONE" || t.status === "CANCELLED";
@@ -2792,6 +2807,11 @@ function toTaskRow(t: {
     createdAt: t.createdAt.toISOString().slice(0, 10),
     // A blank due date is not overdue; it simply has no date.
     overdue: Boolean(t.dueDate) && !done && t.dueDate < today,
+    // The fault leads; only fall back to a resolution shot when there is no
+    // photo of the problem, which usually means it was found and fixed at once.
+    previewUrl: t.photos.find((p) => p.kind === "PROBLEM")?.url ?? t.photos[0]?.url ?? null,
+    photoCount: t.photos.length,
+    hasResolution: t.photos.some((p) => p.kind === "RESOLUTION"),
   };
 }
 
