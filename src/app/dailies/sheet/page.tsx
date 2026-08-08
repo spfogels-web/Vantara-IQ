@@ -69,7 +69,7 @@ export default async function DailyBillingSheetPage({
                 {/* Same cover the project carries everywhere else — a crew
                     picks their job by recognising it, and an aerial does that
                     faster than a row of job numbers that all start 704. */}
-                {cover(p) || p.mapUrl ? (
+                {cover(p) || p.hasMap ? (
                   <div className="relative h-36 shrink-0 overflow-hidden border-b border-border bg-foreground/[0.04]">
                     {cover(p) ? (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -83,7 +83,7 @@ export default async function DailyBillingSheetPage({
                         <MapIcon className="size-5" />
                       </span>
                     )}
-                    {p.mapUrl ? (
+                    {p.hasMap ? (
                       <span className="absolute right-2 top-2 rounded-full border border-border bg-background/80 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground backdrop-blur-sm">
                         Map attached
                       </span>

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   assertOwnSubcontractor,
@@ -113,9 +114,65 @@ function toCustomer(r: CustomerRow, activeProjects: number): Customer {
   };
 }
 
-type ProjectRow = Awaited<ReturnType<typeof prisma.project.findMany>>[number];
+/**
+ * The columns a list of projects actually draws.
+ *
+ * `mapUrl`, `mapOriginalUrl` and `markups` are deliberately absent. A map
+ * uploaded through the server fallback is stored inline as base64, and the two
+ * URL columns hold the same file — so selecting the whole row made rendering
+ * five project rows pull 13 MB out of Postgres, on every page that lists jobs.
+ * Crews open these screens on a phone with one bar of service. A list query
+ * fetches what a list shows and nothing else.
+ */
+const PROJECT_LIST_SELECT = {
+  id: true,
+  number: true,
+  name: true,
+  client: true,
+  location: true,
+  status: true,
+  tone: true,
+  remainingFt: true,
+  requiredFtPerDay: true,
+  actualFtPerDay: true,
+  forecast: true,
+  forecastTone: true,
+  health: true,
+  pctComplete: true,
+  crew: true,
+  updatedAt: true,
+  photoUrl: true,
+} as const;
 
-function toProject(r: ProjectRow): Project {
+/** A row from either query: the list select, or a full single-project row. */
+type ProjectListRow = Prisma.ProjectGetPayload<{ select: typeof PROJECT_LIST_SELECT }> & {
+  mapUrl?: string | null;
+  markups?: unknown;
+  hasMap?: boolean;
+};
+
+/**
+ * Map presence, without the map.
+ *
+ * A list wants two facts: whether a plan exists, and a cover image when the map
+ * is a raster we can draw. Both are answerable cheaply. A map small enough to
+ * be a real URL is passed through; anything larger is reported as present and
+ * left on the server rather than pushed down a job-site connection.
+ */
+async function mapSummaries(ids: string[]): Promise<Map<string, { mapUrl: string | null; hasMap: boolean }>> {
+  const out = new Map<string, { mapUrl: string | null; hasMap: boolean }>();
+  if (ids.length === 0) return out;
+  const rows = await prisma.$queryRaw<{ id: string; mapUrl: string | null; hasMap: boolean }[]>`
+    select id,
+           case when length("mapUrl") <= 4096 then "mapUrl" end as "mapUrl",
+           ("mapUrl" is not null) as "hasMap"
+      from "Project"
+     where id in (${Prisma.join(ids)})`;
+  for (const r of rows) out.set(r.id, { mapUrl: r.mapUrl, hasMap: r.hasMap });
+  return out;
+}
+
+function toProject(r: ProjectListRow): Project {
   return {
     id: r.id,
     number: r.number,
@@ -133,7 +190,8 @@ function toProject(r: ProjectRow): Project {
     pctComplete: r.pctComplete,
     crew: r.crew,
     updatedAt: r.updatedAt,
-    mapUrl: r.mapUrl,
+    mapUrl: r.mapUrl ?? null,
+    hasMap: r.hasMap ?? r.mapUrl != null,
     photoUrl: r.photoUrl,
     markups: r.markups,
   };
@@ -454,8 +512,10 @@ export async function getProjects(): Promise<Project[]> {
   const rows = await prisma.project.findMany({
     where: allowed === null ? undefined : { id: { in: allowed } },
     orderBy: { health: "asc" },
+    select: PROJECT_LIST_SELECT,
   });
-  return rows.map(toProject);
+  const maps = await mapSummaries(rows.map((r) => r.id));
+  return rows.map((r) => toProject({ ...r, ...maps.get(r.id) }));
 }
 
 /** Sorted worst-first — the dashboard table is an attention queue. */

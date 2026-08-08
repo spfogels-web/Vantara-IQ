@@ -47,8 +47,14 @@ export interface Project {
   pctComplete: number;
   crew: string;
   updatedAt: string;
-  /** Uploaded project map (Blob or data URL); may carry redline markup. */
+  /**
+   * Uploaded project map. Present on a single project; on a list it is only
+   * carried when it is a real URL, because a map held inline is megabytes and a
+   * list draws thumbnails. Use `hasMap` to ask whether a plan exists.
+   */
   mapUrl?: string | null;
+  /** Whether a map has been uploaded — answerable without shipping the map. */
+  hasMap?: boolean;
   /** Jobsite cover photo shown on the project card. */
   photoUrl?: string | null;
   /** As-built redline markups (lines + dots) drawn over the map. */

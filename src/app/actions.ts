@@ -2,6 +2,7 @@
 
 import { randomBytes } from "node:crypto";
 import { Prisma } from "@prisma/client";
+import { put } from "@vercel/blob";
 import { revalidatePath } from "next/cache";
 import * as XLSX from "xlsx";
 
@@ -981,7 +982,15 @@ export async function deleteProject(id: string) {
 
 const MAX_MAP_BYTES = 15 * 1024 * 1024;
 
-/** Uploads a project map image (stored as a data URL; original preserved). */
+/**
+ * Uploads a project map when the browser could not reach Blob directly.
+ *
+ * This still stores the file in Blob and keeps only the URL on the project. It
+ * used to inline the whole PDF as base64 into two columns, which put megabytes
+ * on the row — and every screen that lists jobs reads those rows. Inlining is
+ * now the last resort for a local environment with no Blob token at all, and it
+ * is capped, because a map on the row is a cost the field pays on every load.
+ */
 export async function uploadProjectMap(formData: FormData) {
   await requireStaff();
   const file = formData.get("file") as File | null;
@@ -996,6 +1005,28 @@ export async function uploadProjectMap(formData: FormData) {
 
   const buf = Buffer.from(await file.arrayBuffer());
   const mediaType = file.type || (isPdf ? "application/pdf" : "image/png");
+
+  if (process.env.BLOB_READ_WRITE_TOKEN) {
+    const blob = await put(`project-maps/${projectId}/map.${isPdf ? "pdf" : "img"}`, buf, {
+      access: "public",
+      contentType: mediaType,
+      addRandomSuffix: true,
+    });
+    await prisma.project.update({
+      where: { id: projectId },
+      data: { mapUrl: blob.url, mapOriginalUrl: blob.url },
+    });
+    revalidatePath("/projects");
+    revalidatePath(`/projects/${projectId}`);
+    return { ok: true as const, dataUrl: blob.url };
+  }
+
+  if (buf.length > 512 * 1024) {
+    return {
+      ok: false as const,
+      error: "Blob storage is not configured, so maps over 512 KB cannot be stored.",
+    };
+  }
   const dataUrl = `data:${mediaType};base64,${buf.toString("base64")}`;
   await prisma.project.update({
     where: { id: projectId },
