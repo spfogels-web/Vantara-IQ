@@ -12,6 +12,7 @@ export const navSections: NavSection[] = [
   {
     title: "Network",
     items: [
+      { label: "Prospects", href: "/prospects", icon: "prospects" },
       { label: "Subcontractors", href: "/subcontractors", icon: "users" },
       { label: "Customers", href: "/customers", icon: "customers" },
       { label: "Materials", href: "/materials", icon: "materials" },

@@ -431,3 +431,58 @@ export interface ReportDefinition {
   icon: IconKey;
   cadence: string;
 }
+
+/* ---- Prospects ----------------------------------------------------------- */
+
+/**
+ * Who this is, which decides the direction of the money: a worker or a crew is
+ * somebody Fortitude would pay, a prime is somebody who would pay Fortitude.
+ */
+export type ProspectKind = "Worker" | "Crew" | "Prime";
+
+export type ProspectStage =
+  | "New"
+  | "Contacted"
+  | "Qualifying"
+  | "In discussion"
+  | "Won"
+  | "Lost"
+  | "Dormant";
+
+export interface ProspectActivity {
+  id: string;
+  kind: string;
+  body: string;
+  author: string;
+  createdAt: string;
+}
+
+export interface Prospect {
+  id: string;
+  kind: ProspectKind;
+  stage: ProspectStage;
+  name: string;
+  contactName: string;
+  contactRole: string;
+  email: string;
+  phone: string;
+  website: string;
+  city: string;
+  homeState: string;
+  states: string[];
+  markets: string[];
+  trades: string[];
+  crewSize: number;
+  equipment: string[];
+  rating: number;
+  source: string;
+  notes: string;
+  nextStep: string;
+  nextStepDue: string;
+  lastContact: string;
+  owner: string;
+  convertedSubcontractorId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  activities: ProspectActivity[];
+}

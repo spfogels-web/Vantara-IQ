@@ -69,6 +69,7 @@ import type {
   ReportDefinition,
   RevenueSummary,
   Subcontractor,
+  Prospect,
   SubScorecard,
   Tone,
 } from "@/lib/types";
@@ -2462,6 +2463,70 @@ export async function getProjectRates(projectId: string): Promise<ProjectRates> 
  * Only company and id cross over — this is a picker, not a window into another
  * crew's file.
  */
+export interface ProjectCrew {
+  id: string;
+  company: string;
+  lead: string;
+  phone: string;
+  state: Subcontractor["state"];
+  trades: string[];
+  /** Dailies this crew has filed on this job, and how many are still waiting. */
+  dailies: number;
+  pending: number;
+  /** Whether they hold a rate card — a crew without one cannot be paid. */
+  hasRates: boolean;
+}
+
+/**
+ * The crews assigned to one job.
+ *
+ * The office needs this on the project page rather than by cross-referencing
+ * the subcontractor list: when a daily comes in wrong, the first question is
+ * always who is actually on this job, and the second is whether they can be
+ * paid for it. Staff-only — a crew has no business reading the roster of who
+ * else is on the job.
+ */
+export async function getProjectCrews(projectId: string): Promise<ProjectCrew[]> {
+  await requireStaff();
+  const rows = await prisma.subcontractor.findMany({
+    where: { projects: { some: { id: projectId } } },
+    select: {
+      id: true,
+      company: true,
+      lead: true,
+      phone: true,
+      state: true,
+      trades: true,
+      _count: { select: { rates: true } },
+    },
+    orderBy: { company: "asc" },
+  });
+
+  // Dailies name their crew as text, not by id, so count by company name.
+  const counts = await prisma.daily.groupBy({
+    by: ["subcontractor", "status"],
+    where: { projectId, subcontractor: { in: rows.map((r) => r.company) } },
+    _count: { _all: true },
+  });
+
+  return rows.map((r) => {
+    const mine = counts.filter((c) => c.subcontractor === r.company);
+    return {
+      id: r.id,
+      company: r.company,
+      lead: r.lead,
+      phone: r.phone,
+      state: SUBSTATE_LABEL[r.state] ?? "Pending review",
+      trades: r.trades,
+      dailies: mine.reduce((s, c) => s + c._count._all, 0),
+      pending: mine
+        .filter((c) => c.status !== "Approved" && c.status !== "Denied")
+        .reduce((s, c) => s + c._count._all, 0),
+      hasRates: r._count.rates > 0,
+    };
+  });
+}
+
 export async function getRatedCrews(): Promise<{ id: string; company: string }[]> {
   await requireStaff();
   const rows = await prisma.subcontractor.findMany({
@@ -2924,5 +2989,142 @@ export async function getTaskAssignees(): Promise<{
     employees: employees.map((e) => ({ id: e.id, name: e.name || e.email })),
     crews,
     projects,
+  };
+}
+
+/* ------------------------------------------------------------------ *
+ * Prospects — who we know, before they are on a job.
+ * ------------------------------------------------------------------ */
+
+const PROSPECT_KIND: Record<string, Prospect["kind"]> = {
+  WORKER: "Worker",
+  SUBCONTRACTOR: "Crew",
+  PRIME: "Prime",
+};
+
+const PROSPECT_STAGE: Record<string, Prospect["stage"]> = {
+  NEW: "New",
+  CONTACTED: "Contacted",
+  QUALIFYING: "Qualifying",
+  IN_DISCUSSION: "In discussion",
+  WON: "Won",
+  LOST: "Lost",
+  DORMANT: "Dormant",
+};
+
+type ProspectRow = Awaited<
+  ReturnType<typeof prisma.prospect.findMany<{ include: { activities: true } }>>
+>[number];
+
+function toProspect(r: ProspectRow): Prospect {
+  return {
+    id: r.id,
+    kind: PROSPECT_KIND[r.kind] ?? "Crew",
+    stage: PROSPECT_STAGE[r.stage] ?? "New",
+    name: r.name,
+    contactName: r.contactName,
+    contactRole: r.contactRole,
+    email: r.email,
+    phone: r.phone,
+    website: r.website,
+    city: r.city,
+    homeState: r.homeState,
+    states: r.states,
+    markets: r.markets,
+    trades: r.trades,
+    crewSize: r.crewSize,
+    equipment: r.equipment,
+    rating: r.rating,
+    source: r.source,
+    notes: r.notes,
+    nextStep: r.nextStep,
+    nextStepDue: r.nextStepDue,
+    lastContact: r.lastContact,
+    owner: r.owner,
+    convertedSubcontractorId: r.convertedSubcontractorId,
+    createdAt: r.createdAt.toISOString(),
+    updatedAt: r.updatedAt.toISOString(),
+    activities: r.activities
+      .slice()
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .map((a) => ({
+        id: a.id,
+        kind: a.kind,
+        body: a.body,
+        author: a.author,
+        createdAt: a.createdAt.toISOString(),
+      })),
+  };
+}
+
+/**
+ * The whole pipeline.
+ *
+ * Ordered by what needs doing rather than by name: anything with a next step
+ * that has come due floats up, then the rest by most recently touched. A CRM
+ * sorted alphabetically is a filing cabinet, not a work queue.
+ */
+export async function getProspects(): Promise<Prospect[]> {
+  await requireStaff();
+  const rows = await prisma.prospect.findMany({
+    include: { activities: true },
+    orderBy: { updatedAt: "desc" },
+  });
+  return rows.map(toProspect);
+}
+
+export interface ProspectSummary {
+  total: number;
+  byKind: { kind: Prospect["kind"]; count: number }[];
+  /** Open means not yet Won, Lost or Dormant — the ones still in play. */
+  open: number;
+  won: number;
+  /** Next steps whose due date has passed. The actual to-do list. */
+  overdue: number;
+  /** States and markets we have anybody in, most-covered first. */
+  states: { name: string; count: number }[];
+  markets: { name: string; count: number }[];
+}
+
+export async function getProspectSummary(): Promise<ProspectSummary> {
+  await requireStaff();
+  const rows = await prisma.prospect.findMany({
+    select: {
+      kind: true,
+      stage: true,
+      homeState: true,
+      states: true,
+      markets: true,
+      nextStep: true,
+      nextStepDue: true,
+    },
+  });
+
+  const today = new Date().toISOString().slice(0, 10);
+  const tally = (xs: string[]) => {
+    const m = new Map<string, number>();
+    for (const x of xs) {
+      const k = x.trim();
+      if (k) m.set(k, (m.get(k) ?? 0) + 1);
+    }
+    return [...m.entries()]
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  };
+
+  const kinds: Prospect["kind"][] = ["Worker", "Crew", "Prime"];
+  return {
+    total: rows.length,
+    byKind: kinds.map((kind) => ({
+      kind,
+      count: rows.filter((r) => (PROSPECT_KIND[r.kind] ?? "Crew") === kind).length,
+    })),
+    open: rows.filter((r) => !["WON", "LOST", "DORMANT"].includes(r.stage)).length,
+    won: rows.filter((r) => r.stage === "WON").length,
+    // A next step with no date is not overdue — it is unscheduled, which is a
+    // different problem and not one to cry wolf about.
+    overdue: rows.filter((r) => r.nextStep && r.nextStepDue && r.nextStepDue < today).length,
+    states: tally(rows.flatMap((r) => [r.homeState, ...r.states])),
+    markets: tally(rows.flatMap((r) => r.markets)),
   };
 }

@@ -269,31 +269,31 @@ model SubcontractorRate {
 }
 
 model Subcontractor {
-  id             String    @id @default(cuid())
+  id             String            @id @default(cuid())
   company        String
-  lead           String    @default("")
-  email          String    @default("")
-  phone          String    @default("")
-  location       String    @default("")
-  trades         String[]  @default([])
-  state          SubState  @default(PENDING_REVIEW)
-  tone           String    @default("neutral")
+  lead           String            @default("")
+  email          String            @default("")
+  phone          String            @default("")
+  location       String            @default("")
+  trades         String[]          @default([])
+  state          SubState          @default(PENDING_REVIEW)
+  tone           String            @default("neutral")
   /// Jobs this crew is assigned to — the authority on what they can see.
-  projects       Project[] @relation("ProjectCrews")
+  projects       Project[]         @relation("ProjectCrews")
   badges         CrewBadge[]
   ach            AchAuthorization?
   payStatements  SubInvoice[]
-  tasks          Task[]     @relation("TaskCrew")
-  compliance     Json      @default("[]")
-  complianceTone String    @default("neutral")
-  scorecard      Json      @default("{}")
-  crewSize       Int       @default(0)
-  equipment      String[]  @default([])
+  tasks          Task[]            @relation("TaskCrew")
+  compliance     Json              @default("[]")
+  complianceTone String            @default("neutral")
+  scorecard      Json              @default("{}")
+  crewSize       Int               @default(0)
+  equipment      String[]          @default([])
   logoUrl        String?
   /// Internal note on this crew — why their rates differ, what kit they run,
   /// anything the office needs to see beside the name. Never shown to the sub.
-  notes          String    @default("")
-  since          String    @default("")
+  notes          String            @default("")
+  since          String            @default("")
 
   // ---- Vendor packet -------------------------------------------------------
   // What any contractor asks for before letting a crew on site. The sub fills
@@ -412,19 +412,19 @@ model SubInvoice {
   issuedAt        DateTime?
 
   /// The record of them agreeing: who, and exactly when.
-  acceptedAt   DateTime?
-  acceptedBy   String    @default("")
+  acceptedAt  DateTime?
+  acceptedBy  String    @default("")
   /// Their reason when they don't agree — required, because "denied" alone
   /// tells the office nothing to act on.
-  disputeNote  String    @default("")
-  disputedAt   DateTime?
-  disputedBy   String    @default("")
+  disputeNote String    @default("")
+  disputedAt  DateTime?
+  disputedBy  String    @default("")
 
   /// Fortitude's note back, when a dispute is settled.
-  resolutionNote String   @default("")
+  resolutionNote String           @default("")
   lines          SubInvoiceLine[]
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
 
   @@index([subcontractorId, status])
   @@index([projectId])
@@ -435,19 +435,19 @@ model SubInvoice {
 /// The rate lives on the line rather than being looked up, so a card edited in
 /// March cannot restate what a crew already accepted in January.
 model SubInvoiceLine {
-  id           String     @id @default(cuid())
-  invoice      SubInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  invoiceId    String
+  id          String     @id @default(cuid())
+  invoice     SubInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoiceId   String
   /// The daily this came from. A plain id — deleting a daily must not silently
   /// remove a line from a statement a crew has accepted.
-  dailyId      String     @default("")
-  workDate     String     @default("")
-  code         String     @default("")
-  description  String     @default("")
-  unit         String     @default("")
-  quantity     Float      @default(0)
-  rate         Float      @default(0)
-  amount       Float      @default(0)
+  dailyId     String     @default("")
+  workDate    String     @default("")
+  code        String     @default("")
+  description String     @default("")
+  unit        String     @default("")
+  quantity    Float      @default(0)
+  rate        Float      @default(0)
+  amount      Float      @default(0)
 
   @@index([invoiceId])
   @@index([dailyId])
@@ -488,7 +488,7 @@ model Task {
   dueDate  String       @default("")
 
   /// An employee.
-  assigneeUser   User?   @relation("TaskAssignee", fields: [assigneeUserId], references: [id], onDelete: SetNull)
+  assigneeUser   User?          @relation("TaskAssignee", fields: [assigneeUserId], references: [id], onDelete: SetNull)
   assigneeUserId String?
   /// Or a crew — the company, so it survives their staff changing.
   assigneeSub    Subcontractor? @relation("TaskCrew", fields: [assigneeSubId], references: [id], onDelete: SetNull)
@@ -525,22 +525,22 @@ model Task {
 /// not a Social Security card, and the trade-off that makes badge documents
 /// database-only does not apply.
 model TaskPhoto {
-  id     String @id @default(cuid())
-  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  taskId String
-  url    String
-  mediaType String @default("")
-  sizeBytes Int    @default(0)
+  id             String   @id @default(cuid())
+  task           Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId         String
+  url            String
+  mediaType      String   @default("")
+  sizeBytes      Int      @default(0)
   /// PROBLEM | RESOLUTION
-  kind      String @default("PROBLEM")
-  caption   String @default("")
+  kind           String   @default("PROBLEM")
+  caption        String   @default("")
   /// Where it was taken, when the device gave a position. Same honesty as the
   /// project gallery: a coordinate is stored only with a source behind it.
   lat            Float?
   lng            Float?
-  locationSource String @default("")
-  uploadedBy String   @default("")
-  createdAt  DateTime @default(now())
+  locationSource String   @default("")
+  uploadedBy     String   @default("")
+  createdAt      DateTime @default(now())
 
   @@index([taskId])
 }
@@ -550,14 +550,14 @@ model TaskPhoto {
 /// Status changes are written here too, so the history reads in one column
 /// rather than being split between what was said and what was done.
 model TaskComment {
-  id     String @id @default(cuid())
-  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  taskId String
-  body   String
+  id          String   @id @default(cuid())
+  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId      String
+  body        String
   /// True when the row records a status change rather than something typed.
-  systemNote Boolean @default(false)
-  authorName  String @default("")
-  authorEmail String @default("")
+  systemNote  Boolean  @default(false)
+  authorName  String   @default("")
+  authorEmail String   @default("")
   createdAt   DateTime @default(now())
 
   @@index([taskId, createdAt])
@@ -570,15 +570,15 @@ model TaskComment {
 /// recorded — and kept separate from the record it concerns, so removing a
 /// crew does not remove the history of who accessed their details.
 model AccessLog {
-  id         String   @id @default(cuid())
+  id          String   @id @default(cuid())
   /// Dotted, e.g. "ach.revealed".
-  action     String
-  actorUserId String  @default("")
-  actorEmail String   @default("")
+  action      String
+  actorUserId String   @default("")
+  actorEmail  String   @default("")
   /// What was accessed, in words — this is read by a person, not a query.
-  detail     String   @default("")
-  subjectId  String   @default("")
-  createdAt  DateTime @default(now())
+  detail      String   @default("")
+  subjectId   String   @default("")
+  createdAt   DateTime @default(now())
 
   @@index([action, createdAt])
   @@index([subjectId])
@@ -614,29 +614,29 @@ model AchAuthorization {
   email        String @default("")
 
   // Where the money goes.
-  bankName            String @default("")
-  bankAddressLine1    String @default("")
-  bankCity            String @default("")
-  bankStateRegion     String @default("")
-  bankPostalCode      String @default("")
+  bankName         String @default("")
+  bankAddressLine1 String @default("")
+  bankCity         String @default("")
+  bankStateRegion  String @default("")
+  bankPostalCode   String @default("")
   /// "checking" | "savings"
-  accountType         String @default("checking")
+  accountType      String @default("checking")
   /// AES-256-GCM ciphertext. Never sent to a client.
-  accountNumberEnc    String @default("")
-  routingNumberEnc    String @default("")
+  accountNumberEnc String @default("")
+  routingNumberEnc String @default("")
   /// Shown instead of the real thing, and enough to reconcile a remittance.
-  accountLast4        String @default("")
-  routingLast4        String @default("")
+  accountLast4     String @default("")
+  routingLast4     String @default("")
 
   // The authorisation itself.
-  signerName      String    @default("")
-  signerTitle     String    @default("")
+  signerName       String    @default("")
+  signerTitle      String    @default("")
   /// Drawn signature as a data URL.
-  signatureDataUrl String   @default("")
+  signatureDataUrl String    @default("")
   /// The date the signer put on it, as YYYY-MM-DD.
-  signedDate      String    @default("")
+  signedDate       String    @default("")
   /// When the form was actually submitted — distinct from the date typed on it.
-  submittedAt     DateTime?
+  submittedAt      DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -667,21 +667,21 @@ enum BadgeDocKind {
 /// in front of them is the man on the list, which is why it carries a photo ID
 /// and not just a company name.
 model CrewBadge {
-  id              String        @id @default(cuid())
-  subcontractor   Subcontractor @relation(fields: [subcontractorId], references: [id], onDelete: Cascade)
+  id              String          @id @default(cuid())
+  subcontractor   Subcontractor   @relation(fields: [subcontractorId], references: [id], onDelete: Cascade)
   subcontractorId String
   personName      String
-  phone           String        @default("")
-  status          BadgeStatus   @default(DRAFT)
+  phone           String          @default("")
+  status          BadgeStatus     @default(DRAFT)
   /// Licence expiry as YYYY-MM-DD. A badge stops being valid when the licence
   /// behind it does, which nobody remembers to check by hand.
-  licenseExpires  String        @default("")
-  reviewNote      String        @default("")
-  reviewedBy      String        @default("")
+  licenseExpires  String          @default("")
+  reviewNote      String          @default("")
+  reviewedBy      String          @default("")
   reviewedAt      DateTime?
   documents       BadgeDocument[]
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 
   @@index([subcontractorId, status])
 }
@@ -910,7 +910,7 @@ model ProjectPhoto {
   /// guess and should not be drawn on a map like a survey point.
   accuracyM      Float?
   /// "device" | "exif" — never inferred, never filled in from the project.
-  locationSource String  @default("")
+  locationSource String @default("")
 
   caption String @default("")
   /// RECORD (evidence of work) | DIRECTION (instruction for the crew)
@@ -924,12 +924,12 @@ model ProjectPhoto {
 
 /// One project-specific onboarding invite link.
 model Invite {
-  token       String   @id
-  projectId   String?
-  projectName String   @default("")
-  customer    String   @default("")
-  email       String?
-  used        Boolean  @default(false)
+  token           String   @id
+  projectId       String?
+  projectName     String   @default("")
+  customer        String   @default("")
+  email           String?
+  used            Boolean  @default(false)
   /// The subcontractor this invite created, once they start onboarding.
   ///
   /// This is what authorizes the rest of the flow. Onboarding legitimately runs
@@ -939,7 +939,7 @@ model Invite {
   /// action taking a subcontractor id would let anyone write into any sub's
   /// file, including uploading documents into a competitor's packet.
   subcontractorId String?
-  createdAt   DateTime @default(now())
+  createdAt       DateTime @default(now())
 
   @@index([subcontractorId])
 }
@@ -1332,4 +1332,104 @@ model DocumentAuditEvent {
   at          DateTime @default(now())
 
   @@index([documentId, at])
+}
+
+/**
+ * ------------------------------------------------------------------------- *
+ * Prospects — the pipeline before anybody is on a job.
+ * Three different relationships share one table because the office works them
+ * the same way: find them, talk to them, decide. What differs is the direction
+ * of the money. A WORKER or a CREW is somebody Fortitude would pay; a PRIME is
+ * somebody who would pay Fortitude. Keeping them together means one list of
+ * "who do we know in this state", which is the question that actually gets
+ * asked when a job comes up somewhere new.
+ * -------------------------------------------------------------------------
+ */
+
+enum ProspectKind {
+  /// An individual — operator, laborer, fusion tech — hired directly.
+  WORKER
+  /// A crew company that could run production under Fortitude.
+  SUBCONTRACTOR
+  /// A general or prime contractor Fortitude would work for. Future business.
+  PRIME
+}
+
+/// How far along a conversation is. LOST and DORMANT are kept apart on
+/// purpose: lost is a decision, dormant is a phone number worth trying again.
+enum ProspectStage {
+  NEW
+  CONTACTED
+  QUALIFYING
+  IN_DISCUSSION
+  WON
+  LOST
+  DORMANT
+}
+
+model Prospect {
+  id    String        @id @default(cuid())
+  kind  ProspectKind
+  stage ProspectStage @default(NEW)
+
+  /// Company name, or the person's name when this is a worker.
+  name        String
+  contactName String @default("")
+  contactRole String @default("")
+  email       String @default("")
+  phone       String @default("")
+  website     String @default("")
+
+  /// Where they are based.
+  city      String   @default("")
+  homeState String   @default("")
+  /// States they will actually travel to or hold work in. A prospect based in
+  /// one state who works four is the normal case, not the exception.
+  states    String[] @default([])
+  /// Named markets — "Greenville-Spartanburg", "Atlanta Metro". For a prime,
+  /// these are the markets they hold; for a crew, where they want work.
+  markets   String[] @default([])
+
+  trades    String[] @default([])
+  crewSize  Int      @default(0)
+  equipment String[] @default([])
+
+  /// 0 = unrated. Gut-feel ranking so the good ones stay findable.
+  rating Int    @default(0)
+  /// Referral, jobsite, cold call — worth knowing which channels work.
+  source String @default("")
+  notes  String @default("")
+
+  /// The single next thing somebody has to do, and by when. A pipeline without
+  /// this is just a list of names.
+  nextStep    String @default("")
+  nextStepDue String @default("")
+  lastContact String @default("")
+  owner       String @default("")
+
+  /// Set when a won crew is promoted into the real subcontractor roster, so
+  /// the pipeline keeps its history instead of the record vanishing.
+  convertedSubcontractorId String?
+  convertedAt              DateTime?
+
+  activities ProspectActivity[]
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+
+  @@index([kind, stage])
+  @@index([homeState])
+}
+
+/// One logged touch — a call, an email, a note, or a stage change.
+model ProspectActivity {
+  id         String   @id @default(cuid())
+  prospect   Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  prospectId String
+  /// note | call | email | meeting | stage
+  kind       String   @default("note")
+  body       String   @default("")
+  author     String   @default("")
+  createdAt  DateTime @default(now())
+
+  @@index([prospectId, createdAt])
 }

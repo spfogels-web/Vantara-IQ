@@ -316,28 +316,40 @@ function SubDetail({
   const [confirmDelete, setConfirmDelete] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
   const [deleteError, setDeleteError] = React.useState<string | null>(null);
+  /** Jobs this delete would pull them off, once the server has told us. */
+  const [unassigns, setUnassigns] = React.useState<string[] | null>(null);
 
   // Reset the confirm state when switching subs, so an armed delete on one
   // can't carry over to the next.
   React.useEffect(() => {
     setConfirmDelete(false);
     setDeleteError(null);
+    setUnassigns(null);
   }, [s.id]);
 
-  async function remove() {
+  async function remove(force = false) {
     if (deleting) return;
     setDeleting(true);
     setDeleteError(null);
-    const res = await deleteSubcontractor(s.id);
+    const res = await deleteSubcontractor(s.id, force);
     setDeleting(false);
     if (res.ok) {
       setConfirmDelete(false);
       onDeleted();
       router.refresh();
-    } else {
-      setDeleteError(res.error);
-      setConfirmDelete(false);
+      return;
     }
+    // An assignment is not a reason to refuse — it is something to say first.
+    // Keep the delete armed so the second press goes through knowing the cost.
+    if ("needsConfirm" in res && res.needsConfirm) {
+      setDeleteError(res.error);
+      setConfirmDelete(true);
+      setUnassigns(res.projects);
+      return;
+    }
+    setDeleteError(res.error);
+    setConfirmDelete(false);
+    setUnassigns(null);
   }
 
   React.useEffect(() => {
@@ -410,7 +422,7 @@ function SubDetail({
                 <>
                   <button
                     type="button"
-                    onClick={() => void remove()}
+                    onClick={() => void remove(true)}
                     disabled={deleting}
                     className="focus-ring inline-flex h-8 items-center gap-1.5 rounded-lg bg-critical px-2.5 text-[12px] font-semibold text-white hover:opacity-90 disabled:opacity-50"
                   >
@@ -418,7 +430,11 @@ function SubDetail({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setConfirmDelete(false)}
+                    onClick={() => {
+                      setConfirmDelete(false);
+                      setDeleteError(null);
+                      setUnassigns(null);
+                    }}
                     className="focus-ring rounded-lg px-2 text-[12px] text-muted-foreground hover:text-foreground"
                   >
                     Cancel
@@ -427,7 +443,7 @@ function SubDetail({
               ) : (
                 <button
                   type="button"
-                  onClick={() => setConfirmDelete(true)}
+                  onClick={() => void remove(false)}
                   title="Delete this subcontractor"
                   className="focus-ring grid size-8 place-items-center rounded-lg border border-border text-muted-foreground hover:border-critical/40 hover:text-critical"
                 >
@@ -444,9 +460,20 @@ function SubDetail({
           </div>
         </PanelBody>
         {deleteError ? (
-          <p className="border-t border-border/70 px-4 py-2 text-[12px] text-critical sm:px-5">
-            {deleteError}
-          </p>
+          <div
+            className={cn(
+              "border-t border-border/70 px-4 py-2 text-[12px] sm:px-5",
+              // A warning you can act on reads differently from a refusal.
+              unassigns ? "text-warning" : "text-critical",
+            )}
+          >
+            <p>{deleteError}</p>
+            {unassigns ? (
+              <p className="mt-0.5 text-[11.5px] text-muted-foreground">
+                Press Confirm delete to go ahead.
+              </p>
+            ) : null}
+          </div>
         ) : null}
       </Panel>
 

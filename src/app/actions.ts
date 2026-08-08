@@ -188,24 +188,61 @@ export async function updateSubcontractor(id: string, input: SubcontractorInput)
  * refuses while the sub is still assigned to a project — losing a compliance
  * record for a crew that is actively working is not something to do quietly.
  */
-export async function deleteSubcontractor(id: string) {
+/**
+ * Delete a subcontractor.
+ *
+ * Two different things used to be treated as one. A project *assignment* is
+ * bookkeeping — it can be undone as part of the delete. Approved dailies and
+ * pay statements are billing history, and removing the crew they name would
+ * leave the books referring to somebody who no longer exists. Only the second
+ * is a real refusal; the first just needs saying out loud first.
+ *
+ * Call without `confirm` to find out what the delete would take with it. The
+ * login goes too — `User.subcontractorId` is optional, so Postgres would
+ * otherwise null it and leave an account able to sign in with no crew.
+ */
+export async function deleteSubcontractor(id: string, confirm?: boolean) {
   await requireStaff();
   const sub = await prisma.subcontractor.findUnique({
     where: { id },
-    select: { company: true, projects: { select: { id: true } } },
+    select: { company: true, projects: { select: { name: true } } },
   });
   if (!sub) return { ok: false as const, error: "Subcontractor not found." };
-  if (sub.projects.length > 0) {
+
+  const [approvedDailies, payStatements] = await Promise.all([
+    prisma.daily.count({ where: { subcontractor: sub.company, status: "Approved" } }),
+    prisma.subInvoice.count({ where: { subcontractorId: id } }),
+  ]);
+  if (approvedDailies > 0 || payStatements > 0) {
+    const parts = [
+      approvedDailies > 0 ? `${approvedDailies} approved dail${approvedDailies === 1 ? "y" : "ies"}` : null,
+      payStatements > 0 ? `${payStatements} pay statement${payStatements === 1 ? "" : "s"}` : null,
+    ].filter(Boolean);
     return {
       ok: false as const,
-      error: `${sub.company} is still assigned to ${sub.projects.length} project${
-        sub.projects.length === 1 ? "" : "s"
-      }. Unassign it first.`,
+      error: `${sub.company} has ${parts.join(" and ")} on the books. Deleting would leave those records naming a crew that no longer exists. Mark them inactive instead.`,
     };
   }
-  await prisma.subcontractor.delete({ where: { id } });
+
+  const projects = sub.projects.map((p) => p.name.trim()).filter(Boolean);
+  if (projects.length > 0 && !confirm) {
+    return {
+      ok: false as const,
+      needsConfirm: true as const,
+      projects,
+      error: `${sub.company} is assigned to ${projects.join(" and ")}. Deleting removes them from ${
+        projects.length === 1 ? "that job" : "those jobs"
+      } and deletes their login.`,
+    };
+  }
+
+  const [logins] = await prisma.$transaction([
+    prisma.user.deleteMany({ where: { subcontractorId: id } }),
+    prisma.subcontractor.delete({ where: { id } }),
+  ]);
   revalidatePath("/subcontractors");
-  return { ok: true as const };
+  revalidatePath("/projects");
+  return { ok: true as const, removedLogins: logins.count };
 }
 
 /**
@@ -3937,4 +3974,215 @@ export async function getTaskDetail(id: string) {
       createdAt: c.createdAt.toISOString().slice(0, 16).replace("T", " "),
     })),
   };
+}
+
+/* ---- Prospects ----------------------------------------------------------- */
+
+const KIND_TO_DB = { Worker: "WORKER", Crew: "SUBCONTRACTOR", Prime: "PRIME" } as const;
+const STAGE_TO_DB = {
+  New: "NEW",
+  Contacted: "CONTACTED",
+  Qualifying: "QUALIFYING",
+  "In discussion": "IN_DISCUSSION",
+  Won: "WON",
+  Lost: "LOST",
+  Dormant: "DORMANT",
+} as const;
+
+export type ProspectInput = {
+  id?: string;
+  kind: keyof typeof KIND_TO_DB;
+  stage: keyof typeof STAGE_TO_DB;
+  name: string;
+  contactName?: string;
+  contactRole?: string;
+  email?: string;
+  phone?: string;
+  website?: string;
+  city?: string;
+  homeState?: string;
+  states?: string[];
+  markets?: string[];
+  trades?: string[];
+  crewSize?: number;
+  equipment?: string[];
+  rating?: number;
+  source?: string;
+  notes?: string;
+  nextStep?: string;
+  nextStepDue?: string;
+  owner?: string;
+};
+
+/** Trim, drop blanks, de-duplicate — lists here are typed by hand. */
+const cleanList = (xs?: string[]) => {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const x of xs ?? []) {
+    const v = x.trim();
+    if (!v || seen.has(v.toLowerCase())) continue;
+    seen.add(v.toLowerCase());
+    out.push(v);
+  }
+  return out;
+};
+
+/** States are typed in a hurry — store them the way everything else reads them. */
+const cleanStates = (xs?: string[]) => cleanList(xs).map((s) => s.toUpperCase());
+
+export async function saveProspect(input: ProspectInput) {
+  await requireStaff();
+  const name = input.name.trim();
+  if (!name) return { ok: false as const, error: "A name is required." };
+
+  const data = {
+    kind: KIND_TO_DB[input.kind],
+    stage: STAGE_TO_DB[input.stage],
+    name,
+    contactName: input.contactName?.trim() ?? "",
+    contactRole: input.contactRole?.trim() ?? "",
+    email: input.email?.trim() ?? "",
+    phone: input.phone?.trim() ?? "",
+    website: input.website?.trim() ?? "",
+    city: input.city?.trim() ?? "",
+    homeState: (input.homeState ?? "").trim().toUpperCase(),
+    states: cleanStates(input.states),
+    markets: cleanList(input.markets),
+    trades: cleanList(input.trades),
+    crewSize: Math.max(0, Math.round(input.crewSize ?? 0)),
+    equipment: cleanList(input.equipment),
+    rating: Math.min(5, Math.max(0, Math.round(input.rating ?? 0))),
+    source: input.source?.trim() ?? "",
+    notes: input.notes?.trim() ?? "",
+    nextStep: input.nextStep?.trim() ?? "",
+    nextStepDue: input.nextStepDue?.trim() ?? "",
+    owner: input.owner?.trim() ?? "",
+  };
+
+  const saved = input.id
+    ? await prisma.prospect.update({ where: { id: input.id }, data })
+    : await prisma.prospect.create({ data });
+
+  revalidatePath("/prospects");
+  return { ok: true as const, id: saved.id };
+}
+
+export async function deleteProspect(id: string) {
+  await requireStaff();
+  await prisma.prospect.delete({ where: { id } });
+  revalidatePath("/prospects");
+  return { ok: true as const };
+}
+
+/**
+ * Move a prospect along, and write the move into the log.
+ *
+ * The stage on its own tells you where something is but never how it got
+ * there. Recording the change beside the calls and emails means the history
+ * reads as one story rather than a status field and a separate diary.
+ */
+export async function setProspectStage(id: string, stage: keyof typeof STAGE_TO_DB) {
+  const me = await requireStaff();
+  const before = await prisma.prospect.findUnique({ where: { id }, select: { stage: true } });
+  if (!before) return { ok: false as const, error: "Prospect not found." };
+
+  const to = STAGE_TO_DB[stage];
+  if (before.stage === to) return { ok: true as const };
+
+  await prisma.$transaction([
+    prisma.prospect.update({ where: { id }, data: { stage: to } }),
+    prisma.prospectActivity.create({
+      data: {
+        prospectId: id,
+        kind: "stage",
+        body: `Moved to ${stage}`,
+        author: me.name || me.email,
+      },
+    }),
+  ]);
+  revalidatePath("/prospects");
+  return { ok: true as const };
+}
+
+export async function logProspectActivity(id: string, kind: string, body: string) {
+  const me = await requireStaff();
+  const text = body.trim();
+  if (!text) return { ok: false as const, error: "Nothing to log." };
+
+  await prisma.$transaction([
+    prisma.prospectActivity.create({
+      data: { prospectId: id, kind, body: text, author: me.name || me.email },
+    }),
+    // A logged touch is the only honest source for "when did we last speak".
+    prisma.prospect.update({
+      where: { id },
+      data: { lastContact: new Date().toISOString().slice(0, 10) },
+    }),
+  ]);
+  revalidatePath("/prospects");
+  return { ok: true as const };
+}
+
+/**
+ * Promote a won crew into the real subcontractor roster.
+ *
+ * The prospect stays, marked converted and pointing at the record it became —
+ * deleting it would lose how the relationship started, which is exactly what
+ * you want to know when deciding whether a channel is worth working again.
+ */
+export async function convertProspectToSubcontractor(id: string) {
+  const me = await requireStaff();
+  const p = await prisma.prospect.findUnique({ where: { id } });
+  if (!p) return { ok: false as const, error: "Prospect not found." };
+  if (p.convertedSubcontractorId) {
+    return { ok: false as const, error: `${p.name} has already been converted.` };
+  }
+  if (p.kind === "PRIME") {
+    return {
+      ok: false as const,
+      error: "A prime contractor is somebody you work for — add them under Customers, not Subcontractors.",
+    };
+  }
+
+  const existing = await prisma.subcontractor.findFirst({
+    where: { company: { equals: p.name, mode: "insensitive" } },
+    select: { id: true },
+  });
+  if (existing) {
+    return { ok: false as const, error: `A subcontractor called ${p.name} already exists.` };
+  }
+
+  const sub = await prisma.subcontractor.create({
+    data: {
+      company: p.name,
+      lead: p.contactName,
+      email: p.email,
+      phone: p.phone,
+      location: [p.city, p.homeState].filter(Boolean).join(", "),
+      trades: p.trades,
+      crewSize: p.crewSize,
+      equipment: p.equipment,
+      state: "PENDING_REVIEW",
+      notes: p.notes,
+    },
+  });
+
+  await prisma.$transaction([
+    prisma.prospect.update({
+      where: { id },
+      data: { stage: "WON", convertedSubcontractorId: sub.id, convertedAt: new Date() },
+    }),
+    prisma.prospectActivity.create({
+      data: {
+        prospectId: id,
+        kind: "stage",
+        body: "Converted to a subcontractor",
+        author: me.name || me.email,
+      },
+    }),
+  ]);
+
+  revalidatePath("/prospects");
+  revalidatePath("/subcontractors");
+  return { ok: true as const, subcontractorId: sub.id };
 }

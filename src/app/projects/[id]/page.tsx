@@ -9,6 +9,7 @@ import {
   getProjectMaterialImports,
   getProjectMaterials,
   getProjectPhotos,
+  getProjectCrews,
   getProjectRates,
   getProjectSchedule,
   getRatedCrews,
@@ -19,6 +20,7 @@ import {
   formatPercent,
 } from "@/lib/format";
 import { ProjectCover } from "@/components/projects/project-cover";
+import { ProjectCrews } from "@/components/projects/project-crews";
 import { ProjectValue } from "@/components/projects/project-value";
 import { getCurrentUser, isStaff } from "@/lib/auth";
 import { PageShell } from "@/components/common/page-shell";
@@ -52,7 +54,7 @@ export default async function ProjectDetailPage({
   const customers = staff ? await getCustomers() : [];
 
   // The valuation is staff-only and throws for a crew by design, so don't ask.
-  const [materialImports, trackedMaterials, valuation, photos, projectRates, ratedCrews, schedule] = await Promise.all([
+  const [materialImports, trackedMaterials, valuation, photos, projectRates, ratedCrews, schedule, projectCrews] = await Promise.all([
     getProjectMaterialImports(project.id, project.name),
     getProjectMaterials(project.id),
     staff ? getProjectValuation(project.id) : Promise.resolve(null),
@@ -60,6 +62,7 @@ export default async function ProjectDetailPage({
     staff ? getProjectRates(project.id) : Promise.resolve(null),
     staff ? getRatedCrews() : Promise.resolve([]),
     getProjectSchedule(project.id),
+    staff ? getProjectCrews(project.id) : Promise.resolve([]),
   ]);
 
 
@@ -84,6 +87,12 @@ export default async function ProjectDetailPage({
         </Link>
         <ProjectHeaderActions projectId={project.id} photoUrl={project.photoUrl} />
       </div>
+
+      {staff ? (
+        <div className="mb-3">
+          <ProjectCrews crews={projectCrews} />
+        </div>
+      ) : null}
 
       {/* The cover photo, where it belongs — this is the page you land on to
           orient yourself, and an aerial does that faster than any number. Drop
