@@ -15,7 +15,7 @@ export const navSections: NavSection[] = [
       { label: "Subcontractors", href: "/subcontractors", icon: "users" },
       { label: "Customers", href: "/customers", icon: "customers" },
       { label: "Materials", href: "/materials", icon: "materials" },
-      { label: "Crews", href: "/crews", icon: "crew" },
+      { label: "Tasks", href: "/tasks", icon: "clipboard" },
       { label: "Documents", href: "/documents", icon: "document" },
     ],
   },
@@ -66,6 +66,7 @@ export const subNavSections: NavSection[] = [
       { label: "Company profile", href: "/company", icon: "users" },
       { label: "Yard badges", href: "/badges", icon: "idCard" },
       { label: "Pay statements", href: "/pay", icon: "payapps" },
+      { label: "Tasks", href: "/tasks", icon: "clipboard" },
     ],
   },
 ];

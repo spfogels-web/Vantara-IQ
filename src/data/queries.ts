@@ -34,7 +34,6 @@ import {
 } from "@/lib/unit-codes";
 import {
   brief,
-  crews,
   deadlines,
   healthSummary,
   invoices,
@@ -50,7 +49,6 @@ import {
 import type {
   AppNotification,
   BriefItem,
-  Crew,
   Customer,
   CustomerContact,
   DailyFlag,
@@ -401,10 +399,6 @@ export async function getProductionSummary(): Promise<ProductionSummary> {
 
 export async function getRevenueSummary(): Promise<RevenueSummary> {
   return revenueSummary;
-}
-
-export async function getCrews(): Promise<Crew[]> {
-  return crews;
 }
 
 export async function getDeadlines(): Promise<Deadline[]> {
@@ -2727,4 +2721,128 @@ export async function getSubInvoices(): Promise<SubInvoiceRow[]> {
     select: SUB_INVOICE_SELECT,
   });
   return rows.map(toSubInvoiceRow);
+}
+
+/* ------------------------------------------------------------------ *
+ * Tasks — work assigned to a person or a crew.
+ * ------------------------------------------------------------------ */
+
+export interface TaskRow {
+  id: string;
+  title: string;
+  detail: string;
+  status: string;
+  priority: string;
+  dueDate: string;
+  statusNote: string;
+  assigneeUserId: string | null;
+  assigneeSubId: string | null;
+  /** Whoever it is on, in one field for display. */
+  assigneeName: string;
+  assigneeKind: "employee" | "crew" | "unassigned";
+  projectId: string | null;
+  projectName: string;
+  createdByEmail: string;
+  completedAt: string | null;
+  completedBy: string;
+  createdAt: string;
+  /** Past its due date and not finished. */
+  overdue: boolean;
+}
+
+const TASK_SELECT = {
+  id: true, title: true, detail: true, status: true, priority: true,
+  dueDate: true, statusNote: true, assigneeUserId: true, assigneeSubId: true,
+  projectId: true, createdByEmail: true, completedAt: true, completedBy: true,
+  createdAt: true,
+  assigneeUser: { select: { name: true, email: true } },
+  assigneeSub: { select: { company: true } },
+  project: { select: { name: true } },
+};
+
+function toTaskRow(t: {
+  id: string; title: string; detail: string; status: string; priority: string;
+  dueDate: string; statusNote: string; assigneeUserId: string | null;
+  assigneeSubId: string | null; projectId: string | null; createdByEmail: string;
+  completedAt: Date | null; completedBy: string; createdAt: Date;
+  assigneeUser: { name: string; email: string } | null;
+  assigneeSub: { company: string } | null;
+  project: { name: string } | null;
+}): TaskRow {
+  const today = new Date().toISOString().slice(0, 10);
+  const done = t.status === "DONE" || t.status === "CANCELLED";
+  return {
+    id: t.id,
+    title: t.title,
+    detail: t.detail,
+    status: t.status,
+    priority: t.priority,
+    dueDate: t.dueDate,
+    statusNote: t.statusNote,
+    assigneeUserId: t.assigneeUserId,
+    assigneeSubId: t.assigneeSubId,
+    assigneeName:
+      t.assigneeUser?.name || t.assigneeUser?.email || t.assigneeSub?.company || "Unassigned",
+    assigneeKind: t.assigneeUser ? "employee" : t.assigneeSub ? "crew" : "unassigned",
+    projectId: t.projectId,
+    projectName: t.project?.name ?? "",
+    createdByEmail: t.createdByEmail,
+    completedAt: t.completedAt?.toISOString().slice(0, 16).replace("T", " ") ?? null,
+    completedBy: t.completedBy,
+    createdAt: t.createdAt.toISOString().slice(0, 10),
+    // A blank due date is not overdue; it simply has no date.
+    overdue: Boolean(t.dueDate) && !done && t.dueDate < today,
+  };
+}
+
+/**
+ * Tasks the viewer is allowed to see.
+ *
+ * Staff see everything. A crew sees only what is assigned to them — not their
+ * own unassigned work, not another crew's, and nothing internal. A task is
+ * often the first place somebody writes down why a crew is being chased, so
+ * the scoping matters as much as it does on rates.
+ */
+export async function getTasks(): Promise<TaskRow[]> {
+  const user = await requireUser();
+
+  const where = isStaff(user.role)
+    ? {}
+    : user.subcontractorId
+      ? { assigneeSubId: user.subcontractorId }
+      : { id: "" };
+
+  const rows = await prisma.task.findMany({
+    where,
+    orderBy: [{ status: "asc" }, { dueDate: "asc" }, { createdAt: "desc" }],
+    select: TASK_SELECT,
+  });
+  return rows.map(toTaskRow);
+}
+
+/** Who a task can be put on. Staff only — it lists every employee and crew. */
+export async function getTaskAssignees(): Promise<{
+  employees: { id: string; name: string }[];
+  crews: { id: string; company: string }[];
+  projects: { id: string; name: string }[];
+}> {
+  await requireStaff();
+  const [employees, crews, projects] = await Promise.all([
+    prisma.user.findMany({
+      where: { role: { not: "SUBCONTRACTOR" } },
+      select: { id: true, name: true, email: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.subcontractor.findMany({
+      where: { state: { in: ["ACTIVE", "PENDING_REVIEW"] } },
+      select: { id: true, company: true },
+      orderBy: { company: "asc" },
+    }),
+    prisma.project.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
+  ]);
+  return {
+    employees: employees.map((e) => ({ id: e.id, name: e.name || e.email })),
+    crews,
+    projects,
+  };
 }

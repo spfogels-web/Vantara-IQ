@@ -54,6 +54,7 @@ import {
   assertSubcontractorWrite,
   bindInviteToSubcontractor,
   viewer,
+  NotAuthorizedError,
 } from "@/lib/authz";
 
 /**
@@ -3628,4 +3629,281 @@ export async function updateDailyPhotos(sheetId: string, photos: unknown) {
   revalidatePath("/dailies");
   if (sheet.projectId) revalidatePath(`/projects/${sheet.projectId}`);
   return { ok: true as const, count: list.length };
+}
+
+/* ------------------------------------------------------------------ *
+ * Tasks — work assigned to a person or a crew.
+ * ------------------------------------------------------------------ */
+
+/** Everyone who may touch a given task: staff, or the crew it is on. */
+async function assertTaskAccess(taskId: string) {
+  const user = await requireUser();
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: { assigneeSubId: true },
+  });
+  if (!task) throw new NotAuthorizedError("Task not found.");
+  if (isStaff(user.role)) return { user, task };
+  if (task.assigneeSubId && task.assigneeSubId === user.subcontractorId) return { user, task };
+  throw new NotAuthorizedError("That task isn't assigned to you.");
+}
+
+export async function createTask(input: {
+  title: string;
+  detail?: string;
+  priority?: string;
+  dueDate?: string;
+  assigneeUserId?: string | null;
+  assigneeSubId?: string | null;
+  projectId?: string | null;
+}) {
+  const user = await requireStaff();
+
+  const title = input.title.trim();
+  if (!title) return { ok: false as const, error: "Give the task a title." };
+  if (input.dueDate && !/^\d{4}-\d{2}-\d{2}$/.test(input.dueDate)) {
+    return { ok: false as const, error: "Enter the due date as YYYY-MM-DD." };
+  }
+  // One assignee or none — never both, or two people each think it is theirs
+  // and neither does it.
+  if (input.assigneeUserId && input.assigneeSubId) {
+    return { ok: false as const, error: "Assign it to a person or a crew, not both." };
+  }
+
+  const task = await prisma.task.create({
+    data: {
+      title,
+      detail: input.detail?.trim() ?? "",
+      priority: (["LOW", "NORMAL", "HIGH", "URGENT"].includes(input.priority ?? "")
+        ? input.priority
+        : "NORMAL") as never,
+      dueDate: input.dueDate ?? "",
+      assigneeUserId: input.assigneeUserId || null,
+      assigneeSubId: input.assigneeSubId || null,
+      projectId: input.projectId || null,
+      createdByEmail: user.email,
+    },
+    select: { id: true },
+  });
+
+  revalidatePath("/tasks");
+  return { ok: true as const, id: task.id };
+}
+
+export async function updateTask(
+  id: string,
+  patch: {
+    title?: string;
+    detail?: string;
+    priority?: string;
+    dueDate?: string;
+    assigneeUserId?: string | null;
+    assigneeSubId?: string | null;
+    projectId?: string | null;
+  },
+) {
+  await requireStaff();
+  if (patch.assigneeUserId && patch.assigneeSubId) {
+    return { ok: false as const, error: "Assign it to a person or a crew, not both." };
+  }
+
+  await prisma.task.update({
+    where: { id },
+    data: {
+      ...(patch.title != null ? { title: patch.title.trim() } : {}),
+      ...(patch.detail != null ? { detail: patch.detail.trim() } : {}),
+      ...(patch.priority ? { priority: patch.priority as never } : {}),
+      ...(patch.dueDate != null ? { dueDate: patch.dueDate } : {}),
+      ...(patch.assigneeUserId !== undefined
+        ? { assigneeUserId: patch.assigneeUserId || null, assigneeSubId: null }
+        : {}),
+      ...(patch.assigneeSubId !== undefined
+        ? { assigneeSubId: patch.assigneeSubId || null, assigneeUserId: null }
+        : {}),
+      ...(patch.projectId !== undefined ? { projectId: patch.projectId || null } : {}),
+    },
+  });
+  revalidatePath("/tasks");
+  return { ok: true as const };
+}
+
+/**
+ * Move a task along, and write the move into its own thread.
+ *
+ * The history reads in one column that way — what was said and what was done,
+ * in the order it happened, rather than a status field that changed at some
+ * point nobody can place.
+ */
+export async function setTaskStatus(id: string, status: string, note = "") {
+  const { user } = await assertTaskAccess(id);
+
+  const allowed = ["OPEN", "IN_PROGRESS", "BLOCKED", "DONE", "CANCELLED"];
+  if (!allowed.includes(status)) return { ok: false as const, error: "Unknown status." };
+  // Blocked without a reason is just "not done", which the board already knew.
+  if ((status === "BLOCKED" || status === "CANCELLED") && !note.trim()) {
+    return {
+      ok: false as const,
+      error: status === "BLOCKED" ? "Say what it's waiting on." : "Say why it's being cancelled.",
+    };
+  }
+
+  const done = status === "DONE";
+  await prisma.task.update({
+    where: { id },
+    data: {
+      status: status as never,
+      statusNote: note.trim(),
+      completedAt: done ? new Date() : null,
+      completedBy: done ? user.name || user.email : "",
+    },
+  });
+
+  const label: Record<string, string> = {
+    OPEN: "reopened this",
+    IN_PROGRESS: "started work",
+    BLOCKED: "marked it blocked",
+    DONE: "marked it done",
+    CANCELLED: "cancelled it",
+  };
+  await prisma.taskComment.create({
+    data: {
+      taskId: id,
+      body: note.trim() ? `${label[status]} — ${note.trim()}` : label[status],
+      systemNote: true,
+      authorName: user.name || user.email,
+      authorEmail: user.email,
+    },
+  });
+
+  revalidatePath("/tasks");
+  return { ok: true as const };
+}
+
+export async function addTaskComment(id: string, body: string) {
+  const { user } = await assertTaskAccess(id);
+  if (!body.trim()) return { ok: false as const, error: "Nothing to say." };
+
+  await prisma.taskComment.create({
+    data: {
+      taskId: id,
+      body: body.trim(),
+      authorName: user.name || user.email,
+      authorEmail: user.email,
+    },
+  });
+  revalidatePath("/tasks");
+  return { ok: true as const };
+}
+
+/**
+ * Attach a photo to a task, already uploaded to Blob by the browser.
+ *
+ * PROBLEM or RESOLUTION — what was found, or what was done about it. A task
+ * closed with the fix beside the fault settles an argument that words do not.
+ */
+export async function addTaskPhoto(input: {
+  taskId: string;
+  url: string;
+  mediaType: string;
+  sizeBytes: number;
+  kind: "PROBLEM" | "RESOLUTION";
+  caption?: string;
+  lat?: number | null;
+  lng?: number | null;
+  locationSource?: string;
+}) {
+  const { user } = await assertTaskAccess(input.taskId);
+  if (!input.url.trim()) return { ok: false as const, error: "No file was uploaded." };
+
+  // Same rule as the project gallery: a coordinate is stored only with a
+  // source behind it, never inferred.
+  const located =
+    typeof input.lat === "number" &&
+    typeof input.lng === "number" &&
+    Number.isFinite(input.lat) &&
+    Number.isFinite(input.lng) &&
+    input.locationSource === "device";
+
+  await prisma.taskPhoto.create({
+    data: {
+      taskId: input.taskId,
+      url: input.url,
+      mediaType: input.mediaType || "",
+      sizeBytes: Math.max(0, Math.round(input.sizeBytes || 0)),
+      kind: input.kind === "RESOLUTION" ? "RESOLUTION" : "PROBLEM",
+      caption: input.caption?.trim() ?? "",
+      lat: located ? input.lat : null,
+      lng: located ? input.lng : null,
+      locationSource: located ? "device" : "",
+      uploadedBy: user.name || user.email,
+    },
+  });
+
+  revalidatePath("/tasks");
+  return { ok: true as const };
+}
+
+export async function deleteTaskPhoto(id: string) {
+  const photo = await prisma.taskPhoto.findUnique({ where: { id }, select: { taskId: true } });
+  if (!photo) return { ok: false as const, error: "Photo not found." };
+  await assertTaskAccess(photo.taskId);
+
+  await prisma.taskPhoto.delete({ where: { id } });
+  revalidatePath("/tasks");
+  return { ok: true as const };
+}
+
+/** Staff only — a crew closes a task, it never deletes one. */
+export async function deleteTask(id: string) {
+  await requireStaff();
+  await prisma.task.delete({ where: { id } });
+  revalidatePath("/tasks");
+  return { ok: true as const };
+}
+
+/** One task with its thread and photos. Scoped inside. */
+export async function getTaskDetail(id: string) {
+  await assertTaskAccess(id);
+
+  const task = await prisma.task.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      photos: {
+        orderBy: { createdAt: "asc" },
+        select: {
+          id: true, url: true, kind: true, caption: true,
+          lat: true, lng: true, uploadedBy: true, createdAt: true,
+        },
+      },
+      comments: {
+        orderBy: { createdAt: "asc" },
+        select: {
+          id: true, body: true, systemNote: true,
+          authorName: true, createdAt: true,
+        },
+      },
+    },
+  });
+  if (!task) return null;
+
+  return {
+    photos: task.photos.map((p) => ({
+      id: p.id,
+      url: p.url,
+      kind: p.kind,
+      caption: p.caption,
+      lat: p.lat,
+      lng: p.lng,
+      uploadedBy: p.uploadedBy,
+      createdAt: p.createdAt.toISOString().slice(0, 16).replace("T", " "),
+    })),
+    comments: task.comments.map((c) => ({
+      id: c.id,
+      body: c.body,
+      systemNote: c.systemNote,
+      authorName: c.authorName,
+      createdAt: c.createdAt.toISOString().slice(0, 16).replace("T", " "),
+    })),
+  };
 }

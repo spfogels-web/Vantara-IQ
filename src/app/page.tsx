@@ -2,7 +2,6 @@ import { Suspense } from "react";
 
 import {
   getBrief,
-  getCrews,
   getDeadlines,
   getHealthSummary,
   getKpis,
@@ -13,6 +12,7 @@ import {
   getPortfolioSummary,
   getProjectsRequiringAttention,
   getRevenueSummary,
+  getTasks,
 } from "@/data/queries";
 
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -24,7 +24,7 @@ import { ProjectsTable } from "@/components/dashboard/projects-table";
 import { ProductionChart } from "@/components/dashboard/production-chart";
 import { ProductionSplitPanel } from "@/components/dashboard/production-split";
 import { RevenueCards } from "@/components/dashboard/revenue-cards";
-import { CrewAvailability } from "@/components/dashboard/crew-availability";
+import { OpenTasks } from "@/components/dashboard/open-tasks";
 import { UpcomingDeadlines } from "@/components/dashboard/upcoming-deadlines";
 import { MissingDocuments } from "@/components/dashboard/missing-documents";
 import { NotificationsPanel } from "@/components/dashboard/notifications-panel";
@@ -81,9 +81,9 @@ async function RevenueSection() {
   return <RevenueCards summary={summary} />;
 }
 
-async function CrewSection() {
-  const crews = await getCrews();
-  return <CrewAvailability crews={crews} />;
+async function TaskSection() {
+  const tasks = await getTasks();
+  return <OpenTasks tasks={tasks} />;
 }
 
 async function DeadlinesSection() {
@@ -154,7 +154,7 @@ export default async function OperationsCenterPage() {
         </div>
         <div className="xl:col-span-4">
           <Suspense fallback={<ListPanelSkeleton rows={7} />}>
-            <CrewSection />
+            <TaskSection />
           </Suspense>
         </div>
 
