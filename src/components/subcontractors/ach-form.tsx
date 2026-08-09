@@ -2,10 +2,21 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Building2, Check, Landmark, Loader2, Lock, PenLine, ShieldCheck } from "lucide-react";
+import {
+  Building2,
+  Camera,
+  Check,
+  Image as ImageIcon,
+  Landmark,
+  Loader2,
+  Lock,
+  PenLine,
+  ShieldCheck,
+  Upload,
+} from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { saveAchAuthorization } from "@/app/actions";
+import { saveAchAuthorization, uploadSubDocument } from "@/app/actions";
 import type { AchView } from "@/app/actions";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 
@@ -55,11 +66,14 @@ function Field({
 export function AchForm({
   subcontractorId,
   existing,
+  existingProof,
   inviteToken,
   onSaved,
 }: {
   subcontractorId: string;
   existing: AchView | null;
+  /** Name of the voided cheque / statement already on file, if any. */
+  existingProof?: string | null;
   inviteToken?: string;
   onSaved?: () => void;
 }) {
@@ -67,6 +81,26 @@ export function AchForm({
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [saved, setSaved] = React.useState(false);
+
+  const [proof, setProof] = React.useState<string | null>(existingProof ?? null);
+  const [uploadingProof, setUploadingProof] = React.useState(false);
+  const [proofError, setProofError] = React.useState<string | null>(null);
+  const proofRef = React.useRef<HTMLInputElement>(null);
+  const cameraRef = React.useRef<HTMLInputElement>(null);
+
+  async function uploadProof(file: File) {
+    setUploadingProof(true);
+    setProofError(null);
+    const fd = new FormData();
+    fd.set("file", file);
+    fd.set("subcontractorId", subcontractorId);
+    fd.set("section", "payment");
+    if (inviteToken) fd.set("inviteToken", inviteToken);
+    const res = await uploadSubDocument(fd);
+    setUploadingProof(false);
+    if (res.ok) setProof(res.doc.fileName);
+    else setProofError(res.error ?? "That did not upload.");
+  }
 
   const [f, setF] = React.useState({
     legalName: existing?.legalName ?? "",
@@ -263,6 +297,92 @@ export function AchForm({
               set. Everything else on this form saves; leave the two number fields blank for now.
             </p>
           ) : null}
+
+          {/* Proof of the account, taken beside the numbers rather than filed
+              separately. A transposed digit in a routing number is caught by
+              its check digit; a transposed digit in an account number is not,
+              and the only thing that catches it is a picture of the source. */}
+          <div className="rounded-lg border border-border/70 bg-foreground/[0.02] p-3">
+            <p className="flex items-center gap-1.5 text-[11.5px] font-semibold text-foreground">
+              <ImageIcon className="size-3.5 text-brand-bright" />
+              Proof of account
+              <span className="text-critical">*</span>
+            </p>
+            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+              A photo of a voided check, or a screenshot from online banking showing the account
+              number and the wire/routing details. Make sure the numbers are readable and nothing is
+              cropped off — this is what we check the typed numbers against before paying you.
+            </p>
+
+            {proof ? (
+              <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                <span className="inline-flex min-w-0 items-center gap-1.5 rounded-lg border border-success/30 bg-success/[0.07] px-2.5 py-1.5 text-[11.5px] text-success">
+                  <Check className="size-3.5 shrink-0" />
+                  <span className="truncate">{proof}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => proofRef.current?.click()}
+                  disabled={uploadingProof}
+                  className="focus-ring rounded-lg border border-border px-2.5 py-1.5 text-[11.5px] text-muted-foreground hover:text-foreground disabled:opacity-40"
+                >
+                  Replace
+                </button>
+              </div>
+            ) : (
+              <div className="mt-2.5 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => cameraRef.current?.click()}
+                  disabled={uploadingProof}
+                  className="focus-ring inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-[12px] font-medium text-foreground hover:bg-foreground/[0.05] disabled:opacity-40 sm:hidden"
+                >
+                  {uploadingProof ? <Loader2 className="size-3.5 animate-spin" /> : <Camera className="size-3.5" />}
+                  Take a photo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => proofRef.current?.click()}
+                  disabled={uploadingProof}
+                  className="focus-ring inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-[12px] font-medium text-foreground hover:bg-foreground/[0.05] disabled:opacity-40"
+                >
+                  {uploadingProof ? <Loader2 className="size-3.5 animate-spin" /> : <Upload className="size-3.5" />}
+                  Upload an image or PDF
+                </button>
+              </div>
+            )}
+
+            {/* Two inputs rather than one: `capture` asks the phone for the
+                camera directly, which is what somebody standing at a truck
+                wants, while the plain picker is what a desktop needs. */}
+            <input
+              ref={cameraRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              hidden
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (file) void uploadProof(file);
+              }}
+            />
+            <input
+              ref={proofRef}
+              type="file"
+              accept="image/*,application/pdf"
+              hidden
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (file) void uploadProof(file);
+              }}
+            />
+
+            {proofError ? (
+              <p className="mt-2 text-[11.5px] text-critical">{proofError}</p>
+            ) : null}
+          </div>
         </PanelBody>
 
         {/* The authorisation */}

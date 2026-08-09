@@ -55,7 +55,7 @@ export default async function CompanyProfilePage() {
 
         {/* How they get paid. Above the general packet because it is the
             thing a crew chases, and it is the thing that holds up a payment. */}
-        <AchForm subcontractorId={me.subcontractorId} existing={ach} />
+        <AchForm subcontractorId={me.subcontractorId} existing={ach} existingProof={ach?.proofFileName} />
 
         <VendorPacketForm packet={packet} />
       </div>

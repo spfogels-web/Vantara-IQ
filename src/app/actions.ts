@@ -3233,6 +3233,11 @@ export interface AchView {
   signatureDataUrl: string;
   signedDate: string;
   submittedAt: string | null;
+  /**
+   * Name of the voided cheque or statement on file. The file itself is not
+   * pulled here — this screen only needs to know that one exists.
+   */
+  proofFileName: string | null;
   /** False when the environment has no key, so the form can say why. */
   canStore: boolean;
 }
@@ -3251,6 +3256,14 @@ export async function getAchAuthorization(subcontractorId: string): Promise<AchV
   const row = await prisma.achAuthorization.findUnique({ where: { subcontractorId } });
   if (!row) return null;
 
+  // Name only. The image is megabytes of base64 and nothing on this screen
+  // draws it — knowing one is on file is the whole question.
+  const proof = await prisma.subDocument.findFirst({
+    where: { subcontractorId, section: "payment" },
+    orderBy: { createdAt: "desc" },
+    select: { fileName: true },
+  });
+
   return {
     legalName: row.legalName, dba: row.dba, ein: row.ein,
     addressLine1: row.addressLine1, addressLine2: row.addressLine2,
@@ -3266,6 +3279,7 @@ export async function getAchAuthorization(subcontractorId: string): Promise<AchV
     signatureDataUrl: row.signatureDataUrl,
     signedDate: row.signedDate,
     submittedAt: row.submittedAt?.toISOString().slice(0, 10) ?? null,
+    proofFileName: proof?.fileName ?? null,
     canStore: canStoreBankDetails(),
   };
 }
@@ -3333,6 +3347,23 @@ export async function saveAchAuthorization(input: {
   // stored value so a typo elsewhere doesn't mean re-keying the account.
   if (!existing && (!account || !routing)) {
     return { ok: false as const, error: "Account number and routing number are both needed." };
+  }
+
+  // A routing number carries a check digit, so a typo in it is caught here. An
+  // account number carries nothing of the sort, and the only thing that catches
+  // a transposed digit is the picture it was copied from — so a first
+  // submission has to have one. An edit does not: it is already on file.
+  if (!existing) {
+    const proof = await prisma.subDocument.count({
+      where: { subcontractorId: input.subcontractorId, section: "payment" },
+    });
+    if (proof === 0) {
+      return {
+        ok: false as const,
+        error:
+          "Add a photo of a voided check or a screenshot of your account and wire details first — we check the typed numbers against it before paying.",
+      };
+    }
   }
   if (account && !/^\d{4,17}$/.test(account)) {
     return { ok: false as const, error: "An account number is 4 to 17 digits." };

@@ -57,13 +57,10 @@ export const DOC_SECTIONS = [
     canFollow: false,
   },
   { key: "w9", label: "W-9", detail: "Signed W-9 tax form.", required: true, canFollow: false },
-  {
-    key: "payment",
-    label: "Payment / ACH",
-    detail: "Voided check or signed ACH authorization.",
-    required: true,
-    canFollow: false,
-  },
+  // Banking is not collected here. The account and routing numbers are typed
+  // into the signed form on the Payment step, where they can be validated and
+  // encrypted, and the voided cheque is photographed on that same step so the
+  // numbers and the proof of them arrive together rather than in two places.
   {
     key: "insurance",
     label: "Certificate of insurance (COI)",

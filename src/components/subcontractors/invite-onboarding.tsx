@@ -11,6 +11,7 @@ import { BrandLogo } from "@/components/common/brand-logo";
 import { LogoUpload } from "@/components/common/logo-upload";
 import { DocumentCenter } from "@/components/subcontractors/document-center";
 import { AgreementStep } from "@/components/subcontractors/agreement-step";
+import { AchForm } from "@/components/subcontractors/ach-form";
 
 export type InviteProject = {
   name: string;
@@ -39,7 +40,7 @@ const EQUIPMENT_PLACEHOLDER = ["Directional drill", "Mini excavator", "Vac trail
 const inputClass =
   "w-full rounded-lg border border-foreground/[0.1] bg-foreground/[0.03] px-3 py-2.5 text-[13px] text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-brand/40";
 
-type Step = "account" | "capabilities" | "agreement" | "documents" | "done";
+type Step = "account" | "capabilities" | "agreement" | "payment" | "documents" | "done";
 
 export function InviteOnboarding({ token, project }: { token: string; project: InviteProject }) {
   const [step, setStep] = React.useState<Step>("account");
@@ -48,6 +49,8 @@ export function InviteOnboarding({ token, project }: { token: string; project: I
   const [account, setAccount] = React.useState({ company: "", name: "", email: "", password: "" });
   const [caps, setCaps] = React.useState({ crews: "", fieldStaff: "", equipment: "", trades: [] as string[] });
   const [agreementDownloaded, setAgreementDownloaded] = React.useState(false);
+  /** Set once the signed ACH authorisation has been accepted by the server. */
+  const [achSaved, setAchSaved] = React.useState(false);
   const [docStatus, setDocStatus] = React.useState<{ canSubmit: boolean; blockers: string[] }>({
     canSubmit: false,
     blockers: [],
@@ -287,10 +290,10 @@ export function InviteOnboarding({ token, project }: { token: string; project: I
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <button
               type="button"
-              onClick={() => setStep("documents")}
+              onClick={() => setStep("payment")}
               className="brand-gradient focus-ring inline-flex items-center gap-1.5 rounded-lg px-4 py-2.5 text-[13px] font-semibold text-white"
             >
-              Continue to documents
+              Continue to payment
             </button>
             <button
               type="button"
@@ -301,9 +304,47 @@ export function InviteOnboarding({ token, project }: { token: string; project: I
             </button>
           </div>
         </div>
-      ) : step === "documents" && subId ? (
+      ) : step === "payment" && subId ? (
         <div className="mt-6">
           <StepBar current={4} />
+          <div className="mt-4">
+            {/* Filled in here rather than uploaded. The account and routing
+                numbers are validated and encrypted on the way in, which a
+                photograph of a voided cheque cannot be. */}
+            <AchForm
+              subcontractorId={subId}
+              existing={null}
+              inviteToken={token}
+              onSaved={() => setAchSaved(true)}
+            />
+          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setStep("documents")}
+              disabled={!achSaved}
+              title={achSaved ? undefined : "Fill in and sign the authorisation first"}
+              className="brand-gradient focus-ring inline-flex items-center gap-1.5 rounded-lg px-4 py-2.5 text-[13px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Continue to documents
+            </button>
+            <button
+              type="button"
+              onClick={() => setStep("agreement")}
+              className="focus-ring rounded-lg border border-border px-3 py-2.5 text-[12.5px] text-muted-foreground hover:text-foreground"
+            >
+              Back
+            </button>
+            {!achSaved ? (
+              <span className="text-[12px] text-muted-foreground">
+                Fortitude cannot pay you without this.
+              </span>
+            ) : null}
+          </div>
+        </div>
+      ) : step === "documents" && subId ? (
+        <div className="mt-6">
+          <StepBar current={5} />
           <div className="surface mt-4 p-5">
             <h2 className="text-[15px] font-semibold text-foreground">Your documents</h2>
             <p className="mt-1 text-[12px] text-muted-foreground">
@@ -335,7 +376,7 @@ export function InviteOnboarding({ token, project }: { token: string; project: I
             </button>
             <button
               type="button"
-              onClick={() => setStep("agreement")}
+              onClick={() => setStep("payment")}
               className="focus-ring rounded-lg border border-border px-3 py-2.5 text-[12.5px] text-muted-foreground hover:text-foreground"
             >
               Back
@@ -400,7 +441,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
  * have to do" is the question being asked, and a percentage does not answer it.
  */
 function StepBar({ current }: { current: number }) {
-  const steps = ["Account", "Capabilities", "Agreement", "Documents"];
+  const steps = ["Account", "Capabilities", "Agreement", "Payment", "Documents"];
   return (
     <ol className="flex flex-wrap items-center gap-x-2 gap-y-2">
       {steps.map((label, i) => {
