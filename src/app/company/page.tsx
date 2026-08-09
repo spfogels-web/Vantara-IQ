@@ -1,11 +1,15 @@
 import { redirect } from "next/navigation";
 
 import { getCrewBadges, getDocuments, getVendorPacket } from "@/data/queries";
-import { getAchAuthorization } from "@/app/actions";
+import { getAchAuthorization, listSubDocuments } from "@/app/actions";
 import { getCurrentUser } from "@/lib/auth";
+import { FileUp } from "lucide-react";
+
 import { PageShell } from "@/components/common/page-shell";
 import { VendorPacketForm } from "@/components/subcontractors/vendor-packet-form";
 import { DocumentList } from "@/components/documents/document-list";
+import { DocumentCenter } from "@/components/subcontractors/document-center";
+import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { AchForm } from "@/components/subcontractors/ach-form";
 import { BadgeSection } from "@/components/subcontractors/badge-section";
 
@@ -25,11 +29,12 @@ export default async function CompanyProfilePage() {
   if (!me) redirect("/login");
   if (!me.subcontractorId) redirect("/subcontractors");
 
-  const [packet, docs, badges, ach] = await Promise.all([
+  const [packet, docs, badges, ach, myDocs] = await Promise.all([
     getVendorPacket(me.subcontractorId),
     getDocuments(),
     getCrewBadges(me.subcontractorId),
     getAchAuthorization(me.subcontractorId),
+    listSubDocuments(me.subcontractorId),
   ]);
   if (!packet) redirect("/dailies");
 
@@ -44,6 +49,23 @@ export default async function CompanyProfilePage() {
             looking for their signed rates or their agreement, not to re-edit
             their EIN — so the thing they came for goes first. */}
         <DocumentList docs={docs} />
+
+        {/* The same slots they filled during onboarding, still open afterwards.
+            A COI expires every year, an agreement gets re-signed, a W-9 changes
+            when the entity does — so this is not a one-time gate, and a crew
+            with a newer certificate needs somewhere to put it without ringing
+            the office. Uploading again adds a copy rather than replacing one:
+            the old certificate is what was true for the work done under it. */}
+        <Panel>
+          <PanelHeader
+            title="Upload or update a document"
+            description="Send a new certificate, a re-signed agreement, or anything Fortitude has asked for"
+            icon={<FileUp className="size-3.5" />}
+          />
+          <PanelBody>
+            <DocumentCenter subcontractorId={me.subcontractorId} initialDocs={myDocs} />
+          </PanelBody>
+        </Panel>
 
         {/* Who can collect material. A crew clears nobody themselves — they
             put the documents up and Fortitude decides. */}

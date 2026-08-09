@@ -683,7 +683,7 @@ export async function uploadSubDocument(formData: FormData) {
       fileName: doc.fileName,
       mediaType: doc.mediaType,
       sizeBytes: doc.sizeBytes,
-      dataUrl: doc.dataUrl,
+      url: `/api/sub-document/${doc.id}`,
       uploadedBy: doc.uploadedBy,
       createdAt: doc.createdAt.toISOString(),
     },
@@ -710,7 +710,10 @@ export async function listSubDocuments(subcontractorId: string) {
     fileName: d.fileName,
     mediaType: d.mediaType,
     sizeBytes: d.sizeBytes,
-    dataUrl: d.dataUrl,
+    // A link, not the file. These are stored as base64, so returning every
+    // one shipped megabytes to draw a list of filenames — the bytes come
+    // through the route when somebody actually opens one.
+    url: `/api/sub-document/${d.id}`,
     uploadedBy: d.uploadedBy,
     createdAt: d.createdAt.toISOString(),
   }));

@@ -21,7 +21,8 @@ export type SubDoc = {
   fileName: string;
   mediaType: string;
   sizeBytes: number;
-  dataUrl: string;
+  /** Authenticated download link. The bytes are fetched when opened, not listed. */
+  url: string;
   uploadedBy: string;
   createdAt: string;
 };
@@ -248,7 +249,7 @@ export function DocumentCenter({
                       {d.uploadedBy === "contractor" ? "Fortitude" : "Sub"}
                     </span>
                     <a
-                      href={d.dataUrl}
+                      href={d.url}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="focus-ring grid size-6 place-items-center rounded text-muted-foreground hover:text-foreground"
@@ -257,7 +258,7 @@ export function DocumentCenter({
                       <Eye className="size-3.5" />
                     </a>
                     <a
-                      href={d.dataUrl}
+                      href={d.url}
                       download={d.fileName}
                       className="focus-ring grid size-6 place-items-center rounded text-muted-foreground hover:text-foreground"
                       title="Download"
