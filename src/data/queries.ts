@@ -17,6 +17,12 @@ import { balanceOf, billingWeekFor, isPastDue } from "@/lib/billing";
 import { amountPayable, canElectFastPay, dueDateFromCutoff } from "@/lib/fast-pay";
 import { schedulePosition, type SchedulePosition } from "@/lib/schedule";
 import {
+  STANDING_LABEL,
+  canDig,
+  ticketStanding,
+  type LocateStanding,
+} from "@/lib/locates";
+import {
   findRate,
   priceQuantities,
   valueProject,
@@ -3315,5 +3321,133 @@ export async function getProspectSummary(): Promise<ProspectSummary> {
     overdue: rows.filter((r) => r.nextStep && r.nextStepDue && r.nextStepDue < today).length,
     states: tally(rows.flatMap((r) => [r.homeState, ...r.states])),
     markets: tally(rows.flatMap((r) => r.markets)),
+  };
+}
+
+/* ------------------------------------------------------------------ *
+ * Locates — 811 tickets and the clock on them.
+ * ------------------------------------------------------------------ */
+
+export interface LocateResponseRow {
+  id: string;
+  member: string;
+  status: string;
+  respondedOn: string;
+  note: string;
+}
+
+export interface LocateTicketRow {
+  id: string;
+  number: string;
+  revision: string;
+  projectId: string | null;
+  projectName: string;
+  street: string;
+  crossStreet: string;
+  city: string;
+  county: string;
+  workType: string;
+  calledInOn: string;
+  workToBeginOn: string;
+  updateBy: string;
+  expiresOn: string;
+  closedOn: string;
+  notes: string;
+  /** Worked out from the dates, never stored — see src/lib/locates.ts. */
+  standing: LocateStanding;
+  standingLabel: string;
+  daysToExpiry: number | null;
+  /** True when the dates came off the ticket rather than being computed. */
+  datesStated: boolean;
+  /** Whether a crew may dig on it today, and why. */
+  dig: { ok: boolean; because: string };
+  responses: LocateResponseRow[];
+  /** Members still silent. Silence is not clearance. */
+  awaiting: string[];
+}
+
+const LOCATE_SELECT = {
+  id: true, number: true, revision: true, projectId: true,
+  street: true, crossStreet: true, city: true, county: true, workType: true,
+  calledInOn: true, workToBeginOn: true, updateBy: true, expiresOn: true,
+  closedOn: true, notes: true,
+  project: { select: { name: true } },
+  responses: {
+    orderBy: { member: "asc" as const },
+    select: { id: true, member: true, status: true, respondedOn: true, note: true },
+  },
+} as const;
+
+/**
+ * Every locate ticket, with the clock worked out as of today.
+ *
+ * Standing is derived on read rather than stored, so a ticket cannot sit in
+ * the database claiming to be in force three weeks after it expired. The only
+ * way a stored status stays true is if something remembers to change it, and
+ * nothing ever does.
+ */
+export async function getLocateTickets(): Promise<LocateTicketRow[]> {
+  await requireStaff();
+  const rows = await prisma.locateTicket.findMany({
+    orderBy: [{ expiresOn: "asc" }, { number: "asc" }],
+    select: LOCATE_SELECT,
+  });
+
+  const today = new Date().toISOString().slice(0, 10);
+  return rows.map((r) => {
+    const standing = ticketStanding(r, today);
+    return {
+      id: r.id,
+      number: r.number,
+      revision: r.revision,
+      projectId: r.projectId,
+      projectName: r.project?.name?.trim() ?? "",
+      street: r.street,
+      crossStreet: r.crossStreet,
+      city: r.city,
+      county: r.county,
+      workType: r.workType,
+      calledInOn: r.calledInOn,
+      workToBeginOn: r.workToBeginOn,
+      updateBy: standing.updateBy,
+      expiresOn: standing.expiresOn,
+      closedOn: r.closedOn,
+      notes: r.notes,
+      standing: standing.standing,
+      standingLabel: STANDING_LABEL[standing.standing],
+      daysToExpiry: standing.daysToExpiry,
+      datesStated: standing.stated.expiry,
+      dig: canDig(standing),
+      responses: r.responses.map((x) => ({
+        id: x.id, member: x.member, status: x.status,
+        respondedOn: x.respondedOn, note: x.note,
+      })),
+      awaiting: r.responses
+        .filter((x) => x.status === "UNKNOWN" || x.status === "NOT_COMPLETE")
+        .map((x) => x.member),
+    };
+  });
+}
+
+export interface LocateSummary {
+  total: number;
+  active: number;
+  due: number;
+  expired: number;
+  unknown: number;
+  /** Tickets whose members have not all answered. */
+  awaitingResponses: number;
+}
+
+export async function getLocateSummary(): Promise<LocateSummary> {
+  const tickets = await getLocateTickets();
+  const open = tickets.filter((t) => !t.closedOn);
+  return {
+    total: open.length,
+    active: open.filter((t) => t.standing === "active").length,
+    due: open.filter((t) => t.standing === "due").length,
+    expired: open.filter((t) => t.standing === "expired").length,
+    unknown: open.filter((t) => t.standing === "unknown").length,
+    awaitingResponses: open.filter((t) => t.awaiting.length > 0).length,
   };
 }

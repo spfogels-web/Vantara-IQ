@@ -25,6 +25,8 @@ import { isLabourOrEquipmentCode } from "@/lib/unit-codes";
 import { packetStatus } from "@/lib/vendor-packet";
 import { readExif } from "@/lib/exif";
 import { notifyCrew, notifyStaff } from "@/lib/notify";
+import { askAboutLocates, locateChatReady } from "@/lib/locate-chat";
+import { getLocateTickets } from "@/data/queries";
 import {
   FAST_PAY_DAYS,
   FAST_PAY_FEE_PCT,
@@ -4936,4 +4938,195 @@ export async function markNotificationsRead() {
     data: { readAt: new Date() },
   });
   return { ok: true as const };
+}
+
+/* ---- Locates -------------------------------------------------------------- */
+
+export type LocateTicketInput = {
+  id?: string;
+  number: string;
+  revision?: string;
+  projectId?: string | null;
+  street?: string;
+  crossStreet?: string;
+  city?: string;
+  county?: string;
+  workType?: string;
+  calledInOn?: string;
+  workToBeginOn?: string;
+  updateBy?: string;
+  expiresOn?: string;
+  notes?: string;
+};
+
+const day = (v?: string) => {
+  const s = (v ?? "").trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : "";
+};
+
+export async function saveLocateTicket(input: LocateTicketInput) {
+  await requireStaff();
+  const number = input.number.trim().toUpperCase();
+  if (!number) return { ok: false as const, error: "A ticket number is needed." };
+
+  const data = {
+    number,
+    revision: (input.revision ?? "").trim(),
+    projectId: input.projectId || null,
+    street: (input.street ?? "").trim(),
+    crossStreet: (input.crossStreet ?? "").trim(),
+    city: (input.city ?? "").trim(),
+    county: (input.county ?? "").trim(),
+    workType: (input.workType ?? "").trim(),
+    // A date that is not a date is stored as blank rather than as rubbish. A
+    // ticket with no expiry reads as "no date on file", which is a state the
+    // board shows and refuses to dig on — far better than a silent bad value.
+    calledInOn: day(input.calledInOn),
+    workToBeginOn: day(input.workToBeginOn),
+    updateBy: day(input.updateBy),
+    expiresOn: day(input.expiresOn),
+    notes: (input.notes ?? "").trim(),
+  };
+
+  const saved = input.id
+    ? await prisma.locateTicket.update({ where: { id: input.id }, data })
+    : await prisma.locateTicket.upsert({
+        where: { number_revision: { number, revision: data.revision } },
+        create: data,
+        update: data,
+      });
+
+  revalidatePath("/locates");
+  return { ok: true as const, id: saved.id };
+}
+
+export async function closeLocateTicket(id: string, on: string) {
+  await requireStaff();
+  await prisma.locateTicket.update({
+    where: { id },
+    data: { closedOn: day(on) || new Date().toISOString().slice(0, 10) },
+  });
+  revalidatePath("/locates");
+  return { ok: true as const };
+}
+
+export async function deleteLocateTicket(id: string) {
+  await requireStaff();
+  await prisma.locateTicket.delete({ where: { id } });
+  revalidatePath("/locates");
+  return { ok: true as const };
+}
+
+/**
+ * Record what one utility said.
+ *
+ * Upserted per member, so the latest word replaces the last without losing
+ * which member it came from — the question on site is never "is the ticket
+ * done", it is "has the gas company been out".
+ */
+export async function setLocateResponse(input: {
+  ticketId: string;
+  member: string;
+  status: "MARKED" | "CLEAR" | "NOT_COMPLETE" | "DELAYED" | "UNKNOWN";
+  respondedOn?: string;
+  note?: string;
+}) {
+  await requireStaff();
+  const member = input.member.trim();
+  if (!member) return { ok: false as const, error: "Which utility?" };
+
+  await prisma.locateResponse.upsert({
+    where: { ticketId_member: { ticketId: input.ticketId, member } },
+    create: {
+      ticketId: input.ticketId,
+      member,
+      status: input.status,
+      respondedOn: day(input.respondedOn),
+      note: (input.note ?? "").trim(),
+    },
+    update: {
+      status: input.status,
+      respondedOn: day(input.respondedOn),
+      note: (input.note ?? "").trim(),
+    },
+  });
+  revalidatePath("/locates");
+  return { ok: true as const };
+}
+
+/**
+ * Take a pile of ticket numbers and open a row for each.
+ *
+ * Numbers arrive pasted out of an email in whatever shape the email had them,
+ * so anything that looks like a ticket number is picked out and the rest is
+ * ignored. Each one is created bare — no dates — which puts it on the board as
+ * "no date on file" rather than inventing a clock for it.
+ */
+export async function importLocateNumbers(text: string, projectId?: string | null) {
+  await requireStaff();
+  const found = [...new Set(
+    (text.match(/\b\d{6,}\b/g) ?? []).map((n) => n.trim()),
+  )];
+  if (found.length === 0) {
+    return { ok: false as const, error: "No ticket numbers found in that." };
+  }
+
+  let created = 0;
+  let existing = 0;
+  for (const number of found) {
+    const already = await prisma.locateTicket.findUnique({
+      where: { number_revision: { number, revision: "" } },
+      select: { id: true },
+    });
+    if (already) {
+      existing++;
+      continue;
+    }
+    await prisma.locateTicket.create({
+      data: { number, projectId: projectId || null },
+    });
+    created++;
+  }
+
+  revalidatePath("/locates");
+  return { ok: true as const, created, existing, numbers: found };
+}
+
+/**
+ * Ask a question about the locate board.
+ *
+ * The tickets are loaded server-side and handed to the model already decided —
+ * each one carries whether it may be dug on and why, worked out from dates
+ * rather than from language. The model picks which rows answer the question.
+ */
+export async function askLocates(
+  question: string,
+  history: { role: "user" | "assistant"; content: string }[] = [],
+) {
+  await requireStaff();
+  const q = question.trim();
+  if (!q) return { ok: false as const, error: "Ask something." };
+  if (!locateChatReady()) {
+    return {
+      ok: false as const,
+      error: "The assistant needs ANTHROPIC_API_KEY set on this environment.",
+    };
+  }
+
+  const tickets = await getLocateTickets();
+  if (tickets.length === 0) {
+    return {
+      ok: true as const,
+      answer: "There are no locate tickets on the board yet. Add some and ask again.",
+    };
+  }
+
+  try {
+    return { ok: true as const, answer: await askAboutLocates(q, tickets, history) };
+  } catch (e) {
+    return {
+      ok: false as const,
+      error: e instanceof Error ? e.message : "The assistant could not answer.",
+    };
+  }
 }

@@ -31,6 +31,7 @@ export const navSections: NavSection[] = [
   {
     title: "Intelligence",
     items: [
+      { label: "Locates", href: "/locates", icon: "alert" },
       { label: "AI assistant", href: "/assistant", icon: "sparkles", shortcut: "A" },
       { label: "Reports", href: "/reports", icon: "reports" },
       { label: "Integrations", href: "/integrations", icon: "plug" },

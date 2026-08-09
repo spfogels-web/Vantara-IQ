@@ -167,6 +167,7 @@ model Project {
   crews            Subcontractor[]   @relation("ProjectCrews")
   documents        Document[]
   createdAt        DateTime          @default(now())
+  locateTickets    LocateTicket[]
 }
 
 /// A saved Globe-style subcontractor daily billing sheet. The grids are stored
@@ -1523,4 +1524,74 @@ model Notification {
 
   @@index([audience, subcontractorId, readAt])
   @@index([createdAt])
+}
+
+/// What a utility member said about a ticket.
+///
+/// UNKNOWN is a real state and the default: a member who has not answered is
+/// not a member who has cleared. That distinction is the whole reason for
+/// recording responses one by one rather than marking a ticket "done".
+enum LocateResponseStatus {
+  MARKED
+  CLEAR
+  NOT_COMPLETE
+  DELAYED
+  UNKNOWN
+}
+
+/// A Georgia 811 locate ticket.
+///
+/// Dates are held as YYYY-MM-DD because a ticket expires on a day, not at a
+/// moment, and storing a timestamp invites a timezone to move it. The expiry
+/// and update-by dates are stored as 811 stated them where known; blank means
+/// nobody has said, and the app computes a fallback and labels it as computed.
+model LocateTicket {
+  id       String @id @default(cuid())
+  number   String
+  /// 811 re-issues under the same number with a revision.
+  revision String @default("")
+
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  projectId String?
+
+  street      String @default("")
+  crossStreet String @default("")
+  city        String @default("")
+  county      String @default("")
+  /// What the ticket says the work is — bore, trench, plow.
+  workType    String @default("")
+
+  /// The clock. All calendar days.
+  calledInOn    String @default("")
+  workToBeginOn String @default("")
+  updateBy      String @default("")
+  expiresOn     String @default("")
+
+  /// Set when a ticket is cancelled or superseded, so it drops out of the
+  /// board without being deleted — a locate history is a safety record.
+  closedOn String @default("")
+  notes    String @default("")
+
+  responses LocateResponse[]
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@unique([number, revision])
+  @@index([projectId])
+  @@index([expiresOn])
+}
+
+model LocateResponse {
+  id       String       @id @default(cuid())
+  ticket   LocateTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  ticketId String
+
+  /// The utility, as 811 names them.
+  member      String
+  status      LocateResponseStatus @default(UNKNOWN)
+  respondedOn String               @default("")
+  note        String               @default("")
+
+  @@unique([ticketId, member])
+  @@index([ticketId])
 }
