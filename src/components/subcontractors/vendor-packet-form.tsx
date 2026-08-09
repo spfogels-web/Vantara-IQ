@@ -48,7 +48,7 @@ export function VendorPacketForm({
     [f],
   );
 
-  async function submit() {
+  async function submit(auto = false) {
     setBusy(true);
     setError(null);
     try {
@@ -57,7 +57,9 @@ export function VendorPacketForm({
       });
       if (res.ok) {
         setSaved(true);
-        router.refresh();
+        // A refresh mid-sentence re-renders the form under the cursor, so an
+        // autosave stays quiet and the reconcile waits for a deliberate save.
+        if (!auto) router.refresh();
       } else {
         setError(res.error ?? "Could not save.");
       }
@@ -66,6 +68,32 @@ export function VendorPacketForm({
     }
     setBusy(false);
   }
+
+  /**
+   * Save as they type.
+   *
+   * The form used to save only on a button somebody had to find, at the top of
+   * a long page, while they typed at the bottom of it — so a crew filled the
+   * whole thing in, navigated away, and lost it. Typing is the intent to
+   * record something; it should not need confirming.
+   *
+   * Held back until they stop typing, and skipped while the one required field
+   * is empty, so a half-typed name never overwrites a good one and the
+   * "required" complaint waits until somebody actually tries to finish.
+   */
+  const save = React.useRef(submit);
+  save.current = submit;
+  const mounted = React.useRef(false);
+
+  React.useEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      return;
+    }
+    if (!canEdit || !f.legalName?.trim()) return;
+    const t = window.setTimeout(() => void save.current(true), 900);
+    return () => window.clearTimeout(t);
+  }, [f, canEdit]);
 
   return (
     <div className="flex flex-col gap-3">
@@ -89,13 +117,23 @@ export function VendorPacketForm({
             ) : null}
           </div>
           <div className="flex items-center gap-2">
-            {saved ? (
+            {/* Says which of the three states it is in, because "did that go
+                in?" is the whole question autosave has to answer out loud. */}
+            {busy ? (
+              <span className="inline-flex items-center gap-1.5 text-[12px] text-muted-foreground">
+                <Loader2 className="size-3.5 animate-spin" /> Saving…
+              </span>
+            ) : saved ? (
               <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-success">
                 <Check className="size-3.5" /> Saved
               </span>
-            ) : null}
+            ) : (
+              <span className="text-[11.5px] text-muted-foreground/80">
+                Saves as you type
+              </span>
+            )}
             <Button
-              onClick={submit}
+              onClick={() => void submit()}
               disabled={busy || !canEdit}
               className="brand-gradient h-9 gap-1.5 rounded-lg px-4 text-[12.5px] font-semibold text-white disabled:opacity-50"
             >

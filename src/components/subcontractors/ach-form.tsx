@@ -130,14 +130,19 @@ export function AchForm({
 
   const sigRef = React.useRef<SignaturePadHandle>(null);
   const [hasSignature, setHasSignature] = React.useState(Boolean(existing?.signatureDataUrl));
+  const [typedSignature, setTypedSignature] = React.useState("");
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (busy) return;
 
-    // Keep the stored signature if they didn't draw a new one.
+    // Drawn first, then typed, then whatever was already on file. A typed name
+    // is rendered to the same image format so the record holds one kind of
+    // thing, and it says on the image that it was typed rather than passing
+    // itself off as a drawn hand.
     const drawn = sigRef.current?.toDataURL() ?? "";
-    const signature = drawn || existing?.signatureDataUrl || "";
+    const typed = drawn ? "" : renderTypedSignature(typedSignature);
+    const signature = drawn || typed || existing?.signatureDataUrl || "";
 
     setBusy(true);
     setError(null);
@@ -411,13 +416,37 @@ export function AchForm({
             </Field>
           </div>
 
-          <Field label="Signature" required>
+          {/* Deliberately not a <Field>. That renders a <label>, and dragging
+              inside a label starts the browser's own click-and-select gesture,
+              which swallows the pointer stream a signature is drawn with. */}
+          <div className="flex select-none flex-col gap-1">
+            <span className="text-[11px] font-medium text-muted-foreground">
+              Signature<span className="ml-0.5 text-critical">*</span>
+            </span>
             <SignaturePad
               ref={sigRef}
               existing={existing?.signatureDataUrl}
               onChange={(has) => setHasSignature(has)}
             />
-          </Field>
+
+            {/* A drawn signature depends on a canvas, a pointer and a steady
+                hand on a phone in a truck. When any of that fails there has to
+                be a way through that is still a signature — a typed full name
+                is what every e-sign flow falls back to, and it is recorded as
+                typed rather than passed off as drawn. */}
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <span className="text-[10.5px] text-muted-foreground">
+                Can&apos;t draw it? Type your full name instead:
+              </span>
+              <input
+                value={typedSignature}
+                onChange={(e) => setTypedSignature(e.target.value)}
+                placeholder="Jonathan D Hunter"
+                className="h-8 w-52 rounded-lg border border-border/70 bg-foreground/[0.03] px-2 text-[12.5px] text-foreground placeholder:text-muted-foreground/60 outline-none focus:border-brand/60"
+                style={{ fontFamily: "Georgia, serif", fontStyle: "italic" }}
+              />
+            </div>
+          </div>
 
           {error ? <p className="text-[12px] text-critical">{error}</p> : null}
 
@@ -586,7 +615,11 @@ const SignaturePad = React.forwardRef<
         ) : null}
         <canvas
           ref={canvasRef}
-          className="relative block h-[120px] w-full cursor-crosshair touch-none"
+          draggable={false}
+          // A drag starting on the canvas is the browser trying to drag the
+          // element, and it takes the pointer stream with it mid-signature.
+          onDragStart={(e) => e.preventDefault()}
+          className="relative block h-[120px] w-full cursor-crosshair select-none touch-none"
           onPointerDown={(e) => {
             e.preventDefault();
             e.currentTarget.setPointerCapture(e.pointerId);
@@ -635,3 +668,47 @@ const SignaturePad = React.forwardRef<
     </div>
   );
 });
+
+/**
+ * A typed name, rendered as a signature image.
+ *
+ * Stored in the same format as a drawn one so the record holds one kind of
+ * thing and every downstream reader — the PDF, the portal, the audit view —
+ * needs no special case. It is stamped "typed signature" on the image itself,
+ * because a name set in italics is not a drawn hand and the record should not
+ * quietly imply that it is.
+ */
+function renderTypedSignature(name: string): string {
+  const text = name.trim();
+  if (!text) return "";
+  if (typeof document === "undefined") return "";
+
+  const ratio = window.devicePixelRatio || 1;
+  const w = 420;
+  const h = 120;
+  const c = document.createElement("canvas");
+  c.width = w * ratio;
+  c.height = h * ratio;
+
+  const ctx = c.getContext("2d");
+  if (!ctx) return "";
+  ctx.scale(ratio, ratio);
+
+  ctx.fillStyle = "#111827";
+  ctx.font = "italic 34px Georgia, 'Times New Roman', serif";
+  ctx.textBaseline = "alphabetic";
+  ctx.fillText(text, 16, 62, w - 32);
+
+  ctx.strokeStyle = "#9ca3af";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(16, 74);
+  ctx.lineTo(w - 16, 74);
+  ctx.stroke();
+
+  ctx.fillStyle = "#6b7280";
+  ctx.font = "11px Helvetica, Arial, sans-serif";
+  ctx.fillText("Typed signature", 16, 92);
+
+  return c.toDataURL("image/png");
+}
