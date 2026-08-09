@@ -19,7 +19,7 @@ const db = new PrismaClient();
 
 const DOCS: { file: string; type: DocType; title: string; download: string }[] = [
   {
-    file: "pdf.net_Subcontractor-Agreement.pdf",
+    file: "Subcontractor Agreement (1).pdf",
     type: "MASTER_SUBCONTRACTOR_AGREEMENT",
     title: "Subcontractor Agreement",
     download: "fortitude-subcontractor-agreement.pdf",
