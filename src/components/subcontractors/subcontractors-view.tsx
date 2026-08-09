@@ -68,11 +68,19 @@ function workReadiness(s: Subcontractor) {
     ...s.compliance.map((d) => ({
       label: d.label,
       ok: d.status === "valid" || d.status === "expiring",
+      required: true,
     })),
-    { label: "Capabilities statement (crews & equipment)", ok: s.equipment.length > 0 },
-    { label: "Fortitude review & approval", ok: s.state === "Active" },
+    // Useful to have, not a reason to stop a crew working. What is on this list
+    // should be the paperwork that carries legal or financial consequence if it
+    // is absent — a list of trucks does not.
+    {
+      label: "Capabilities statement (crews & equipment)",
+      ok: s.equipment.length > 0,
+      required: false,
+    },
+    { label: "Fortitude review & approval", ok: s.state === "Active", required: true },
   ];
-  const outstanding = items.filter((i) => !i.ok);
+  const outstanding = items.filter((i) => i.required && !i.ok);
   return { items, outstanding, eligible: outstanding.length === 0 };
 }
 
@@ -526,16 +534,32 @@ function SubDetail({
           <ul className="grid grid-cols-1 gap-x-4 gap-y-1.5 sm:grid-cols-2">
             {gate.items.map((it) => (
               <li key={it.label} className="flex items-center gap-2 text-[12px]">
+                {/* An outstanding optional item is greyed rather than crossed.
+                    A red cross beside something that stops nothing teaches
+                    people to read past the red ones that do. */}
                 <span
                   className={cn(
                     "grid size-4 shrink-0 place-items-center rounded-full",
-                    it.ok ? "bg-success/15 text-success" : "bg-critical/15 text-critical",
+                    it.ok
+                      ? "bg-success/15 text-success"
+                      : it.required
+                        ? "bg-critical/15 text-critical"
+                        : "bg-foreground/[0.06] text-muted-foreground",
                   )}
                 >
                   {it.ok ? <Check className="size-3" /> : <X className="size-3" />}
                 </span>
-                <span className={it.ok ? "text-muted-foreground" : "font-medium text-foreground"}>
+                <span
+                  className={
+                    it.ok || !it.required
+                      ? "text-muted-foreground"
+                      : "font-medium text-foreground"
+                  }
+                >
                   {it.label}
+                  {!it.required && !it.ok ? (
+                    <span className="ml-1.5 text-[10.5px] text-muted-foreground/70">optional</span>
+                  ) : null}
                 </span>
               </li>
             ))}

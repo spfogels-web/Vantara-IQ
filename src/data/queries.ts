@@ -223,15 +223,26 @@ type SubRow = Awaited<ReturnType<typeof prisma.subcontractor.findMany>>[number] 
  */
 const COMPLIANCE_SOURCE: Record<string, string> = {
   "general liability coi": "insurance",
-  "workers comp": "insurance",
+  "certificate of insurance": "insurance",
+  "coi": "insurance",
   "w-9": "w9",
+  "w9": "w9",
+  // The master subcontract is the subcontractor agreement — one document under
+  // two names, depending on which screen you are reading.
   "master subcontract": "agreement",
+  "subcontractor agreement": "agreement",
+  "signed subcontractor agreement": "agreement",
   "mutual nda": "nda",
+  "nda": "nda",
 };
 
 /** Labels are typed by hand and carry either apostrophe, or none. */
 const labelKey = (label: string) =>
-  label.toLowerCase().replace(/[‘’']/g, "").replace(/s+/g, " ").trim();
+  label
+    .toLowerCase()
+    .replace(/[‘’']/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 
 /**
  * Compliance as it actually stands.

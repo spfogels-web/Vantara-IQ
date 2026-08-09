@@ -526,9 +526,12 @@ export async function createSubcontractorDraft(input: {
   // The work-eligibility gate. A crew cannot be given a job until every one of
   // these is satisfied — the NDA sits here beside the subcontract because both
   // have to be signed before any of it starts, not chased afterwards.
+  // Workers' comp is not listed separately. The certificate asked for covers
+  // general liability and workers' comp together, so a second line for it only
+  // ever restated the first — and could be missing while the document proving
+  // it sat on file.
   const compliance = [
     { label: "General liability COI", status: "missing", expires: "—", daysOut: null },
-    { label: "Workers' comp", status: "missing", expires: "—", daysOut: null },
     { label: "W-9", status: "missing", expires: "—", daysOut: null },
     { label: "Master subcontract", status: "missing", expires: "—", daysOut: null },
     { label: "Mutual NDA", status: "missing", expires: "—", daysOut: null },
