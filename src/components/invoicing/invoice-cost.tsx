@@ -105,6 +105,43 @@ export function InvoiceCostPanel({ invoiceId }: { invoiceId: string }) {
                   <span className="num w-24 text-right text-[12.5px] font-semibold text-foreground">
                     {formatCurrency(c.cost)}
                   </span>
+
+                  {/* Which card these figures came from, and whether it still
+                      says the same thing. This is the difference between "the
+                      system priced it" and "we can show why we paid that". */}
+                  <div className="w-full pl-9">
+                    <p className="text-[10.5px] text-muted-foreground">
+                      {c.cards.length === 0
+                        ? "Priced before the source card was recorded — regenerate the statement to stamp it."
+                        : `Priced from ${c.cards.join(", ")}`}
+                    </p>
+
+                    {c.drift.length > 0 ? (
+                      <div className="mt-1 rounded border border-critical/30 bg-critical/[0.06] px-2 py-1.5">
+                        <p className="text-[11px] font-semibold text-critical">
+                          {c.drift.length} rate{c.drift.length === 1 ? "" : "s"} on this statement no
+                          longer match their card
+                        </p>
+                        <ul className="mt-0.5">
+                          {c.drift.map((d) => (
+                            <li key={d.code} className="num text-[10.5px] text-muted-foreground">
+                              {d.code}: paying {formatCurrency(d.paidRate)} ·{" "}
+                              {d.cardRate === null
+                                ? "not on their card at all"
+                                : `card now says ${formatCurrency(d.cardRate)}`}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
+
+                    {c.ambiguous.length > 0 ? (
+                      <p className="mt-1 text-[10.5px] text-warning">
+                        Their card lists {c.ambiguous.join(", ")} more than once at different rates —
+                        which one gets used is not decided by anything.
+                      </p>
+                    ) : null}
+                  </div>
                 </li>
               ))}
             </ul>

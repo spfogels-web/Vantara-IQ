@@ -79,7 +79,7 @@ export async function fileApprovedDailyForSub(dailyId: string): Promise<SubFileR
       rates: {
         select: {
           code: true, description: true, unit: true,
-          rate: true, effectiveDate: true, expirationDate: true,
+          rate: true, effectiveDate: true, expirationDate: true, source: true,
         },
       },
     },
@@ -169,6 +169,7 @@ export async function fileApprovedDailyForSub(dailyId: string): Promise<SubFileR
       quantity: l.quantity,
       rate: l.rate,
       amount: Math.round(l.amount * 100) / 100,
+      sourceCard: l.source,
     })),
   });
 

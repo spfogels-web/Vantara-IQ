@@ -471,6 +471,12 @@ model SubInvoiceLine {
   rate        Float      @default(0)
   amount      Float      @default(0)
 
+  /// Which rate card priced this line, recorded when it was priced. A crew is
+  /// paid from a signed card, and "which card was that" is the first question
+  /// asked when a figure is disputed — reading it back off the card today
+  /// answers what the card says now, not what it said when this was priced.
+  sourceCard String @default("")
+
   @@index([invoiceId])
   @@index([dailyId])
 }

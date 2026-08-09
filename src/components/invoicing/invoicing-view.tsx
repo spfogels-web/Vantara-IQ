@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Check, ChevronRight, Loader2, Plus, Send, Trash2, Wallet, X } from "lucide-react";
+import { Check, ChevronRight, Download, Loader2, Plus, Send, Trash2, Wallet, X } from "lucide-react";
 
 import { InvoiceLines } from "@/components/invoicing/invoice-lines";
 import { InvoiceCostPanel } from "@/components/invoicing/invoice-cost";
@@ -334,6 +334,19 @@ function InvoiceTable({
                       </span>
                     </td>
                     <td className="whitespace-nowrap px-3 py-2.5 text-right">
+                      {/* Available at every status, draft included. A draft is
+                          the version somebody reads before deciding to send it,
+                          so gating the download behind sending would mean the
+                          only way to check an invoice is to commit to it. The
+                          PDF carries a DRAFT watermark instead. */}
+                      <a
+                        href={`/api/invoice/${inv.id}`}
+                        download={`${inv.number}.pdf`}
+                        title="Download this invoice as a PDF"
+                        className="focus-ring mr-1 inline-flex h-7 items-center gap-1 rounded border border-border px-2 text-[11.5px] font-medium text-foreground hover:bg-foreground/[0.05]"
+                      >
+                        <Download className="size-3" /> Download
+                      </a>
                       {inv.status === "DRAFT" ? (
                         <>
                           <button

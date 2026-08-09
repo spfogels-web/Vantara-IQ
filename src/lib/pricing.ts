@@ -29,6 +29,8 @@ export interface RateRow {
   rate: number;
   effectiveDate?: string;
   expirationDate?: string;
+  /** Which card this rate came from, carried through onto the priced line. */
+  source?: string;
 }
 
 export interface QuantityRow {
@@ -45,6 +47,8 @@ export interface PricedLine {
   quantity: number;
   rate: number;
   amount: number;
+  /** The card the matched rate came from, so a figure can be traced back. */
+  source: string;
 }
 
 export interface UnpricedLine {
@@ -137,6 +141,7 @@ export function priceQuantities(
       quantity: q.quantity,
       rate: match.rate,
       amount: q.quantity * match.rate,
+      source: match.source ?? "",
     });
   }
 

@@ -2419,6 +2419,16 @@ export type InvoiceCostCrew = {
   /** Fast pay reduces what actually leaves the bank; shown, not silently netted. */
   fastPay: boolean;
   fastPayFeePct: number;
+  /** The rate card(s) these lines were priced from, recorded at pricing time. */
+  cards: string[];
+  /**
+   * Codes where the rate on this statement no longer matches the crew's card.
+   * Either the card was changed after pricing or the wrong one was attached —
+   * both mean somebody is about to be paid the wrong amount.
+   */
+  drift: { code: string; paidRate: number; cardRate: number | null }[];
+  /** Codes their card lists more than once, so the rate matched is a coin flip. */
+  ambiguous: string[];
 };
 
 export type InvoiceCost = {
@@ -2478,17 +2488,29 @@ export async function getInvoiceCost(invoiceId: string): Promise<InvoiceCost> {
     select: {
       dailyId: true,
       amount: true,
+      code: true,
+      rate: true,
+      sourceCard: true,
       invoice: {
         select: {
           id: true, number: true, status: true,
           fastPay: true, fastPayFeePct: true,
+          subcontractorId: true,
           subcontractor: { select: { company: true } },
         },
       },
     },
   });
 
-  const byStatement = new Map<string, InvoiceCostCrew & { dailies: Set<string> }>();
+  const byStatement = new Map<
+    string,
+    InvoiceCostCrew & {
+      dailies: Set<string>;
+      cardSet: Set<string>;
+      subcontractorId: string;
+      priced: Map<string, number>;
+    }
+  >();
   const costedDailies = new Set<string>();
   let cost = 0;
 
@@ -2505,11 +2527,40 @@ export async function getInvoiceCost(invoiceId: string): Promise<InvoiceCost> {
       dailyCount: 0,
       fastPay: inv.fastPay,
       fastPayFeePct: inv.fastPayFeePct,
+      cards: [],
+      drift: [],
+      ambiguous: [],
       dailies: new Set<string>(),
+      cardSet: new Set<string>(),
+      subcontractorId: inv.subcontractorId,
+      priced: new Map<string, number>(),
     };
     entry.cost += l.amount;
     entry.dailies.add(l.dailyId);
+    if (l.sourceCard) entry.cardSet.add(l.sourceCard);
+    entry.priced.set(l.code, l.rate);
     byStatement.set(inv.id, entry);
+  }
+
+  // Check each statement back against the card the crew is on today. A rate
+  // that has moved since pricing, or a code the card lists twice, is how
+  // somebody gets paid the wrong amount without anyone typing a wrong number.
+  for (const entry of byStatement.values()) {
+    const card = await prisma.subcontractorRate.findMany({
+      where: { subcontractorId: entry.subcontractorId },
+      select: { code: true, rate: true },
+    });
+    const seen = new Map<string, number>();
+    const dupes = new Set<string>();
+    for (const r of card) {
+      if (seen.has(r.code) && seen.get(r.code) !== r.rate) dupes.add(r.code);
+      else seen.set(r.code, r.rate);
+    }
+    entry.cards = [...entry.cardSet];
+    entry.ambiguous = [...dupes].filter((c) => entry.priced.has(c));
+    entry.drift = [...entry.priced.entries()]
+      .map(([code, paidRate]) => ({ code, paidRate, cardRate: seen.get(code) ?? null }))
+      .filter((d) => d.cardRate === null || Math.abs(d.cardRate - d.paidRate) > 0.0001);
   }
 
   // Anything still unpriced: say which day, whose it is, and what is blocking it.
@@ -2552,7 +2603,21 @@ export async function getInvoiceCost(invoiceId: string): Promise<InvoiceCost> {
     margin,
     marginPct: revenue > 0 ? margin / revenue : null,
     crews: [...byStatement.values()]
-      .map(({ dailies, ...c }) => ({ ...c, dailyCount: dailies.size }))
+      // Built field by field: the working sets above are bookkeeping for this
+      // function and have no business crossing to a client.
+      .map((c) => ({
+        subInvoiceId: c.subInvoiceId,
+        number: c.number,
+        company: c.company,
+        status: c.status,
+        cost: c.cost,
+        dailyCount: c.dailies.size,
+        fastPay: c.fastPay,
+        fastPayFeePct: c.fastPayFeePct,
+        cards: c.cards,
+        drift: c.drift,
+        ambiguous: c.ambiguous,
+      }))
       .sort((a, b) => b.cost - a.cost),
     uncosted,
     complete: uncosted.length === 0,
