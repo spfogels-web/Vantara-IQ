@@ -60,11 +60,20 @@ async function main() {
     }
     const rate = r.rate;
 
-    // The card prints BM60(1)(1 1/4) twice — missile at $5, drill at $6. Taking
-    // the first silently would make the rate a coin flip, so only one is
-    // written and the other is reported for a human to resolve.
-    if (seen.has(r.code)) {
-      console.log(`skipped duplicate  ${r.code} $${rate.toFixed(2)} (${r.description})`);
+    // The card prints BM60(1)(1 1/4) twice — missile at $5, drill at $6. Both
+    // are kept now, each tagged with the machine it is for, and the crew's own
+    // bore method picks between them when the work is priced. A duplicate that
+    // names no machine is still a coin flip, so that one is left out and said.
+    const method = /missile|stick/i.test(r.description)
+      ? ("MISSILE" as const)
+      : /drill/i.test(r.description)
+        ? ("DRILL" as const)
+        : null;
+
+    if (seen.has(r.code) && !method) {
+      console.log(
+        `skipped duplicate  ${r.code} $${rate.toFixed(2)} (${r.description}) — names no machine`,
+      );
       continue;
     }
     seen.add(r.code);
@@ -78,6 +87,7 @@ async function main() {
           description: r.description,
           unit: r.unit,
           rate,
+          method,
           rules: r.rules,
           source: "GEORGIA BURIED CABLE RATES - Sheet1 (10).pdf",
         },
@@ -85,6 +95,9 @@ async function main() {
       written++;
     }
   }
+
+  // The sandbox crew runs a D20x22, which is a drill.
+  await db.subcontractor.update({ where: { id: crew.id }, data: { boreMethod: "DRILL" } });
   console.log(`\nGeorgia card on ${crew.company}: ${written} rates`);
 
   // --- Make sure the sandbox customer can bill the same codes ---------------

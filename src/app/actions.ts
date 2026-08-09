@@ -341,7 +341,40 @@ export async function listSubRates(subcontractorId: string) {
     effectiveDate: r.effectiveDate,
     expirationDate: r.expirationDate,
     source: r.source,
+    method: r.method,
   }));
+}
+
+/**
+ * Which machine a crew bores with, and setting it.
+ *
+ * A rate card prints the same bore code twice — one price for a missile or
+ * stick, another for a drill — and expects whoever reads it to know which crew
+ * is which. Nothing in a lookup can know that, so it is recorded against the
+ * crew once and every bore they file is priced from it. Without it the two
+ * rows are indistinguishable and the rate matched is whichever came back first.
+ */
+export async function getCrewBoreMethod(subcontractorId: string) {
+  await assertOwnSubcontractor(subcontractorId);
+  const crew = await prisma.subcontractor.findUnique({
+    where: { id: subcontractorId },
+    select: { boreMethod: true },
+  });
+  return crew?.boreMethod ?? null;
+}
+
+export async function setCrewBoreMethod(
+  subcontractorId: string,
+  method: "MISSILE" | "DRILL" | null,
+) {
+  await requireStaff();
+  await prisma.subcontractor.update({
+    where: { id: subcontractorId },
+    data: { boreMethod: method },
+  });
+  revalidatePath("/subcontractors");
+  revalidatePath("/invoicing");
+  return { ok: true as const };
 }
 
 export async function addSubRate(subcontractorId: string, input: SubRateInput) {

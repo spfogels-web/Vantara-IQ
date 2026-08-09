@@ -106,7 +106,11 @@ export function findRate(
   // what keeps a card that never split a code working unchanged.
   if (candidates.some((r) => r.method)) {
     const matched = candidates.filter((r) => !r.method || r.method === method);
-    if (matched.length > 0) candidates = matched;
+    // Every rate for this code names a machine and none of them is this crew's,
+    // usually because nobody has said what they bore with. Refuse rather than
+    // pick: an unpriced code gets chased, and a guessed one just gets paid.
+    if (matched.length === 0) return null;
+    candidates = matched;
   }
   if (candidates.length === 1) return candidates[0];
 
