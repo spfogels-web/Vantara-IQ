@@ -31,6 +31,12 @@ export interface RateRow {
   expirationDate?: string;
   /** Which card this rate came from, carried through onto the priced line. */
   source?: string;
+  /**
+   * Set when a code is paid differently by method — a bore cut with a missile
+   * and the same bore drilled are the same unit code at two rates. Undefined
+   * means the rate applies however the work was done.
+   */
+  method?: string | null;
 }
 
 export interface QuantityRow {
@@ -87,12 +93,21 @@ export function findRate(
   code: string,
   rates: RateRow[],
   onDate?: string,
+  method?: string | null,
 ): RateRow | null {
   const wanted = normalizeCode(code);
   if (!wanted) return null;
 
-  const candidates = rates.filter((r) => normalizeCode(r.code) === wanted);
+  let candidates = rates.filter((r) => normalizeCode(r.code) === wanted);
   if (candidates.length === 0) return null;
+
+  // A code priced by method is decided by the crew, not by the card. Rates
+  // carrying no method apply either way, so they stay in the running — that is
+  // what keeps a card that never split a code working unchanged.
+  if (candidates.some((r) => r.method)) {
+    const matched = candidates.filter((r) => !r.method || r.method === method);
+    if (matched.length > 0) candidates = matched;
+  }
   if (candidates.length === 1) return candidates[0];
 
   const at = asTime(onDate);
@@ -116,6 +131,8 @@ export function priceQuantities(
   quantities: QuantityRow[],
   rates: RateRow[],
   onDate?: string,
+  /** The crew doing the work, for codes that are priced by method. */
+  method?: string | null,
 ): PricingResult {
   const lines: PricedLine[] = [];
   const unpriced: UnpricedLine[] = [];
@@ -124,7 +141,7 @@ export function priceQuantities(
     const code = normalizeCode(q.code);
     if (!code || !Number.isFinite(q.quantity) || q.quantity === 0) continue;
 
-    const match = findRate(code, rates, onDate);
+    const match = findRate(code, rates, onDate, method);
     if (!match || !Number.isFinite(match.rate)) {
       unpriced.push({
         code,

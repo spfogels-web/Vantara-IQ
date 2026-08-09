@@ -250,6 +250,14 @@ model ProjectMaterial {
 /// what we bill, this side is what the work costs. Margin is the difference
 /// between the two on the same code — never a blended average, because two
 /// codes on the same job can carry very different spreads.
+/// How a bore is cut. The same unit code is paid differently depending on the
+/// machine that cut it — a rate card prints both and expects the reader to know
+/// which crew is which, which is not something a lookup can know.
+enum BoreMethod {
+  MISSILE
+  DRILL
+}
+
 model SubcontractorRate {
   id              String        @id @default(cuid())
   subcontractor   Subcontractor @relation(fields: [subcontractorId], references: [id], onDelete: Cascade)
@@ -263,6 +271,9 @@ model SubcontractorRate {
   effectiveDate   String        @default("")
   expirationDate  String        @default("")
   source          String        @default("manual")
+  /// Set when a code is priced differently by method. Null means the rate
+  /// applies however the work was done.
+  method          BoreMethod?
   createdAt       DateTime      @default(now())
 
   @@index([subcontractorId])
@@ -289,6 +300,9 @@ model Subcontractor {
   scorecard      Json              @default("{}")
   crewSize       Int               @default(0)
   equipment      String[]          @default([])
+  /// Which machine this crew bores with. Decides which of two same-coded rates
+  /// they are paid, so it is asked once here rather than guessed per invoice.
+  boreMethod     BoreMethod?
   logoUrl        String?
   /// Internal note on this crew — why their rates differ, what kit they run,
   /// anything the office needs to see beside the name. Never shown to the sub.

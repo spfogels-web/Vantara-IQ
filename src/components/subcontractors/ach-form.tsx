@@ -476,34 +476,96 @@ const SignaturePad = React.forwardRef<
 >(function SignaturePad({ existing, onChange }, ref) {
   const canvasRef = React.useRef<HTMLCanvasElement>(null);
   const drawing = React.useRef(false);
+
+  /**
+   * The signature itself, kept as points rather than only as pixels.
+   *
+   * The canvas is a rendering of this, not the record of it. Sizing a canvas
+   * clears whatever was on it, so anything that changes the layout — a phone
+   * rotating, the keyboard closing, the panel settling after mount — would
+   * erase a signature that lived only in the bitmap. Redrawing from points
+   * survives all of it, and makes "is this empty" an exact question rather
+   * than an inference from a blank image.
+   */
+  const strokes = React.useRef<{ x: number; y: number }[][]>([]);
   const [inked, setInked] = React.useState(false);
 
-  React.useImperativeHandle(ref, () => ({
-    toDataURL: () => (inked ? (canvasRef.current?.toDataURL("image/png") ?? "") : ""),
-    clear: () => {
-      const c = canvasRef.current;
-      if (!c) return;
-      c.getContext("2d")?.clearRect(0, 0, c.width, c.height);
-      setInked(false);
-      onChange?.(false);
-    },
-  }));
-
-  React.useEffect(() => {
+  const paint = React.useCallback(() => {
     const c = canvasRef.current;
     if (!c) return;
-    const ratio = window.devicePixelRatio || 1;
-    const rect = c.getBoundingClientRect();
-    c.width = rect.width * ratio;
-    c.height = rect.height * ratio;
     const ctx = c.getContext("2d");
-    if (!ctx) return;
-    ctx.scale(ratio, ratio);
+    if (!ctx || c.width === 0 || c.height === 0) return;
+
+    const ratio = c.width / (c.clientWidth || 1);
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    ctx.clearRect(0, 0, c.clientWidth, c.clientHeight);
     ctx.lineWidth = 2;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     ctx.strokeStyle = "#111827";
+
+    for (const stroke of strokes.current) {
+      if (stroke.length === 0) continue;
+      ctx.beginPath();
+      ctx.moveTo(stroke[0].x, stroke[0].y);
+      // A single tap is a dot, not a nothing — draw it as a short segment so a
+      // full stop or a dotted "i" actually appears.
+      if (stroke.length === 1) ctx.lineTo(stroke[0].x + 0.1, stroke[0].y);
+      else for (const p of stroke.slice(1)) ctx.lineTo(p.x, p.y);
+      ctx.stroke();
+    }
   }, []);
+
+  /**
+   * Match the backing store to the layout box, whenever that box changes.
+   *
+   * This used to run once on mount off getBoundingClientRect. When the element
+   * had not been laid out yet the rect was zero, so the canvas was created
+   * 0×0 — it accepted every stroke and painted none of them, and exported a
+   * blank image. An observer means the size is taken when there is a size to
+   * take, however late that happens.
+   */
+  React.useEffect(() => {
+    const c = canvasRef.current;
+    if (!c) return;
+
+    const size = () => {
+      const ratio = window.devicePixelRatio || 1;
+      const w = c.clientWidth;
+      const h = c.clientHeight;
+      if (w === 0 || h === 0) return;
+      const nextW = Math.round(w * ratio);
+      const nextH = Math.round(h * ratio);
+      if (c.width === nextW && c.height === nextH) return;
+      c.width = nextW;
+      c.height = nextH;
+      paint();
+    };
+
+    size();
+    const observer = new ResizeObserver(size);
+    observer.observe(c);
+    return () => observer.disconnect();
+  }, [paint]);
+
+  React.useImperativeHandle(
+    ref,
+    () => ({
+      toDataURL: () => {
+        if (strokes.current.length === 0) return "";
+        const c = canvasRef.current;
+        if (!c || c.width === 0) return "";
+        return c.toDataURL("image/png");
+      },
+      clear: () => {
+        strokes.current = [];
+        paint();
+        setInked(false);
+        onChange?.(false);
+      },
+    }),
+    [paint, onChange],
+  );
 
   function pos(e: React.PointerEvent<HTMLCanvasElement>) {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -516,19 +578,21 @@ const SignaturePad = React.forwardRef<
         {/* The stored signature, until they draw a new one over it. */}
         {existing && !inked ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={existing} alt="Signature on file" className="pointer-events-none absolute inset-0 size-full object-contain" />
+          <img
+            src={existing}
+            alt="Signature on file"
+            className="pointer-events-none absolute inset-0 size-full object-contain"
+          />
         ) : null}
         <canvas
           ref={canvasRef}
-          className="relative block h-[120px] w-full touch-none"
+          className="relative block h-[120px] w-full cursor-crosshair touch-none"
           onPointerDown={(e) => {
+            e.preventDefault();
             e.currentTarget.setPointerCapture(e.pointerId);
-            const ctx = e.currentTarget.getContext("2d");
-            if (!ctx) return;
-            const p = pos(e);
-            ctx.beginPath();
-            ctx.moveTo(p.x, p.y);
             drawing.current = true;
+            strokes.current.push([pos(e)]);
+            paint();
             if (!inked) {
               setInked(true);
               onChange?.(true);
@@ -536,13 +600,14 @@ const SignaturePad = React.forwardRef<
           }}
           onPointerMove={(e) => {
             if (!drawing.current) return;
-            const ctx = e.currentTarget.getContext("2d");
-            if (!ctx) return;
-            const p = pos(e);
-            ctx.lineTo(p.x, p.y);
-            ctx.stroke();
+            e.preventDefault();
+            strokes.current[strokes.current.length - 1]?.push(pos(e));
+            paint();
           }}
           onPointerUp={() => {
+            drawing.current = false;
+          }}
+          onPointerCancel={() => {
             drawing.current = false;
           }}
           onPointerLeave={() => {
@@ -554,9 +619,8 @@ const SignaturePad = React.forwardRef<
         <button
           type="button"
           onClick={() => {
-            const c = canvasRef.current;
-            if (!c) return;
-            c.getContext("2d")?.clearRect(0, 0, c.width, c.height);
+            strokes.current = [];
+            paint();
             setInked(false);
             onChange?.(Boolean(existing));
           }}

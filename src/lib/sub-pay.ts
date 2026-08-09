@@ -75,11 +75,12 @@ export async function fileApprovedDailyForSub(dailyId: string): Promise<SubFileR
   const crew = await prisma.subcontractor.findFirst({
     where: { company },
     select: {
-      id: true, company: true,
+      id: true, company: true, boreMethod: true,
       rates: {
         select: {
           code: true, description: true, unit: true,
           rate: true, effectiveDate: true, expirationDate: true, source: true,
+          method: true,
         },
       },
     },
@@ -99,10 +100,14 @@ export async function fileApprovedDailyForSub(dailyId: string): Promise<SubFileR
     byCode.set(li.code.trim(), (byCode.get(li.code.trim()) ?? 0) + qty);
   }
 
+  // Their bore method decides which of two same-coded rates applies. Asked once
+  // on the crew rather than guessed per invoice, because the card cannot know
+  // which machine turned up.
   const priced = priceQuantities(
     [...byCode.entries()].map(([code, quantity]) => ({ code, quantity })),
     crew.rates,
     daily.workDate,
+    crew.boreMethod,
   );
   const unpriced = priced.unpriced.map((u) => u.code);
 

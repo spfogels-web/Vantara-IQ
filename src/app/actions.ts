@@ -2546,13 +2546,26 @@ export async function getInvoiceCost(invoiceId: string): Promise<InvoiceCost> {
   // that has moved since pricing, or a code the card lists twice, is how
   // somebody gets paid the wrong amount without anyone typing a wrong number.
   for (const entry of byStatement.values()) {
-    const card = await prisma.subcontractorRate.findMany({
-      where: { subcontractorId: entry.subcontractorId },
-      select: { code: true, rate: true },
-    });
+    const [card, crewRow] = await Promise.all([
+      prisma.subcontractorRate.findMany({
+        where: { subcontractorId: entry.subcontractorId },
+        select: { code: true, rate: true, method: true },
+      }),
+      prisma.subcontractor.findUnique({
+        where: { id: entry.subcontractorId },
+        select: { boreMethod: true },
+      }),
+    ]);
+
+    // Narrow to the rates this crew is actually eligible for before judging
+    // anything ambiguous. A code printed twice for two machines is not
+    // ambiguous once you know which machine they run.
+    const method = crewRow?.boreMethod ?? null;
+    const eligible = card.filter((r) => !r.method || r.method === method);
+
     const seen = new Map<string, number>();
     const dupes = new Set<string>();
-    for (const r of card) {
+    for (const r of eligible) {
       if (seen.has(r.code) && seen.get(r.code) !== r.rate) dupes.add(r.code);
       else seen.set(r.code, r.rate);
     }
