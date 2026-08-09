@@ -11,6 +11,7 @@ import {
   SIDEBAR_WIDTH,
   SIDEBAR_WIDTH_COLLAPSED,
 } from "@/components/layout/sidebar";
+import type { AppNotification } from "@/lib/types";
 import { Topbar } from "@/components/layout/topbar";
 import type { CurrentUser } from "@/lib/auth";
 import { useIsDesktop } from "@/hooks/use-media-query";
@@ -25,11 +26,13 @@ function ShellFrame({
   user,
   logoUrl,
   badges,
+  notifications,
 }: {
   children: React.ReactNode;
   user: CurrentUser | null;
   logoUrl?: string | null;
   badges?: Record<string, number>;
+  notifications?: AppNotification[];
 }) {
   const { collapsed } = useSidebar();
   const isDesktop = useIsDesktop();
@@ -47,7 +50,7 @@ function ShellFrame({
           transition: "margin-inline-start 260ms cubic-bezier(0.16, 1, 0.3, 1)",
         }}
       >
-        <Topbar user={user} logoUrl={logoUrl} badges={badges} />
+        <Topbar user={user} logoUrl={logoUrl} badges={badges} notifications={notifications} />
         <main className="flex-1">{children}</main>
       </div>
     </div>
@@ -59,11 +62,13 @@ export function AppShell({
   user,
   logoUrl,
   badges,
+  notifications,
 }: {
   children: React.ReactNode;
   user: CurrentUser | null;
   logoUrl?: string | null;
   badges?: Record<string, number>;
+  notifications?: AppNotification[];
 }) {
   const pathname = usePathname();
 
@@ -81,7 +86,7 @@ export function AppShell({
     <TooltipProvider delayDuration={300} skipDelayDuration={200}>
       <SidebarProvider>
         <CommandMenuProvider role={user?.role}>
-          <ShellFrame user={user} logoUrl={logoUrl} badges={badges}>{children}</ShellFrame>
+          <ShellFrame user={user} logoUrl={logoUrl} badges={badges} notifications={notifications}>{children}</ShellFrame>
         </CommandMenuProvider>
       </SidebarProvider>
     </TooltipProvider>

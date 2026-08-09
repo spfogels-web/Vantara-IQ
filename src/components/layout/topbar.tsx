@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Bell,
   ChevronDown,
@@ -23,7 +24,9 @@ import { cn } from "@/lib/utils";
 import { getIcon } from "@/lib/icons";
 import { initials } from "@/lib/format";
 import { toneStyles } from "@/lib/tone";
-import { notifications, organization } from "@/data/mock";
+import { organization } from "@/data/mock";
+import type { AppNotification } from "@/lib/types";
+import { markNotificationsRead } from "@/app/actions";
 import type { CurrentUser } from "@/lib/auth";
 import { logout } from "@/app/auth-actions";
 import { Button } from "@/components/ui/button";
@@ -81,7 +84,16 @@ function SearchTrigger({ className }: { className?: string }) {
   );
 }
 
-function NotificationsPopover() {
+/**
+ * The viewer's own feed.
+ *
+ * Handed in from the server already scoped to whoever is asking: staff get the
+ * office feed, a crew gets only rows written about their own work. Nothing is
+ * filtered here, which is the point — a filter in a component is a filter
+ * somebody can forget.
+ */
+function NotificationsPopover({ notifications }: { notifications: AppNotification[] }) {
+  const router = useRouter();
   const unread = notifications.filter((n) => n.unread).length;
 
   return (
@@ -112,7 +124,11 @@ function NotificationsPopover() {
               {unread} new
             </span>
           </div>
-          <button className="focus-ring rounded-md px-1.5 py-1 text-[11.5px] text-muted-foreground transition-colors hover:text-foreground">
+          <button
+            type="button"
+            onClick={() => void markNotificationsRead().then(() => router.refresh())}
+            className="focus-ring rounded-md px-1.5 py-1 text-[11.5px] text-muted-foreground transition-colors hover:text-foreground"
+          >
             Mark all read
           </button>
         </div>
@@ -348,10 +364,12 @@ export function Topbar({
   user,
   logoUrl,
   badges,
+  notifications = [],
 }: {
   user: CurrentUser | null;
   logoUrl?: string | null;
   badges?: Record<string, number>;
+  notifications?: AppNotification[];
 }) {
   const { setOpen: setCommandOpen } = useCommandMenu();
 
@@ -392,7 +410,7 @@ export function Topbar({
         <QuickActions />
         <VibeToggle />
         <ThemeToggle />
-        <NotificationsPopover />
+        <NotificationsPopover notifications={notifications} />
         <span className="mx-1 hidden h-5 w-px bg-border sm:block" />
         <UserMenu user={user} />
       </div>

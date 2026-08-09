@@ -293,6 +293,7 @@ model Subcontractor {
   projects       Project[]         @relation("ProjectCrews")
   badges         CrewBadge[]
   ach            AchAuthorization?
+  notifications  Notification[]
   payStatements  SubInvoice[]
   tasks          Task[]            @relation("TaskCrew")
   compliance     Json              @default("[]")
@@ -1482,4 +1483,44 @@ model ProspectActivity {
   createdAt  DateTime @default(now())
 
   @@index([prospectId, createdAt])
+}
+
+/// Who a notification is for.
+///
+/// Not a preference — a boundary. Staff notifications name crews, jobs and
+/// money across the whole book; a crew's name what happened to their own work.
+/// The two are never the same row, so there is no filter to get wrong.
+enum NotifyAudience {
+  STAFF
+  SUBCONTRACTOR
+}
+
+/// Something that happened which somebody should know about.
+///
+/// Written at the moment of the event rather than derived by polling, so the
+/// record says what happened and when, and a notification cannot quietly
+/// change its mind later because the underlying row moved on.
+model Notification {
+  id              String         @id @default(cuid())
+  audience        NotifyAudience
+  /// Set when the audience is one crew. Null for the office.
+  subcontractor   Subcontractor? @relation(fields: [subcontractorId], references: [id], onDelete: Cascade)
+  subcontractorId String?
+
+  title    String
+  detail   String @default("")
+  /// Where to go to act on it.
+  href     String @default("")
+  /// daily | billing | compliance | crew | system
+  category String @default("system")
+  tone     String @default("info")
+
+  /// Who did the thing, for the office to see at a glance.
+  actor String @default("")
+
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([audience, subcontractorId, readAt])
+  @@index([createdAt])
 }

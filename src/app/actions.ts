@@ -24,6 +24,7 @@ import { findJobProfile } from "@/lib/job-profiles";
 import { isLabourOrEquipmentCode } from "@/lib/unit-codes";
 import { packetStatus } from "@/lib/vendor-packet";
 import { readExif } from "@/lib/exif";
+import { notifyCrew, notifyStaff } from "@/lib/notify";
 import {
   FAST_PAY_DAYS,
   FAST_PAY_FEE_PCT,
@@ -674,6 +675,19 @@ export async function uploadSubDocument(formData: FormData) {
       uploadedBy,
     },
   });
+  const crewName = await prisma.subcontractor.findUnique({
+    where: { id: subcontractorId },
+    select: { company: true },
+  });
+  await notifyStaff({
+    title: `${crewName?.company ?? "A crew"} uploaded a document`,
+    detail: `${section} — ${file.name}`,
+    href: "/subcontractors",
+    category: "compliance",
+    tone: "info",
+    actor: uploadedBy,
+  });
+
   revalidatePath("/subcontractors");
   return {
     ok: true as const,
@@ -1980,6 +1994,31 @@ export async function reviewDaily(input: {
     // issued needs a credit or a conversation, not a quiet edit.
     billing = await unfileDaily(daily.id);
     crewPay = await unfileDailyForSub(daily.id);
+  }
+
+  // Tell the crew what happened to the day they filed. A denial they find out
+  // about a week later is a week of the same mistake repeated.
+  const filingCrew = daily.subcontractor?.trim()
+    ? await prisma.subcontractor.findFirst({
+        where: { company: daily.subcontractor.trim() },
+        select: { id: true },
+      })
+    : null;
+  if (filingCrew) {
+    await notifyCrew(filingCrew.id, {
+      title:
+        input.decision === "APPROVED"
+          ? `${daily.projectName} — ${daily.workDate} approved`
+          : `${daily.projectName} — ${daily.workDate} sent back`,
+      detail:
+        input.decision === "APPROVED"
+          ? "It will appear on your next pay statement."
+          : input.note.trim() || "Check the sheet and file it again.",
+      href: "/dailies",
+      category: "daily",
+      tone: input.decision === "APPROVED" ? "success" : "critical",
+      actor: input.reviewedBy,
+    });
   }
 
   revalidatePath("/dailies");
@@ -3964,9 +4003,17 @@ export async function issueSubInvoice(id: string) {
   if (inv.status !== "DRAFT") return { ok: false as const, error: "Only a draft can be sent." };
   if (inv.lines.length === 0) return { ok: false as const, error: "Nothing on this statement to send." };
 
-  await prisma.subInvoice.update({
+  const sent = await prisma.subInvoice.update({
     where: { id },
     data: { status: "ISSUED", issuedAt: new Date() },
+    select: { number: true, subtotal: true, subcontractorId: true },
+  });
+  await notifyCrew(sent.subcontractorId, {
+    title: `Pay statement ${sent.number} is ready`,
+    detail: "Check it against your sheets, then accept it or tell us what is wrong.",
+    href: "/pay",
+    category: "billing",
+    tone: "warning",
   });
   revalidatePath("/subcontractors");
   revalidatePath("/pay");
@@ -3985,7 +4032,10 @@ export async function acceptSubInvoice(id: string, electFastPay = false) {
 
   const inv = await prisma.subInvoice.findUnique({
     where: { id },
-    select: { subcontractorId: true, status: true, number: true, fastPay: true },
+    select: {
+      subcontractorId: true, status: true, number: true, fastPay: true,
+      subcontractor: { select: { company: true } },
+    },
   });
   if (!inv) return { ok: false as const, error: "Statement not found." };
 
@@ -4035,6 +4085,18 @@ export async function acceptSubInvoice(id: string, electFastPay = false) {
         : `Accepted ${inv.number}`,
     },
   }).catch(() => undefined);
+
+  // The office is waiting on this answer before it can pay anybody.
+  await notifyStaff({
+    title: `${inv.subcontractor?.company ?? "A crew"} accepted ${inv.number}`,
+    detail: takingFastPay
+      ? `Took fast pay — NET ${FAST_PAY_DAYS} by wire, less ${FAST_PAY_FEE_PCT}%.`
+      : "Agreed the figures. Standard terms.",
+    href: "/subcontractors",
+    category: "billing",
+    tone: "success",
+    actor: user.name || user.email,
+  });
 
   revalidatePath("/pay");
   revalidatePath("/subcontractors");
@@ -4851,4 +4913,24 @@ export async function convertProspectToSubcontractor(id: string) {
   revalidatePath("/prospects");
   revalidatePath("/subcontractors");
   return { ok: true as const, subcontractorId: sub.id };
+}
+
+/**
+ * Clear the viewer's own unread notifications.
+ *
+ * Scoped the same way reading them is: staff clear the office feed, a crew
+ * clears only rows written about their own work. There is no id parameter,
+ * because an id parameter is a way to clear somebody else's.
+ */
+export async function markNotificationsRead() {
+  const user = await requireUser();
+  await prisma.notification.updateMany({
+    where: isStaff(user.role)
+      ? { audience: "STAFF", readAt: null }
+      : user.subcontractorId
+        ? { audience: "SUBCONTRACTOR", subcontractorId: user.subcontractorId, readAt: null }
+        : { id: "" },
+    data: { readAt: new Date() },
+  });
+  return { ok: true as const };
 }

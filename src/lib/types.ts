@@ -173,6 +173,8 @@ export interface AppNotification {
   unread: boolean;
   icon: IconKey;
   category: "daily" | "billing" | "compliance" | "crew" | "system";
+  /** Where to go to act on it. Empty when there is nowhere to go. */
+  href?: string;
 }
 
 export interface NavItem {

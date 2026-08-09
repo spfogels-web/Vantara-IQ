@@ -41,7 +41,6 @@ import {
   invoices,
   materials,
   missingDocuments,
-  notifications,
   organization,
   payApplications,
   productionSummary,
@@ -471,8 +470,61 @@ export async function getMissingDocuments(): Promise<MissingDocument[]> {
   return missingDocuments;
 }
 
+/**
+ * What this viewer should be told about.
+ *
+ * Scoped by who is asking, not by a filter the caller passes: staff get the
+ * office's feed, a crew gets only rows written for their own record, and
+ * anybody signed out gets nothing. There is no argument that widens it.
+ */
 export async function getNotifications(): Promise<AppNotification[]> {
-  return notifications;
+  const user = await viewer();
+  if (!user) return [];
+
+  const rows = await prisma.notification.findMany({
+    where: isStaff(user.role)
+      ? { audience: "STAFF" }
+      : user.subcontractorId
+        ? { audience: "SUBCONTRACTOR", subcontractorId: user.subcontractorId }
+        : // A subcontractor login with no crew attached has no work to hear
+          // about. Returning the office's feed here would be the whole leak.
+          { id: "" },
+    orderBy: { createdAt: "desc" },
+    take: 40,
+  });
+
+  const iconFor: Record<string, AppNotification["icon"]> = {
+    daily: "clipboard",
+    billing: "billing",
+    compliance: "document",
+    crew: "users",
+    system: "bell",
+  };
+
+  return rows.map((n) => ({
+    id: n.id,
+    title: n.title,
+    detail: n.detail,
+    time: relativeTime(n.createdAt),
+    tone: n.tone as AppNotification["tone"],
+    unread: n.readAt === null,
+    icon: iconFor[n.category] ?? "bell",
+    category: n.category as AppNotification["category"],
+    href: n.href,
+  }));
+}
+
+/** "3 min ago" — the only form anybody reads a notification list in. */
+function relativeTime(at: Date): string {
+  const seconds = Math.max(0, Math.round((Date.now() - at.getTime()) / 1000));
+  if (seconds < 60) return "just now";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  const days = Math.round(hours / 24);
+  if (days < 7) return `${days} day${days === 1 ? "" : "s"} ago`;
+  return at.toISOString().slice(0, 10);
 }
 
 /* -- Entities (Postgres) ---------------------------------------------------- */
