@@ -2408,6 +2408,157 @@ export async function getInvoiceLines(invoiceId: string): Promise<{
   };
 }
 
+export type InvoiceCostCrew = {
+  subInvoiceId: string | null;
+  number: string;
+  company: string;
+  status: string;
+  /** Their price for the dailies that are on this invoice, at their own card. */
+  cost: number;
+  dailyCount: number;
+  /** Fast pay reduces what actually leaves the bank; shown, not silently netted. */
+  fastPay: boolean;
+  fastPayFeePct: number;
+};
+
+export type InvoiceCost = {
+  revenue: number;
+  cost: number;
+  margin: number;
+  marginPct: number | null;
+  crews: InvoiceCostCrew[];
+  /**
+   * Dailies on this invoice with nothing priced against them yet, and why.
+   * These are the reason a margin can be wrong, so they are never folded in.
+   */
+  uncosted: { dailyId: string; workDate: string; crew: string; revenue: number; reason: string }[];
+  /** False when anything is uncosted — the margin below is then incomplete. */
+  complete: boolean;
+};
+
+/**
+ * What this invoice costs us, and therefore what it makes.
+ *
+ * Matched on the daily rather than on the week. Both sides of the job — what
+ * Fortitude bills Globe and what Fortitude pays the crew — are built from the
+ * same reported day, so the daily id is the only link that stays true when a
+ * crew's pay period and a customer's billing period do not line up, or when one
+ * statement covers dailies that ended up on two different invoices.
+ *
+ * A daily with no crew pricing behind it is listed rather than counted as free.
+ * Treating an uncosted day as zero cost is how a job reads as pure profit right
+ * up until the crew invoices for it.
+ */
+export async function getInvoiceCost(invoiceId: string): Promise<InvoiceCost> {
+  await requireStaff();
+
+  const invoice = await prisma.invoice.findUnique({
+    where: { id: invoiceId },
+    select: { lines: { select: { dailyId: true, amount: true } } },
+  });
+  const empty: InvoiceCost = {
+    revenue: 0, cost: 0, margin: 0, marginPct: null,
+    crews: [], uncosted: [], complete: true,
+  };
+  if (!invoice) return empty;
+
+  const revenueByDaily = new Map<string, number>();
+  let revenue = 0;
+  for (const l of invoice.lines) {
+    revenue += l.amount;
+    if (l.dailyId) revenueByDaily.set(l.dailyId, (revenueByDaily.get(l.dailyId) ?? 0) + l.amount);
+  }
+  const dailyIds = [...revenueByDaily.keys()];
+  if (dailyIds.length === 0) {
+    return { ...empty, revenue, margin: revenue, complete: invoice.lines.length === 0 };
+  }
+
+  const subLines = await prisma.subInvoiceLine.findMany({
+    where: { dailyId: { in: dailyIds } },
+    select: {
+      dailyId: true,
+      amount: true,
+      invoice: {
+        select: {
+          id: true, number: true, status: true,
+          fastPay: true, fastPayFeePct: true,
+          subcontractor: { select: { company: true } },
+        },
+      },
+    },
+  });
+
+  const byStatement = new Map<string, InvoiceCostCrew & { dailies: Set<string> }>();
+  const costedDailies = new Set<string>();
+  let cost = 0;
+
+  for (const l of subLines) {
+    const inv = l.invoice;
+    costedDailies.add(l.dailyId);
+    cost += l.amount;
+    const entry = byStatement.get(inv.id) ?? {
+      subInvoiceId: inv.id,
+      number: inv.number,
+      company: inv.subcontractor.company,
+      status: inv.status,
+      cost: 0,
+      dailyCount: 0,
+      fastPay: inv.fastPay,
+      fastPayFeePct: inv.fastPayFeePct,
+      dailies: new Set<string>(),
+    };
+    entry.cost += l.amount;
+    entry.dailies.add(l.dailyId);
+    byStatement.set(inv.id, entry);
+  }
+
+  // Anything still unpriced: say which day, whose it is, and what is blocking it.
+  const missingIds = dailyIds.filter((id) => !costedDailies.has(id));
+  const missing = missingIds.length
+    ? await prisma.daily.findMany({
+        where: { id: { in: missingIds } },
+        select: { id: true, workDate: true, subcontractor: true },
+      })
+    : [];
+
+  const uncosted = await Promise.all(
+    missing.map(async (d) => {
+      const company = d.subcontractor?.trim() ?? "";
+      let reason = "No pay statement raised for this day yet.";
+      if (!company) {
+        reason = "The daily names no crew, so there is nobody to price it against.";
+      } else {
+        const crew = await prisma.subcontractor.findFirst({
+          where: { company },
+          select: { _count: { select: { rates: true } } },
+        });
+        if (!crew) reason = `No crew on file called "${company}".`;
+        else if (crew._count.rates === 0) reason = `${company} has no signed rate card.`;
+      }
+      return {
+        dailyId: d.id,
+        workDate: d.workDate,
+        crew: company || "—",
+        revenue: revenueByDaily.get(d.id) ?? 0,
+        reason,
+      };
+    }),
+  );
+
+  const margin = revenue - cost;
+  return {
+    revenue,
+    cost,
+    margin,
+    marginPct: revenue > 0 ? margin / revenue : null,
+    crews: [...byStatement.values()]
+      .map(({ dailies, ...c }) => ({ ...c, dailyCount: dailies.size }))
+      .sort((a, b) => b.cost - a.cost),
+    uncosted,
+    complete: uncosted.length === 0,
+  };
+}
+
 /** A draft can be corrected; anything the customer has seen cannot. */
 async function assertDraft(invoiceId: string) {
   const inv = await prisma.invoice.findUnique({

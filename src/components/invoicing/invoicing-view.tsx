@@ -2,9 +2,10 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Check, Loader2, Plus, Send, Trash2, Wallet, X } from "lucide-react";
+import { Check, ChevronRight, Loader2, Plus, Send, Trash2, Wallet, X } from "lucide-react";
 
 import { InvoiceLines } from "@/components/invoicing/invoice-lines";
+import { InvoiceCostPanel } from "@/components/invoicing/invoice-cost";
 
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatRate } from "@/lib/format";
@@ -266,13 +267,29 @@ function InvoiceTable({
                       <button
                         type="button"
                         onClick={() => setOpenId(openId === inv.id ? null : inv.id)}
-                        className="focus-ring num rounded text-[12.5px] font-semibold text-brand-bright hover:underline"
+                        className="focus-ring num inline-flex items-center gap-1 rounded text-[12.5px] font-semibold text-brand-bright hover:underline"
                       >
+                        {/* The row expands, and nothing said so — a caret and a
+                            label are the difference between a feature that
+                            exists and one anybody finds. */}
+                        <ChevronRight
+                          className={cn(
+                            "size-3.5 transition-transform",
+                            openId === inv.id && "rotate-90",
+                          )}
+                        />
                         {inv.number}
                       </button>
                       <p className="text-[11px] text-muted-foreground">
                         {inv.dailyCount} dail{inv.dailyCount === 1 ? "y" : "ies"} · {inv.lineCount} lines
                       </p>
+                      <button
+                        type="button"
+                        onClick={() => setOpenId(openId === inv.id ? null : inv.id)}
+                        className="focus-ring rounded text-[11px] text-muted-foreground hover:text-foreground"
+                      >
+                        {openId === inv.id ? "Hide details" : "Review, edit & see margin"}
+                      </button>
                     </td>
                     <td className="max-w-[180px] truncate px-3 py-2.5 text-[12px] text-muted-foreground">
                       {inv.project || "—"}
@@ -366,6 +383,13 @@ function InvoiceTable({
                             and the payments are the answer to a later question. */}
                         <div className="mb-4">
                           <InvoiceLines invoiceId={inv.id} onChanged={onPaid} />
+                        </div>
+
+                        {/* What the same work costs us, directly under what we
+                            charged for it — the two figures only mean
+                            something next to each other. */}
+                        <div className="mb-4 border-t border-border/50 pt-3">
+                          <InvoiceCostPanel invoiceId={inv.id} />
                         </div>
 
                         <p className="mb-2 text-[11px] uppercase tracking-wider text-muted-foreground">
