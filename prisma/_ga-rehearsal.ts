@@ -52,11 +52,19 @@ async function main() {
   const seen = new Set<string>();
   let written = 0;
   for (const r of imp.rows) {
+    // An extracted row can carry no rate at all — a line the reader saw but
+    // could not price. Writing it as zero would put free work on a rate card.
+    if (r.rate == null) {
+      console.log(`skipped unpriced   ${r.code} (${r.description})`);
+      continue;
+    }
+    const rate = r.rate;
+
     // The card prints BM60(1)(1 1/4) twice — missile at $5, drill at $6. Taking
     // the first silently would make the rate a coin flip, so only one is
     // written and the other is reported for a human to resolve.
     if (seen.has(r.code)) {
-      console.log(`skipped duplicate  ${r.code} $${r.rate.toFixed(2)} (${r.description})`);
+      console.log(`skipped duplicate  ${r.code} $${rate.toFixed(2)} (${r.description})`);
       continue;
     }
     seen.add(r.code);
@@ -69,7 +77,7 @@ async function main() {
           code,
           description: r.description,
           unit: r.unit,
-          rate: r.rate,
+          rate,
           rules: r.rules,
           source: "GEORGIA BURIED CABLE RATES - Sheet1 (10).pdf",
         },
