@@ -39,10 +39,18 @@ export function ProjectScheduleStrip({
   projectId,
   schedule: s,
   canEdit,
+  showMetrics = true,
 }: {
   projectId: string;
   schedule: ProjectSchedule;
   canEdit: boolean;
+  /**
+   * Health, pace and feet remaining. Off for a crew: these measure their
+   * output against a target they never agreed to, and a number that reads as
+   * a score on their own work starts an argument rather than informing one.
+   * Whether the job is on schedule is the part that concerns them.
+   */
+  showMetrics?: boolean;
 }) {
   const router = useRouter();
   const [editing, setEditing] = React.useState(false);
@@ -70,7 +78,12 @@ export function ProjectScheduleStrip({
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-5">
         {/* Completion ring */}
-        <div className="relative grid size-[74px] shrink-0 place-items-center">
+        <div
+          className={cn(
+            "relative grid size-[74px] shrink-0 place-items-center",
+            !showMetrics && "hidden",
+          )}
+        >
           <svg viewBox="0 0 36 36" className="size-full -rotate-90">
             <circle cx="18" cy="18" r="15.5" fill="none" strokeWidth="3" className="stroke-foreground/[0.08]" />
             <circle
@@ -87,13 +100,15 @@ export function ProjectScheduleStrip({
         </div>
 
         <div className="min-w-0">
-          <p className="eyebrow">Project health</p>
+          <p className="eyebrow">{showMetrics ? "Project health" : "Schedule"}</p>
           <p className={cn("mt-0.5 text-[14px] font-semibold", st.tone)}>{st.label}</p>
-          <p className="mt-0.5 text-[11.5px] text-muted-foreground">
-            {s.pctComplete === null
-              ? "No plow or bore footage on the material list yet"
-              : `${formatFeet(s.completedFt)} of ${formatFeet(s.plannedFt)} route`}
-          </p>
+          {showMetrics ? (
+            <p className="mt-0.5 text-[11.5px] text-muted-foreground">
+              {s.pctComplete === null
+                ? "No plow or bore footage on the material list yet"
+                : `${formatFeet(s.completedFt)} of ${formatFeet(s.plannedFt)} route`}
+            </p>
+          ) : null}
         </div>
 
         {/* Deadline — the one figure here anyone types. */}
@@ -162,7 +177,12 @@ export function ProjectScheduleStrip({
         </div>
 
         {/* The numbers that follow from it. */}
-        <div className="ml-auto grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4">
+        <div
+          className={cn(
+            "ml-auto grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-4",
+            !showMetrics && "hidden",
+          )}
+        >
           <Stat label="Remaining" value={s.pctComplete === null ? "—" : formatFeet(s.remainingFt)} />
           <Stat
             label="Required pace"

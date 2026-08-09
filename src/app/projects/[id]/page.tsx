@@ -117,6 +117,7 @@ export default async function ProjectDetailPage({
               projectId={project.id}
               schedule={schedule}
               canEdit={staff}
+              showMetrics={staff}
             />
           </PanelBody>
         </Panel>
