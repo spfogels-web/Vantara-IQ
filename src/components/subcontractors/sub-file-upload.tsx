@@ -21,6 +21,7 @@ import { registerUploadedDocument } from "@/app/actions";
 const TYPES = [
   { value: "SUBCONTRACTOR_RATE_CARD", label: "Signed rate card" },
   { value: "MASTER_SUBCONTRACTOR_AGREEMENT", label: "Signed master agreement" },
+  { value: "NDA", label: "Signed mutual NDA" },
   { value: "PROJECT_SUBCONTRACTOR_AGREEMENT", label: "Project agreement" },
   { value: "INSURANCE_REQUEST", label: "Certificate of insurance" },
   { value: "W9_REQUEST", label: "W-9" },

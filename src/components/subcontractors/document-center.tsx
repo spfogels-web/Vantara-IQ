@@ -40,9 +40,20 @@ export const DOC_SECTIONS = [
   {
     key: "agreement",
     label: "Signed subcontractor agreement",
-    detail: "Download the agreement, sign it, and upload the signed copy.",
+    detail:
+      "Download it, fill in your company details, sign it by hand, and upload the signed copy. A typed name is not accepted — Fortitude requires a wet signature.",
     required: true,
     canFollow: false,
+  },
+  {
+    key: "nda",
+    label: "Signed mutual NDA",
+    detail:
+      "Download it, sign it by hand, and upload the signed copy. Covers both sides before drawings or customer detail change hands.",
+    required: true,
+    // Chased after signup rather than blocking it, same as a COI. Make this
+    // false to stop an account being submitted without it.
+    canFollow: true,
   },
   { key: "w9", label: "W-9", detail: "Signed W-9 tax form.", required: true, canFollow: false },
   {
