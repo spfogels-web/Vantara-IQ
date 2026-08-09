@@ -337,6 +337,10 @@ export interface DailyReport {
   subcontractor: string;
   crew: string;
   workDate: string;
+  /** The Friday this bills to. Saturday-to-Friday unless the office moved it. */
+  billingWeekEnd: string;
+  /** Whether that Friday came from an override rather than the work date. */
+  billingWeekOverridden: boolean;
   submittedAt: string;
   status: DailyStatus;
   tone: Tone;

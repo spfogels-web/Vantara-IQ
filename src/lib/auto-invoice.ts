@@ -2,7 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/prisma";
 import { priceQuantities } from "@/lib/pricing";
-import { addDays, daysFromTerms, invoiceMoney, weekOf } from "@/lib/billing";
+import { addDays, billingWeekFor, daysFromTerms, invoiceMoney } from "@/lib/billing";
 
 /**
  * Filing approved production onto invoices, as it is approved.
@@ -70,7 +70,7 @@ export async function fileApprovedDaily(dailyId: string): Promise<FileResult> {
     where: { id: dailyId },
     select: {
       id: true, status: true, projectId: true, projectName: true,
-      workDate: true, lineItems: true,
+      workDate: true, lineItems: true, billingWeekEnd: true,
     },
   });
   if (!daily) return { ok: false, reason: "Daily not found." };
@@ -83,7 +83,7 @@ export async function fileApprovedDaily(dailyId: string): Promise<FileResult> {
   });
   if (already) return { ok: false, reason: `Already on ${already.invoice.number}.` };
 
-  const week = weekOf(daily.workDate);
+  const week = billingWeekFor(daily);
   if (!week) return { ok: false, reason: "No work date, so no billing period." };
 
   const project = await prisma.project.findUnique({

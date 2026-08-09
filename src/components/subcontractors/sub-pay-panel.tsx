@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Check, Loader2, Send, ShieldCheck, TriangleAlert, Wallet } from "lucide-react";
+import { Check, Loader2, Send, ShieldCheck, TriangleAlert, Wallet, Zap } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/format";
@@ -47,7 +47,7 @@ export function SubPayPanel({
   const mine = invoices.filter((i) => i.subcontractorId === subcontractorId);
   const owed = mine
     .filter((i) => i.status === "ISSUED" || i.status === "ACCEPTED" || i.status === "DISPUTED")
-    .reduce((s, i) => s + i.subtotal, 0);
+    .reduce((s, i) => s + i.net, 0);
 
   async function run(key: string, fn: () => Promise<{ ok: boolean; error?: string }>) {
     setBusy(key);
@@ -127,7 +127,7 @@ export function SubPayPanel({
                     {inv.project || "—"} · {inv.periodStart}–{inv.periodEnd} · {inv.dailyCount} dailies
                   </span>
                   <span className="num ml-auto text-[13px] font-semibold text-foreground">
-                    {formatCurrency(inv.subtotal)}
+                    {formatCurrency(inv.net)}
                   </span>
 
                   {inv.status === "DRAFT" ? (
@@ -165,6 +165,18 @@ export function SubPayPanel({
                     >
                       Reopen
                     </button>
+                  ) : null}
+
+                  {inv.fastPay ? (
+                    <span className="num flex w-full items-center gap-1.5 text-[11px] text-brand">
+                      <Zap className="size-3 shrink-0" />
+                      Fast pay · pay by WIRE by {inv.dueDate || "—"} ·{" "}
+                      {formatCurrency(inv.subtotal)} less {inv.fastPayFeePct}% ({formatCurrency(inv.fee)})
+                    </span>
+                  ) : inv.dueDate ? (
+                    <span className="num flex w-full items-center gap-1.5 text-[11px] text-muted-foreground">
+                      NET {inv.termsDays} by ACH · due {inv.dueDate}
+                    </span>
                   ) : null}
 
                   {/* The record of their answer, where the office can see it. */}

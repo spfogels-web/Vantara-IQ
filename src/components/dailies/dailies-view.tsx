@@ -22,7 +22,7 @@ import { formatCurrency, formatFeet, formatNumber, formatWhen } from "@/lib/form
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { StatusPill } from "@/components/common/status-pill";
 import { Button } from "@/components/ui/button";
-import { reopenDailyReview, reviewDaily } from "@/app/actions";
+import { reopenDailyReview, reviewDaily, setDailyBillingWeek } from "@/app/actions";
 
 const FILTERS: (DailyStatus | "All")[] = [
   "All",
@@ -182,6 +182,8 @@ function DailyDetail({
   const [note, setNote] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [movingWeek, setMovingWeek] = React.useState(false);
+  const [weekDate, setWeekDate] = React.useState("");
 
   const decided = d.status === "Approved" || d.status === "Denied";
 
@@ -190,7 +192,21 @@ function DailyDetail({
   React.useEffect(() => {
     setNote("");
     setError(null);
+    setMovingWeek(false);
+    setWeekDate("");
   }, [d.id]);
+
+  async function moveWeek(to: string) {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    const res = await setDailyBillingWeek(d.id, to);
+    setBusy(false);
+    if (res.ok) {
+      setMovingWeek(false);
+      router.refresh();
+    } else setError(res.error);
+  }
 
   async function decide(decision: "APPROVED" | "DENIED") {
     if (busy) return;
@@ -236,6 +252,20 @@ function DailyDetail({
               <p className="mt-0.5 text-[11.5px] text-muted-foreground/80">
                 Sheet <span className="num">{d.sheetNumber}</span> · Work date {d.workDate} · submitted {formatWhen(d.submittedAt)}
               </p>
+              {/* Which week this money lands in. Billing runs Saturday to
+                  Friday, so the Friday is the fact that matters here — it is
+                  what payment terms are counted from. */}
+              {d.billingWeekEnd ? (
+                <p className="mt-0.5 text-[11.5px]">
+                  <span className="text-muted-foreground/80">Bills to week ending </span>
+                  <span className={cn("num", d.billingWeekOverridden ? "font-semibold text-warning" : "text-muted-foreground/80")}>
+                    {d.billingWeekEnd}
+                  </span>
+                  {d.billingWeekOverridden ? (
+                    <span className="text-warning"> · moved by the office</span>
+                  ) : null}
+                </p>
+              ) : null}
             </div>
             <div className="text-right">
               <p className="eyebrow">Billable</p>
@@ -392,7 +422,60 @@ function DailyDetail({
                 className="w-full resize-y rounded-lg border border-foreground/[0.1] bg-foreground/[0.03] px-3 py-2 text-[12.5px] text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-brand/40"
               />
               {error ? <p className="text-[12px] text-critical">{error}</p> : null}
+
+              {/* Moving the billing week is an override, so it sits behind a
+                  press rather than beside Approve — the rule should be what
+                  happens when nobody does anything. */}
+              {movingWeek ? (
+                <div className="flex flex-wrap items-center gap-2 rounded-lg border border-warning/30 bg-warning/[0.05] px-2.5 py-2">
+                  <span className="text-[11.5px] text-foreground">Bill this day to the week ending</span>
+                  <input
+                    type="date"
+                    value={weekDate}
+                    onChange={(e) => setWeekDate(e.target.value)}
+                    className="focus-ring h-8 rounded-lg border border-border bg-background px-2 text-[12px] text-foreground"
+                  />
+                  <span className="text-[11px] text-muted-foreground">must be a Friday</span>
+                  <button
+                    type="button"
+                    disabled={busy || !weekDate}
+                    onClick={() => void moveWeek(weekDate)}
+                    className="focus-ring h-8 rounded-lg bg-warning px-2.5 text-[12px] font-semibold text-black hover:opacity-90 disabled:opacity-40"
+                  >
+                    Move
+                  </button>
+                  {d.billingWeekOverridden ? (
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void moveWeek("")}
+                      className="focus-ring h-8 rounded-lg px-2 text-[12px] text-muted-foreground hover:text-foreground disabled:opacity-40"
+                    >
+                      Put back on the rule
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => setMovingWeek(false)}
+                    className="focus-ring h-8 rounded-lg px-2 text-[12px] text-muted-foreground hover:text-foreground"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : null}
+
               <div className="flex flex-wrap items-center justify-end gap-2">
+                {!movingWeek ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMovingWeek(true);
+                    }}
+                    className="focus-ring mr-auto h-9 rounded-lg px-2 text-[12px] text-muted-foreground hover:text-foreground"
+                  >
+                    Move billing week
+                  </button>
+                ) : null}
                 <Button
                   variant="outline"
                   size="sm"

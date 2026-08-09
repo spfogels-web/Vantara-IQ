@@ -13,7 +13,8 @@ import {
 import { packetStatus } from "@/lib/vendor-packet";
 import { badgeReadiness } from "@/lib/badge";
 import { isStaff } from "@/lib/auth";
-import { balanceOf, isPastDue } from "@/lib/billing";
+import { balanceOf, billingWeekFor, isPastDue } from "@/lib/billing";
+import { amountPayable, canElectFastPay, dueDateFromCutoff } from "@/lib/fast-pay";
 import { schedulePosition, type SchedulePosition } from "@/lib/schedule";
 import {
   findRate,
@@ -272,6 +273,8 @@ function toDaily(
     subcontractor: r.subcontractor,
     crew: r.crew,
     workDate: r.workDate,
+    billingWeekEnd: billingWeekFor(r)?.end ?? "",
+    billingWeekOverridden: billingWeekFor(r)?.overridden ?? false,
     submittedAt: r.submittedAt,
     status: r.status as DailyReport["status"],
     tone: r.tone as Tone,
@@ -2751,6 +2754,22 @@ export interface SubInvoiceRow {
   disputedAt: string | null;
   disputedBy: string;
   resolutionNote: string;
+  /** Settlement window in calendar days: 30 normally, 10 on fast pay. */
+  termsDays: number;
+  /** Calendar date this is due, derived from when it was issued. */
+  dueDate: string;
+  fastPay: boolean;
+  /** The fee rate frozen at election. 0 when fast pay was never taken. */
+  fastPayFeePct: number;
+  fastPayElectedAt: string | null;
+  fastPayElectedBy: string;
+  /** ACH normally; wire when fast pay was taken. Never the crew's choice. */
+  payMethod: string;
+  /** What the fee comes to, and what actually lands in their account. */
+  fee: number;
+  net: number;
+  /** Whether this statement can still be moved onto fast pay. */
+  canElectFastPay: boolean;
   dailyCount: number;
   /** Every priced unit, so the crew can check the statement against their sheets. */
   lines: {
@@ -2770,6 +2789,8 @@ function toSubInvoiceRow(r: {
   id: string; number: string; subcontractorId: string; projectName: string;
   periodStart: string; periodEnd: string; status: string; subtotal: number;
   issuedAt: Date | null; acceptedAt: Date | null; acceptedBy: string;
+  termsDays: number; fastPay: boolean; fastPayFeePct: number;
+  fastPayElectedAt: Date | null; fastPayElectedBy: string; payMethod: string;
   disputeNote: string; disputedAt: Date | null; disputedBy: string;
   resolutionNote: string;
   subcontractor: { company: string };
@@ -2778,6 +2799,9 @@ function toSubInvoiceRow(r: {
     description: string; unit: string; quantity: number; rate: number; amount: number;
   }[];
 }): SubInvoiceRow {
+  // One place decides what a statement is worth, so the office view, the crew
+  // view and any batch total all read the same number off the same rules.
+  const money = amountPayable(r);
   return {
     id: r.id,
     number: r.number,
@@ -2797,6 +2821,17 @@ function toSubInvoiceRow(r: {
     disputedAt: r.disputedAt?.toISOString().slice(0, 16).replace("T", " ") ?? null,
     disputedBy: r.disputedBy,
     resolutionNote: r.resolutionNote,
+    termsDays: r.termsDays,
+    dueDate: dueDateFromCutoff(r.periodEnd, r.termsDays),
+    fastPay: r.fastPay,
+    fastPayFeePct: r.fastPayFeePct,
+    fastPayElectedAt:
+      r.fastPayElectedAt?.toISOString().slice(0, 16).replace("T", " ") ?? null,
+    fastPayElectedBy: r.fastPayElectedBy,
+    payMethod: r.payMethod,
+    fee: money.fee,
+    net: money.net,
+    canElectFastPay: canElectFastPay(r.status, r.fastPay),
     dailyCount: new Set(r.lines.map((l) => l.dailyId).filter(Boolean)).size,
     lines: r.lines,
   };
@@ -2806,6 +2841,8 @@ const SUB_INVOICE_SELECT = {
   id: true, number: true, subcontractorId: true, projectName: true,
   periodStart: true, periodEnd: true, status: true, subtotal: true,
   issuedAt: true, acceptedAt: true, acceptedBy: true,
+  termsDays: true, fastPay: true, fastPayFeePct: true,
+  fastPayElectedAt: true, fastPayElectedBy: true, payMethod: true,
   disputeNote: true, disputedAt: true, disputedBy: true, resolutionNote: true,
   subcontractor: { select: { company: true } },
   lines: {

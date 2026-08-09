@@ -24,6 +24,13 @@ import { findJobProfile } from "@/lib/job-profiles";
 import { isLabourOrEquipmentCode } from "@/lib/unit-codes";
 import { packetStatus } from "@/lib/vendor-packet";
 import { readExif } from "@/lib/exif";
+import {
+  FAST_PAY_DAYS,
+  FAST_PAY_FEE_PCT,
+  FAST_PAY_METHOD,
+  canElectFastPay,
+  fastPayQuote,
+} from "@/lib/fast-pay";
 import { balanceOf } from "@/lib/billing";
 import { badgeReadiness } from "@/lib/badge";
 import {
@@ -3471,12 +3478,12 @@ export async function issueSubInvoice(id: string) {
  * exactly when. Only the crew the statement belongs to can do it — staff
  * accepting on a crew's behalf would make the timestamp worthless.
  */
-export async function acceptSubInvoice(id: string) {
+export async function acceptSubInvoice(id: string, electFastPay = false) {
   const user = await requireUser();
 
   const inv = await prisma.subInvoice.findUnique({
     where: { id },
-    select: { subcontractorId: true, status: true, number: true },
+    select: { subcontractorId: true, status: true, number: true, fastPay: true },
   });
   if (!inv) return { ok: false as const, error: "Statement not found." };
 
@@ -3491,6 +3498,9 @@ export async function acceptSubInvoice(id: string) {
   }
 
   const at = new Date();
+  // Electing fast pay is part of accepting, so the agreement and the terms it
+  // was agreed on are written together and carry the same timestamp.
+  const takingFastPay = electFastPay && !inv.fastPay;
   await prisma.subInvoice.update({
     where: { id },
     data: {
@@ -3499,6 +3509,16 @@ export async function acceptSubInvoice(id: string) {
       acceptedBy: user.name || user.email,
       // Accepting settles any earlier dispute; the note stays as history.
       disputedAt: null,
+      ...(takingFastPay
+        ? {
+            fastPay: true,
+            fastPayFeePct: FAST_PAY_FEE_PCT,
+            fastPayElectedAt: at,
+            fastPayElectedBy: user.name || user.email,
+            termsDays: FAST_PAY_DAYS,
+            payMethod: FAST_PAY_METHOD,
+          }
+        : {}),
     },
   });
 
@@ -3508,13 +3528,157 @@ export async function acceptSubInvoice(id: string) {
       actorUserId: user.id,
       actorEmail: user.email,
       subjectId: id,
-      detail: `Accepted ${inv.number}`,
+      detail: takingFastPay
+        ? `Accepted ${inv.number} with fast pay (${FAST_PAY_FEE_PCT}%, NET ${FAST_PAY_DAYS}, wire)`
+        : `Accepted ${inv.number}`,
     },
   }).catch(() => undefined);
 
   revalidatePath("/pay");
   revalidatePath("/subcontractors");
   return { ok: true as const, acceptedAt: at.toISOString() };
+}
+
+/**
+ * Move a daily into a different billing week.
+ *
+ * Billing runs Saturday to Friday, and a day filed after Friday night falls
+ * into the week that follows. Sometimes it shouldn't — a sheet that arrived
+ * late, or a day the office needs to hold back. This moves which week the
+ * daily bills in without touching the work date, because the work happened
+ * when it happened and a statement that says otherwise is a false record.
+ *
+ * Pass an empty string to put it back on the rule.
+ */
+export async function setDailyBillingWeek(dailyId: string, fridayDate: string) {
+  const me = await requireStaff();
+
+  const daily = await prisma.daily.findUnique({
+    where: { id: dailyId },
+    select: { id: true, sheetNumber: true, workDate: true, billingWeekEnd: true },
+  });
+  if (!daily) return { ok: false as const, error: "Daily not found." };
+
+  const target = fridayDate.trim();
+  if (target) {
+    const d = new Date(`${target}T00:00:00Z`);
+    if (Number.isNaN(d.getTime())) {
+      return { ok: false as const, error: "That isn't a date." };
+    }
+    if (d.getUTCDay() !== 5) {
+      return {
+        ok: false as const,
+        error: "A billing week closes on a Friday. Pick the Friday it should bill to.",
+      };
+    }
+  }
+
+  // Once it is on a statement, moving the week would leave the statement's own
+  // period disagreeing with the line inside it. Pull it off first.
+  const onStatement = await prisma.subInvoiceLine.findFirst({
+    where: { dailyId },
+    select: { invoice: { select: { number: true, status: true } } },
+  });
+  const onInvoice = await prisma.invoiceLine.findFirst({
+    where: { dailyId },
+    select: { invoice: { select: { number: true, status: true } } },
+  });
+  const held = onStatement?.invoice ?? onInvoice?.invoice;
+  if (held) {
+    return {
+      ok: false as const,
+      error: `This daily is already on ${held.number}. Take it off that first.`,
+    };
+  }
+
+  await prisma.daily.update({ where: { id: dailyId }, data: { billingWeekEnd: target } });
+
+  await prisma.accessLog
+    .create({
+      data: {
+        action: "daily.billingweek",
+        actorUserId: me.id,
+        actorEmail: me.email,
+        subjectId: dailyId,
+        detail: target
+          ? `Sheet ${daily.sheetNumber || dailyId} (worked ${daily.workDate}) moved to the week ending ${target}`
+          : `Sheet ${daily.sheetNumber || dailyId} put back on the standard week for ${daily.workDate}`,
+      },
+    })
+    .catch(() => undefined);
+
+  revalidatePath("/dailies");
+  revalidatePath("/invoicing");
+  revalidatePath("/pay");
+  return { ok: true as const };
+}
+
+/**
+ * Take fast pay on a statement that has already been accepted.
+ *
+ * A crew that agreed the figures on Monday and needs the money on Wednesday is
+ * a normal thing to happen. The gross does not move — what they agreed to is
+ * what the work came to — so this only adds the fee and shortens the terms.
+ *
+ * One way, deliberately. Once this is elected the office may already have the
+ * wire queued, and letting it be taken back would mean a payment run that no
+ * longer matches what the statement says.
+ */
+export async function electFastPay(id: string) {
+  const user = await requireUser();
+
+  const inv = await prisma.subInvoice.findUnique({
+    where: { id },
+    select: { subcontractorId: true, status: true, number: true, fastPay: true, subtotal: true },
+  });
+  if (!inv) return { ok: false as const, error: "Statement not found." };
+  if (user.subcontractorId !== inv.subcontractorId) {
+    return { ok: false as const, error: "Only the crew this statement belongs to can do that." };
+  }
+  if (inv.fastPay) {
+    return { ok: false as const, error: "Fast pay is already on this statement." };
+  }
+  if (!canElectFastPay(inv.status, inv.fastPay)) {
+    return {
+      ok: false as const,
+      error:
+        inv.status === "PAID"
+          ? "This one has already been paid."
+          : "Fast pay can't be added to this statement.",
+    };
+  }
+
+  const at = new Date();
+  const quote = fastPayQuote(inv.subtotal, FAST_PAY_FEE_PCT, FAST_PAY_DAYS);
+  await prisma.subInvoice.update({
+    where: { id },
+    data: {
+      fastPay: true,
+      fastPayFeePct: FAST_PAY_FEE_PCT,
+      fastPayElectedAt: at,
+      fastPayElectedBy: user.name || user.email,
+      termsDays: FAST_PAY_DAYS,
+      payMethod: FAST_PAY_METHOD,
+    },
+  });
+
+  await prisma.accessLog
+    .create({
+      data: {
+        action: "subinvoice.fastpay",
+        actorUserId: user.id,
+        actorEmail: user.email,
+        subjectId: id,
+        detail: `Fast pay on ${inv.number}: ${quote.feePct}% fee ($${quote.fee.toFixed(
+          2,
+        )}), net $${quote.net.toFixed(2)}, NET ${quote.days} by wire`,
+      },
+    })
+    .catch(() => undefined);
+
+  revalidatePath("/pay");
+  revalidatePath("/subcontractors");
+  return { ok: true as const, electedAt: at.toISOString(), fee: quote.fee, net: quote.net };
 }
 
 /**

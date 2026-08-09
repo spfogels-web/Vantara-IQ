@@ -375,6 +375,13 @@ model SubDocument {
 }
 
 /// Where a crew's pay statement stands.
+/// How a statement settles. A crew does not choose this — standard pay runs
+/// on the ACH details they gave at onboarding, and fast pay goes by wire.
+enum PayMethod {
+  ACH
+  WIRE
+}
+
 enum SubInvoiceStatus {
   /// Building as their dailies are approved.
   DRAFT
@@ -419,6 +426,21 @@ model SubInvoice {
   disputeNote String    @default("")
   disputedAt  DateTime?
   disputedBy  String    @default("")
+
+  /// Settlement window in calendar days. 30 unless fast pay is elected.
+  termsDays Int @default(30)
+
+  /// Fast pay — the crew trades a slice of the statement for getting paid
+  /// sooner. Wire only, and that is not a preference they set: wire is what
+  /// actually clears inside ten days.
+  fastPay          Boolean   @default(false)
+  /// Fee percentage, frozen at the moment it is elected. A house rate changed
+  /// next quarter must not restate a statement somebody already agreed to.
+  fastPayFeePct    Float     @default(0)
+  fastPayElectedAt DateTime?
+  fastPayElectedBy String    @default("")
+  /// How this settles. Electing fast pay forces WIRE.
+  payMethod        PayMethod @default(ACH)
 
   /// Fortitude's note back, when a dispute is settled.
   resolutionNote String           @default("")
@@ -714,15 +736,23 @@ model BadgeDocument {
 }
 
 model Daily {
-  id             String   @id @default(cuid())
-  sheetNumber    String   @default("")
-  project        Project? @relation(fields: [projectId], references: [id])
-  projectId      String?
-  projectName    String   @default("")
-  customer       String   @default("")
-  subcontractor  String   @default("")
-  crew           String   @default("")
-  workDate       String   @default("")
+  id            String   @id @default(cuid())
+  sheetNumber   String   @default("")
+  project       Project? @relation(fields: [projectId], references: [id])
+  projectId     String?
+  projectName   String   @default("")
+  customer      String   @default("")
+  subcontractor String   @default("")
+  crew          String   @default("")
+  workDate      String   @default("")
+
+  /// Administration override for which billing week this daily falls in, as
+  /// the Friday that closes that week. Empty means derive it from workDate,
+  /// which is the rule: Saturday through Friday, and anything after Friday
+  /// night belongs to the week that follows. The override exists because the
+  /// office sometimes has to hold a day back or pull one forward, and doing
+  /// that by editing the work date would falsify when the work happened.
+  billingWeekEnd String   @default("")
   submittedAt    String   @default("")
   status         String   @default("Submitted")
   tone           String   @default("info")
