@@ -63,7 +63,15 @@ export default async function CompanyProfilePage() {
             icon={<FileUp className="size-3.5" />}
           />
           <PanelBody>
-            <DocumentCenter subcontractorId={me.subcontractorId} initialDocs={myDocs} />
+            {/* No delete. Removing a document is staff-only on the server, so
+                the button could only ever fail — and a crew unpicking their own
+                compliance record after it has been reviewed is not something to
+                offer anyway. Uploading again supersedes it. */}
+            <DocumentCenter
+              subcontractorId={me.subcontractorId}
+              initialDocs={myDocs}
+              canDelete={false}
+            />
           </PanelBody>
         </Panel>
 
