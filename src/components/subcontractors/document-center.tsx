@@ -145,6 +145,9 @@ export function DocumentCenter({
     docs.some((d) => d.section === s.key),
   );
 
+  /** Uploaded under a heading this form no longer lists, so shown separately. */
+  const orphaned = docs.filter((d) => !DOC_SECTIONS.some((s) => s.key === d.section));
+
   // Tell the parent whenever the picture changes, so the submit button and this
   // list can never disagree about what is missing.
   const blockerLabels = submitBlockers.map((s) => s.label).join("|");
@@ -182,6 +185,48 @@ export function DocumentCenter({
           You can submit now. Your certificate of insurance can follow — work can&apos;t start
           until it&apos;s on file, but your account will be under review in the meantime.
         </p>
+      ) : null}
+
+      {/* Anything filed under a heading this form no longer shows.
+          Sections get reorganised — banking moved to its own step, and every
+          voided cheque already uploaded under it stopped being rendered
+          anywhere. A document somebody sent must not become invisible because
+          we rearranged the form afterwards. */}
+      {orphaned.length > 0 ? (
+        <div className="rounded-xl border border-border/70 bg-foreground/[0.02] p-3.5">
+          <p className="text-[12.5px] font-medium text-foreground">Also on file</p>
+          <p className="text-[11px] text-muted-foreground">
+            Sent earlier, under headings this form no longer asks for.
+          </p>
+          <ul className="mt-2.5 flex flex-col gap-1.5">
+            {orphaned.map((d) => (
+              <li key={d.id} className="flex items-center gap-2 rounded-lg bg-foreground/[0.03] px-2.5 py-1.5">
+                <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1 truncate text-[12px] text-foreground">{d.fileName}</span>
+                <span className="shrink-0 rounded bg-foreground/[0.06] px-1.5 py-0.5 text-[9.5px] font-medium text-muted-foreground">
+                  {d.section}
+                </span>
+                <a
+                  href={d.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="focus-ring grid size-6 shrink-0 place-items-center rounded text-muted-foreground hover:text-foreground"
+                  title="Open"
+                >
+                  <Eye className="size-3.5" />
+                </a>
+                <a
+                  href={d.url}
+                  download={d.fileName}
+                  className="focus-ring grid size-6 shrink-0 place-items-center rounded text-muted-foreground hover:text-foreground"
+                  title="Download"
+                >
+                  <Download className="size-3.5" />
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
       ) : null}
 
       {DOC_SECTIONS.map((section) => {
