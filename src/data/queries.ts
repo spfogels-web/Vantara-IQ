@@ -209,7 +209,50 @@ const SUBSTATE_LABEL: Record<string, Subcontractor["state"]> = {
 /** A subcontractor row read with its assigned projects included. */
 type SubRow = Awaited<ReturnType<typeof prisma.subcontractor.findMany>>[number] & {
   projects?: { id: string; name: string; number: string }[];
+  /** Which document slots this crew has actually filled. */
+  filedSections?: string[];
 };
+
+/**
+ * Which uploaded document answers which compliance line.
+ *
+ * One certificate normally evidences both liability and workers comp, which
+ * is what the upload form asks for in a single slot, so both lines are
+ * satisfied by it. Splitting them would demand a document the form never
+ * offers anywhere to put, and the item could then never be cleared.
+ */
+const COMPLIANCE_SOURCE: Record<string, string> = {
+  "general liability coi": "insurance",
+  "workers comp": "insurance",
+  "w-9": "w9",
+  "master subcontract": "agreement",
+  "mutual nda": "nda",
+};
+
+/** Labels are typed by hand and carry either apostrophe, or none. */
+const labelKey = (label: string) =>
+  label.toLowerCase().replace(/[‘’']/g, "").replace(/s+/g, " ").trim();
+
+/**
+ * Compliance as it actually stands.
+ *
+ * An item is satisfied when the document answering it has been uploaded. The
+ * stored status is kept as a floor rather than discarded, so a certificate the
+ * office received by email and marked valid by hand is not undone by there
+ * being no upload behind it — this can raise a line to valid, never lower one.
+ */
+function complianceFrom(
+  stored: Subcontractor["compliance"],
+  filedSections: string[],
+): Subcontractor["compliance"] {
+  const filed = new Set(filedSections);
+  return stored.map((item) => {
+    if (item.status === "valid" || item.status === "expiring") return item;
+    const source = COMPLIANCE_SOURCE[labelKey(item.label)];
+    if (!source || !filed.has(source)) return item;
+    return { ...item, status: "valid" as const, expires: item.expires || "On file" };
+  });
+}
 
 function toSubcontractor(r: SubRow): Subcontractor {
   const packet = packetStatus(r);
@@ -236,7 +279,14 @@ function toSubcontractor(r: SubRow): Subcontractor {
       name: p.name,
       number: p.number,
     })),
-    compliance: (r.compliance as unknown as Subcontractor["compliance"]) ?? [],
+    // Read from the documents actually on file rather than a list written
+    // when the crew was created. That list was never updated by an upload, so
+    // a crew could send every certificate asked of them and still read as
+    // missing all of it — which is exactly what happened to J&P.
+    compliance: complianceFrom(
+      (r.compliance as unknown as Subcontractor["compliance"]) ?? [],
+      r.filedSections ?? [],
+    ),
     complianceTone: r.complianceTone as Tone,
     scorecard: (r.scorecard as unknown as SubScorecard) ?? emptyScorecard,
     crewSize: r.crewSize,
@@ -600,10 +650,17 @@ export async function getProject(id: string): Promise<Project | undefined> {
 export async function getSubcontractors(): Promise<Subcontractor[]> {
   await requireStaff();
   const rows = await prisma.subcontractor.findMany({
-    include: { projects: { select: { id: true, name: true, number: true } } },
+    include: {
+      projects: { select: { id: true, name: true, number: true } },
+      // Section only — the files themselves are megabytes and nothing here
+      // draws them; the question is only which slots have been filled.
+      documents: { select: { section: true } },
+    },
     orderBy: { createdAt: "asc" },
   });
-  return rows.map(toSubcontractor);
+  return rows.map((r) =>
+    toSubcontractor({ ...r, filedSections: r.documents.map((d) => d.section) }),
+  );
 }
 
 /**
