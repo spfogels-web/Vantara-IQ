@@ -4,6 +4,8 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { Check, Loader2, Plus, Send, Trash2, Wallet, X } from "lucide-react";
 
+import { InvoiceLines } from "@/components/invoicing/invoice-lines";
+
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatRate } from "@/lib/format";
 import type { ArTotals, InvoiceRow } from "@/data/queries";
@@ -359,6 +361,13 @@ function InvoiceTable({
                   {openId === inv.id ? (
                     <tr className="border-b border-border/40 bg-foreground/[0.02]">
                       <td colSpan={10} className="px-4 py-3 sm:px-5">
+                        {/* What is on the bill comes before what has been paid
+                            against it — this panel is opened to check the work,
+                            and the payments are the answer to a later question. */}
+                        <div className="mb-4">
+                          <InvoiceLines invoiceId={inv.id} onChanged={onPaid} />
+                        </div>
+
                         <p className="mb-2 text-[11px] uppercase tracking-wider text-muted-foreground">
                           Payments received
                         </p>

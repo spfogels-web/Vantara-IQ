@@ -566,21 +566,39 @@ export async function getSubcontractors(): Promise<Subcontractor[]> {
  * rate that applied when the work was done.
  */
 async function priceDailies(
-  rows: { customer: string; subcontractor: string; workDate: string; lineItems: unknown }[],
+  rows: {
+    customer: string;
+    subcontractor: string;
+    workDate: string;
+    lineItems: unknown;
+    projectId: string | null;
+  }[],
 ) {
   const customerNames = [...new Set(rows.map((r) => r.customer?.trim()).filter(Boolean))];
   const subNames = [...new Set(rows.map((r) => r.subcontractor?.trim()).filter(Boolean))];
+  const projectIds = [...new Set(rows.map((r) => r.projectId).filter(Boolean))] as string[];
 
   const rateSelect = {
     code: true, description: true, unit: true,
     rate: true, effectiveDate: true, expirationDate: true,
   } as const;
 
-  const [customers, subs] = await Promise.all([
+  // The job's customer is a foreign key; the name written on the daily is free
+  // text. Matching on the text priced every daily at zero the moment a job was
+  // labelled "Windstream" while the card lived on "GLOBE COMMUNICATIONS" — the
+  // invoice was right and the daily said $0 with everything unpriced. The link
+  // decides; the name is only a fallback for a daily attached to no job.
+  const [projects, customers, subs] = await Promise.all([
+    projectIds.length
+      ? prisma.project.findMany({
+          where: { id: { in: projectIds } },
+          select: { id: true, customerId: true },
+        })
+      : Promise.resolve([]),
     customerNames.length
       ? prisma.customer.findMany({
           where: { name: { in: customerNames } },
-          select: { name: true, rates: { select: rateSelect } },
+          select: { id: true, name: true, rates: { select: rateSelect } },
         })
       : Promise.resolve([]),
     subNames.length
@@ -591,6 +609,16 @@ async function priceDailies(
       : Promise.resolve([]),
   ]);
 
+  const customerIdByProject = new Map(projects.map((p) => [p.id, p.customerId]));
+  const linkedIds = [...new Set([...customerIdByProject.values()].filter(Boolean))] as string[];
+  const linked = linkedIds.length
+    ? await prisma.customer.findMany({
+        where: { id: { in: linkedIds } },
+        select: { id: true, rates: { select: rateSelect } },
+      })
+    : [];
+
+  const ratesByCustomerId = new Map(linked.map((c) => [c.id, c.rates]));
   const customerRates = new Map(customers.map((c) => [c.name, c.rates]));
   const subRates = new Map(subs.map((s) => [s.company, s.rates]));
 
@@ -604,7 +632,11 @@ async function priceDailies(
         quantity: typeof li.quantity === "number" ? li.quantity : 0,
       }));
 
-    const ours = customerRates.get(r.customer?.trim() ?? "") ?? [];
+    const linkedId = r.projectId ? customerIdByProject.get(r.projectId) : null;
+    const ours =
+      (linkedId ? ratesByCustomerId.get(linkedId) : undefined) ??
+      customerRates.get(r.customer?.trim() ?? "") ??
+      [];
     const theirs = subRates.get(r.subcontractor?.trim() ?? "") ?? [];
 
     const revenue = priceQuantities(quantities, ours, r.workDate);

@@ -42,6 +42,7 @@ import {
 } from "@/lib/field-crypto";
 import {
   fileApprovedDaily,
+  recalcInvoice,
   unfileDaily,
   type FileResult,
   type UnfileResult,
@@ -2353,6 +2354,207 @@ export async function generateInvoices(customerId: string) {
 }
 
 /** Send a draft. From here the figures are what the customer has seen. */
+/* ---- Invoice lines: reviewing and correcting a draft --------------------- */
+
+export type InvoiceLineRow = {
+  id: string;
+  dailyId: string;
+  workDate: string;
+  code: string;
+  description: string;
+  unit: string;
+  quantity: number;
+  rate: number;
+  amount: number;
+};
+
+/**
+ * The lines on one invoice, for review before it goes out.
+ *
+ * Loaded when an invoice is opened rather than with the list — the list draws
+ * totals, and pulling every line of every invoice to render a table of sums is
+ * how a page that opens instantly stops doing so.
+ */
+export async function getInvoiceLines(invoiceId: string): Promise<{
+  status: string;
+  editable: boolean;
+  lines: InvoiceLineRow[];
+}> {
+  await requireStaff();
+  const inv = await prisma.invoice.findUnique({
+    where: { id: invoiceId },
+    select: {
+      status: true,
+      lines: { orderBy: [{ workDate: "asc" }, { code: "asc" }] },
+    },
+  });
+  if (!inv) return { status: "", editable: false, lines: [] };
+
+  return {
+    status: inv.status,
+    // Only a draft. Everything from SENT on is a figure the customer has seen.
+    editable: inv.status === "DRAFT",
+    lines: inv.lines.map((l) => ({
+      id: l.id,
+      dailyId: l.dailyId,
+      workDate: l.workDate,
+      code: l.code,
+      description: l.description,
+      unit: l.unit,
+      quantity: l.quantity,
+      rate: l.rate,
+      amount: l.amount,
+    })),
+  };
+}
+
+/** A draft can be corrected; anything the customer has seen cannot. */
+async function assertDraft(invoiceId: string) {
+  const inv = await prisma.invoice.findUnique({
+    where: { id: invoiceId },
+    select: { status: true, number: true },
+  });
+  if (!inv) return { ok: false as const, error: "Invoice not found." };
+  if (inv.status !== "DRAFT") {
+    return {
+      ok: false as const,
+      error: `${inv.number} has already been sent. Void it and raise a new one rather than editing a figure the customer has seen.`,
+    };
+  }
+  return { ok: true as const };
+}
+
+/**
+ * Correct one line.
+ *
+ * The amount is worked out here from quantity and rate rather than accepted
+ * from the caller — a total that does not equal its own quantity times its own
+ * rate is the one thing an invoice must never do, and that is not a rule worth
+ * trusting a browser with.
+ */
+export async function updateInvoiceLine(
+  lineId: string,
+  patch: {
+    code?: string;
+    description?: string;
+    unit?: string;
+    quantity?: number;
+    rate?: number;
+    workDate?: string;
+  },
+) {
+  await requireStaff();
+  const line = await prisma.invoiceLine.findUnique({
+    where: { id: lineId },
+    select: { invoiceId: true, quantity: true, rate: true },
+  });
+  if (!line) return { ok: false as const, error: "Line not found." };
+
+  const guard = await assertDraft(line.invoiceId);
+  if (!guard.ok) return guard;
+
+  const quantity = patch.quantity ?? line.quantity;
+  const rate = patch.rate ?? line.rate;
+  if (!Number.isFinite(quantity) || quantity < 0) {
+    return { ok: false as const, error: "Quantity has to be zero or more." };
+  }
+  if (!Number.isFinite(rate) || rate < 0) {
+    return { ok: false as const, error: "Rate has to be zero or more." };
+  }
+
+  await prisma.invoiceLine.update({
+    where: { id: lineId },
+    data: {
+      ...(patch.code !== undefined ? { code: patch.code.trim().toUpperCase() } : {}),
+      ...(patch.description !== undefined ? { description: patch.description.trim() } : {}),
+      ...(patch.unit !== undefined ? { unit: patch.unit.trim() } : {}),
+      ...(patch.workDate !== undefined ? { workDate: patch.workDate.trim() } : {}),
+      quantity,
+      rate,
+      amount: Math.round(quantity * rate * 100) / 100,
+    },
+  });
+  await recalcInvoice(line.invoiceId);
+
+  revalidatePath("/invoicing");
+  return { ok: true as const };
+}
+
+/**
+ * Add a line by hand.
+ *
+ * Carries no daily id, which is the honest record: this is work the office put
+ * on the bill, not production a crew reported. Anything with a daily id behind
+ * it can be traced back to a signed sheet, and a hand-added line should not be
+ * able to pretend it can.
+ */
+export async function addInvoiceLine(
+  invoiceId: string,
+  input: { code: string; description?: string; unit?: string; quantity: number; rate: number; workDate?: string },
+) {
+  await requireStaff();
+  const guard = await assertDraft(invoiceId);
+  if (!guard.ok) return guard;
+
+  const code = input.code.trim().toUpperCase();
+  if (!code) return { ok: false as const, error: "A unit code is needed." };
+  const quantity = Number(input.quantity);
+  const rate = Number(input.rate);
+  if (!Number.isFinite(quantity) || quantity < 0) {
+    return { ok: false as const, error: "Quantity has to be zero or more." };
+  }
+  if (!Number.isFinite(rate) || rate < 0) {
+    return { ok: false as const, error: "Rate has to be zero or more." };
+  }
+
+  await prisma.invoiceLine.create({
+    data: {
+      invoiceId,
+      dailyId: "",
+      workDate: input.workDate?.trim() ?? "",
+      code,
+      description: input.description?.trim() ?? "",
+      unit: input.unit?.trim() ?? "",
+      quantity,
+      rate,
+      amount: Math.round(quantity * rate * 100) / 100,
+    },
+  });
+  await recalcInvoice(invoiceId);
+
+  revalidatePath("/invoicing");
+  return { ok: true as const };
+}
+
+/**
+ * Take a line off.
+ *
+ * Removing a line that came from a daily frees that daily to be billed again —
+ * the daily id on the line is what marks it as already invoiced, so taking the
+ * line away is what puts the work back in the queue rather than losing it.
+ */
+export async function deleteInvoiceLine(lineId: string) {
+  await requireStaff();
+  const line = await prisma.invoiceLine.findUnique({
+    where: { id: lineId },
+    select: { invoiceId: true, code: true, dailyId: true },
+  });
+  if (!line) return { ok: false as const, error: "Line not found." };
+
+  const guard = await assertDraft(line.invoiceId);
+  if (!guard.ok) return guard;
+
+  await prisma.invoiceLine.delete({ where: { id: lineId } });
+  await recalcInvoice(line.invoiceId);
+
+  revalidatePath("/invoicing");
+  return {
+    ok: true as const,
+    // Worth saying out loud — otherwise it looks like the work vanished.
+    freedDaily: Boolean(line.dailyId),
+  };
+}
+
 export async function issueInvoice(id: string) {
   await requireStaff();
   const inv = await prisma.invoice.findUnique({ where: { id }, select: { status: true } });
