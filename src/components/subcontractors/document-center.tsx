@@ -51,9 +51,10 @@ export const DOC_SECTIONS = [
     detail:
       "Download it, sign it by hand, and upload the signed copy. Covers both sides before drawings or customer detail change hands.",
     required: true,
-    // Chased after signup rather than blocking it, same as a COI. Make this
-    // false to stop an account being submitted without it.
-    canFollow: true,
+    // Blocks signup outright, like the agreement. Confidentiality has to be in
+    // place before anything worth protecting is handed over, so there is no
+    // version of this that sensibly arrives later.
+    canFollow: false,
   },
   { key: "w9", label: "W-9", detail: "Signed W-9 tax form.", required: true, canFollow: false },
   {

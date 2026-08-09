@@ -488,11 +488,15 @@ export async function createSubcontractorDraft(input: {
     }
   }
 
+  // The work-eligibility gate. A crew cannot be given a job until every one of
+  // these is satisfied — the NDA sits here beside the subcontract because both
+  // have to be signed before any of it starts, not chased afterwards.
   const compliance = [
     { label: "General liability COI", status: "missing", expires: "—", daysOut: null },
     { label: "Workers' comp", status: "missing", expires: "—", daysOut: null },
     { label: "W-9", status: "missing", expires: "—", daysOut: null },
     { label: "Master subcontract", status: "missing", expires: "—", daysOut: null },
+    { label: "Mutual NDA", status: "missing", expires: "—", daysOut: null },
   ];
   const scorecard = {
     rating: 0, projectsCompleted: 0, avgApprovalDays: 0, avgDailyFt: 0,

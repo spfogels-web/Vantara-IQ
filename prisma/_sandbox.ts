@@ -99,7 +99,13 @@ async function main() {
   // --- Crew, cleared to work ------------------------------------------------
   // The assignment gate wants approval, a complete packet and equipment on
   // file, so the sandbox crew is given all three rather than half-created.
-  const compliance = ["General liability COI", "Workers' comp", "W-9", "Master subcontract"].map(
+  const compliance = [
+    "General liability COI",
+    "Workers' comp",
+    "W-9",
+    "Master subcontract",
+    "Mutual NDA",
+  ].map(
     (label) => ({ label, status: "valid", daysOut: 365, expires: "Dec 31, 2027" }),
   );
 
