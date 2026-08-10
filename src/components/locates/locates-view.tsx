@@ -21,6 +21,7 @@ import {
   askLocates,
   closeLocateTicket,
   importLocateNumbers,
+  importLocateText,
   saveLocateTicket,
   setLocateResponse,
 } from "@/app/actions";
@@ -494,6 +495,18 @@ function Field({
   );
 }
 
+/**
+ * Getting tickets in.
+ *
+ * Two ways, and pasting the ticket itself is the one that matters. Everything
+ * 811 states — called in, work may begin, update by, expires, the street, and
+ * what each utility answered — is read off the text, leaving only the job to
+ * link, which is the one thing the ticket does not know.
+ *
+ * A field the ticket does not state is left empty rather than filled in. That
+ * is the whole discipline here: a blank expiry shows as "no date on file" and
+ * refuses digging, where a guessed one would read as a clearance.
+ */
 function AddTickets({
   projects,
   onDone,
@@ -502,27 +515,98 @@ function AddTickets({
   onDone: () => void;
 }) {
   const router = useRouter();
+  const [mode, setMode] = React.useState<"paste" | "numbers">("paste");
   const [text, setText] = React.useState("");
   const [projectId, setProjectId] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [note, setNote] = React.useState<string | null>(null);
+  const [warn, setWarn] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+
+  async function submit() {
+    setBusy(true);
+    setError(null);
+    setNote(null);
+    setWarn(null);
+
+    if (mode === "paste") {
+      const res = await importLocateText(text, projectId || null);
+      setBusy(false);
+      if (!res.ok) return setError(res.error);
+      setNote(
+        `${res.created} ticket${res.created === 1 ? "" : "s"} read` +
+          (res.updated ? `, ${res.updated} updated` : "") +
+          (res.responses ? `, ${res.responses} utility response${res.responses === 1 ? "" : "s"} recorded` : "") +
+          ".",
+      );
+      // Named rather than buried: a ticket read without an expiry is exactly
+      // the one somebody will assume came through complete.
+      if (res.incomplete.length > 0) {
+        setWarn(
+          `No expiry stated on ${res.incomplete.join(", ")} — ${
+            res.incomplete.length === 1 ? "it reads" : "they read"
+          } as "no date on file" and will refuse digging until you enter it.`,
+        );
+      }
+    } else {
+      const res = await importLocateNumbers(text, projectId || null);
+      setBusy(false);
+      if (!res.ok) return setError(res.error);
+      setNote(`${res.created} added${res.existing ? `, ${res.existing} already on the board` : ""}.`);
+    }
+
+    setText("");
+    router.refresh();
+  }
 
   return (
     <div className="border-b border-border/70 p-3">
-      <p className="text-[12px] font-medium text-foreground">Paste ticket numbers</p>
-      <p className="mt-0.5 text-[11px] text-muted-foreground">
-        Straight out of the 811 email — anything that looks like a ticket number is picked up and the
-        rest ignored. They arrive with no dates, so each one reads &quot;no date on file&quot; until
-        you fill in what 811 said.
+      <div className="flex flex-wrap items-center gap-1.5">
+        {(["paste", "numbers"] as const).map((m) => (
+          <button
+            key={m}
+            type="button"
+            onClick={() => setMode(m)}
+            className={cn(
+              "focus-ring h-7 rounded-lg px-2.5 text-[11.5px] font-medium transition",
+              mode === m
+                ? "bg-brand/15 text-brand ring-1 ring-inset ring-brand/30"
+                : "text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground",
+            )}
+          >
+            {m === "paste" ? "Paste the ticket" : "Numbers only"}
+          </button>
+        ))}
+      </div>
+
+      <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
+        {mode === "paste" ? (
+          <>
+            Paste the whole 811 email or ticket. It reads the dates off it — called in, work may
+            begin, update by, expires — along with the street and what each utility answered.
+            Anything the ticket does not state is left blank rather than guessed. The only thing you
+            need to set is the job.
+          </>
+        ) : (
+          <>
+            Just the numbers, when you want them on the board before the detail arrives. They land
+            with no dates, so each reads &quot;no date on file&quot; until you fill in what 811 said.
+          </>
+        )}
       </p>
+
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
-        rows={3}
-        placeholder="20260809-00123  20260809-00124 …"
+        rows={mode === "paste" ? 8 : 3}
+        placeholder={
+          mode === "paste"
+            ? "Paste the ticket or the whole email here…"
+            : "20260809-00123  20260809-00124 …"
+        }
         className="mt-2 w-full rounded-lg border border-border/70 bg-foreground/[0.03] px-2.5 py-2 text-[12.5px] text-foreground placeholder:text-muted-foreground/60 focus:border-brand/60 focus:outline-none"
       />
+
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <select
           value={projectId}
@@ -537,31 +621,29 @@ function AddTickets({
         <button
           type="button"
           disabled={busy || !text.trim()}
-          onClick={async () => {
-            setBusy(true);
-            setError(null);
-            setNote(null);
-            const res = await importLocateNumbers(text, projectId || null);
-            setBusy(false);
-            if (!res.ok) return setError(res.error);
-            setNote(`${res.created} added${res.existing ? `, ${res.existing} already on the board` : ""}.`);
-            setText("");
-            router.refresh();
-          }}
+          onClick={() => void submit()}
           className="focus-ring inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand px-3 text-[12px] font-semibold text-white hover:bg-brand-bright disabled:opacity-40"
         >
           {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Plus className="size-3.5" />}
-          Add
+          {busy ? (mode === "paste" ? "Reading…" : "Adding…") : mode === "paste" ? "Read ticket" : "Add"}
         </button>
         <button type="button" onClick={onDone} className="focus-ring h-8 rounded-lg px-2 text-[12px] text-muted-foreground hover:text-foreground">
           Done
         </button>
-        {note ? <span className="text-[11.5px] text-success">{note}</span> : null}
-        {error ? <span className="text-[11.5px] text-critical">{error}</span> : null}
       </div>
+
+      {note ? <p className="mt-1.5 text-[11.5px] text-success">{note}</p> : null}
+      {warn ? (
+        <p className="mt-1 flex items-start gap-1.5 text-[11.5px] text-warning">
+          <TriangleAlert className="mt-px size-3.5 shrink-0" />
+          <span>{warn}</span>
+        </p>
+      ) : null}
+      {error ? <p className="mt-1.5 text-[11.5px] text-critical">{error}</p> : null}
     </div>
   );
 }
+
 
 /**
  * Ask the board a question.

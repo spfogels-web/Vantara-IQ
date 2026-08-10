@@ -114,3 +114,156 @@ export async function askAboutLocates(
     .join("\n")
     .trim();
 }
+
+/* ---- Reading a ticket ----------------------------------------------------- */
+
+export interface ParsedTicket {
+  number: string;
+  revision: string;
+  street: string;
+  crossStreet: string;
+  city: string;
+  county: string;
+  workType: string;
+  calledInOn: string;
+  workToBeginOn: string;
+  updateBy: string;
+  expiresOn: string;
+  notes: string;
+  members: { member: string; status: string; respondedOn: string; note: string }[];
+}
+
+const PARSE_SYSTEM = `You read Georgia 811 locate tickets and turn them into structured
+data. The text you are given is pasted from an email or the 811 portal, and may
+contain several tickets at once.
+
+Rules:
+
+1. Copy values. Do not calculate, infer or tidy. If the ticket does not state a
+   field, return an empty string for it. An empty field is correct and useful;
+   a guessed one is dangerous, because these dates decide whether a crew is
+   allowed to break ground.
+2. Never compute an expiry from a start date. Only return an expiry the text
+   actually states.
+3. Dates as YYYY-MM-DD. If a date is ambiguous, return an empty string rather
+   than choosing an interpretation.
+4. Utility responses: return one entry per member the ticket lists, with the
+   status it states. Map to MARKED, CLEAR, NOT_COMPLETE, DELAYED, or UNKNOWN.
+   A member listed with no response yet is UNKNOWN.
+5. Put anything that matters but does not fit a field — dig site remarks,
+   instructions, restrictions — into notes, verbatim.`;
+
+const TICKET_TOOL: Anthropic.Tool = {
+  name: "record_tickets",
+  description: "Record every locate ticket found in the text.",
+  input_schema: {
+    type: "object",
+    properties: {
+      tickets: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            number: { type: "string", description: "The 811 ticket number" },
+            revision: { type: "string" },
+            street: { type: "string" },
+            crossStreet: { type: "string" },
+            city: { type: "string" },
+            county: { type: "string" },
+            workType: { type: "string" },
+            calledInOn: { type: "string", description: "YYYY-MM-DD or empty" },
+            workToBeginOn: { type: "string", description: "YYYY-MM-DD or empty" },
+            updateBy: { type: "string", description: "YYYY-MM-DD or empty" },
+            expiresOn: { type: "string", description: "YYYY-MM-DD or empty" },
+            notes: { type: "string" },
+            members: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  member: { type: "string" },
+                  status: {
+                    type: "string",
+                    enum: ["MARKED", "CLEAR", "NOT_COMPLETE", "DELAYED", "UNKNOWN"],
+                  },
+                  respondedOn: { type: "string" },
+                  note: { type: "string" },
+                },
+                required: ["member", "status"],
+              },
+            },
+          },
+          required: ["number"],
+        },
+      },
+    },
+    required: ["tickets"],
+  },
+};
+
+const asDay = (v: unknown) =>
+  typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v.trim()) ? v.trim() : "";
+const asText = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+
+/**
+ * Read one or more tickets out of pasted text.
+ *
+ * Every value is re-validated here rather than trusted as returned. A date that
+ * is not a date becomes empty, which the board renders as "no date on file" and
+ * refuses to dig on — the failure mode of this function has to be a ticket that
+ * says it knows nothing, never one that quietly states a wrong expiry.
+ */
+export async function parseLocateText(text: string): Promise<ParsedTicket[]> {
+  if (!locateChatReady()) {
+    throw new Error("ANTHROPIC_API_KEY is not set, so tickets cannot be read.");
+  }
+
+  const client = new Anthropic();
+  const message = await client.messages.create({
+    model: "claude-opus-5",
+    max_tokens: 8000,
+    system: PARSE_SYSTEM,
+    tools: [TICKET_TOOL],
+    tool_choice: { type: "tool", name: "record_tickets" },
+    messages: [{ role: "user", content: text.slice(0, 120_000) }],
+  });
+
+  const call = message.content.find(
+    (b): b is Anthropic.ToolUseBlock => b.type === "tool_use" && b.name === "record_tickets",
+  );
+  if (!call) return [];
+
+  const raw = (call.input as { tickets?: unknown[] }).tickets ?? [];
+  return raw
+    .map((t) => {
+      const r = t as Record<string, unknown>;
+      const members = Array.isArray(r.members) ? r.members : [];
+      return {
+        number: asText(r.number).toUpperCase(),
+        revision: asText(r.revision),
+        street: asText(r.street),
+        crossStreet: asText(r.crossStreet),
+        city: asText(r.city),
+        county: asText(r.county),
+        workType: asText(r.workType),
+        calledInOn: asDay(r.calledInOn),
+        workToBeginOn: asDay(r.workToBeginOn),
+        updateBy: asDay(r.updateBy),
+        expiresOn: asDay(r.expiresOn),
+        notes: asText(r.notes),
+        members: members.map((m) => {
+          const x = m as Record<string, unknown>;
+          const status = asText(x.status).toUpperCase();
+          return {
+            member: asText(x.member),
+            status: ["MARKED", "CLEAR", "NOT_COMPLETE", "DELAYED", "UNKNOWN"].includes(status)
+              ? status
+              : "UNKNOWN",
+            respondedOn: asDay(x.respondedOn),
+            note: asText(x.note),
+          };
+        }).filter((m) => m.member),
+      };
+    })
+    .filter((t) => t.number);
+}

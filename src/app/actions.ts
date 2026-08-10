@@ -25,7 +25,7 @@ import { isLabourOrEquipmentCode } from "@/lib/unit-codes";
 import { packetStatus } from "@/lib/vendor-packet";
 import { readExif } from "@/lib/exif";
 import { notifyCrew, notifyStaff } from "@/lib/notify";
-import { askAboutLocates, locateChatReady } from "@/lib/locate-chat";
+import { askAboutLocates, locateChatReady, parseLocateText } from "@/lib/locate-chat";
 import { getLocateTickets } from "@/data/queries";
 import {
   FAST_PAY_DAYS,
@@ -5064,9 +5064,20 @@ export async function setLocateResponse(input: {
  */
 export async function importLocateNumbers(text: string, projectId?: string | null) {
   await requireStaff();
-  const found = [...new Set(
-    (text.match(/\b\d{6,}\b/g) ?? []).map((n) => n.trim()),
-  )];
+  // A ticket number is not just a run of digits. 811 numbers carry hyphens and
+  // sometimes letters, and matching bare digits split 20260809-00123 into its
+  // first half and filed a ticket that does not exist. Tokens are taken whole
+  // and kept when they carry enough digits to be a ticket number.
+  const found = [
+    ...new Set(
+      text
+        .split(/[\s,;|]+/)
+        .map((t) => t.trim().replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, ""))
+        .filter((t) => /^[A-Za-z0-9][A-Za-z0-9-]*$/.test(t))
+        .filter((t) => (t.match(/\d/g) ?? []).length >= 6)
+        .map((t) => t.toUpperCase()),
+    ),
+  ];
   if (found.length === 0) {
     return { ok: false as const, error: "No ticket numbers found in that." };
   }
@@ -5129,4 +5140,97 @@ export async function askLocates(
       error: e instanceof Error ? e.message : "The assistant could not answer.",
     };
   }
+}
+
+/**
+ * Read pasted ticket text and file what it says.
+ *
+ * This is the answer to "can it pull the information off the ticket": paste the
+ * email or the portal page and every field it states is read off it — dates,
+ * street, work type, and what each utility answered.
+ *
+ * What it will not do is fill a gap. A field the text does not state is left
+ * empty, and an empty expiry shows on the board as "no date on file" and
+ * returns do-not-dig. The failure mode has to be a ticket that admits it knows
+ * nothing, never one that quietly states a wrong date.
+ */
+export async function importLocateText(text: string, projectId?: string | null) {
+  await requireStaff();
+  if (!text.trim()) return { ok: false as const, error: "Paste a ticket first." };
+  if (!locateChatReady()) {
+    return { ok: false as const, error: "Reading tickets needs ANTHROPIC_API_KEY set." };
+  }
+
+  let parsed;
+  try {
+    parsed = await parseLocateText(text);
+  } catch (e) {
+    return {
+      ok: false as const,
+      error: e instanceof Error ? e.message : "Could not read that.",
+    };
+  }
+  if (parsed.length === 0) {
+    return { ok: false as const, error: "No ticket found in that text." };
+  }
+
+  let created = 0;
+  let updated = 0;
+  let responses = 0;
+  const incomplete: string[] = [];
+
+  for (const t of parsed) {
+    const existing = await prisma.locateTicket.findUnique({
+      where: { number_revision: { number: t.number, revision: t.revision } },
+      select: { id: true },
+    });
+
+    const data = {
+      number: t.number,
+      revision: t.revision,
+      street: t.street,
+      crossStreet: t.crossStreet,
+      city: t.city,
+      county: t.county,
+      workType: t.workType,
+      calledInOn: t.calledInOn,
+      workToBeginOn: t.workToBeginOn,
+      updateBy: t.updateBy,
+      expiresOn: t.expiresOn,
+      notes: t.notes,
+      ...(projectId ? { projectId } : {}),
+    };
+
+    const saved = existing
+      ? await prisma.locateTicket.update({ where: { id: existing.id }, data })
+      : await prisma.locateTicket.create({ data });
+    if (existing) updated++;
+    else created++;
+
+    for (const m of t.members) {
+      await prisma.locateResponse.upsert({
+        where: { ticketId_member: { ticketId: saved.id, member: m.member } },
+        create: {
+          ticketId: saved.id,
+          member: m.member,
+          status: m.status as "MARKED" | "CLEAR" | "NOT_COMPLETE" | "DELAYED" | "UNKNOWN",
+          respondedOn: m.respondedOn,
+          note: m.note,
+        },
+        update: {
+          status: m.status as "MARKED" | "CLEAR" | "NOT_COMPLETE" | "DELAYED" | "UNKNOWN",
+          respondedOn: m.respondedOn,
+          note: m.note,
+        },
+      });
+      responses++;
+    }
+
+    // Said out loud rather than left to be noticed. A ticket read without an
+    // expiry is the one somebody will assume was read correctly.
+    if (!t.expiresOn) incomplete.push(t.number);
+  }
+
+  revalidatePath("/locates");
+  return { ok: true as const, created, updated, responses, incomplete };
 }
