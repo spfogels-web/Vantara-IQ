@@ -1569,9 +1569,24 @@ model LocateTicket {
 
   /// The clock. All calendar days.
   calledInOn    String @default("")
+  /// "Effective On" — the ticket is not in force before this.
   workToBeginOn String @default("")
+  /// "Response By" — when the members owe an answer. Past this with silence
+  /// is a call to make, not a wait to keep having.
+  responseBy    String @default("")
+  /// "Updateable On" — the earliest an update can be filed.
+  updateableOn  String @default("")
   updateBy      String @default("")
   expiresOn     String @default("")
+
+  /// The dig site as 811 recorded it. Held because it is the only coordinate
+  /// anyone states for this work, and it is what puts a ticket on a map
+  /// beside the crews.
+  lat                Float?
+  lng                Float?
+  /// Verbatim from the ticket. These say where to start and what to walk, and
+  /// paraphrasing them would lose the only site-specific instruction there is.
+  locateInstructions String @default("")
 
   /// Set when a ticket is cancelled or superseded, so it drops out of the
   /// board without being deleted — a locate history is a safety record.
@@ -1593,10 +1608,15 @@ model LocateResponse {
   ticketId String
 
   /// The utility, as 811 names them.
-  member      String
-  status      LocateResponseStatus @default(UNKNOWN)
-  respondedOn String               @default("")
-  note        String               @default("")
+  member       String
+  /// The 811 member code, which is what appears on a response.
+  code         String               @default("")
+  /// Gas, Electric, Water, Telecommunication. Not decoration: what is in the
+  /// ground decides how badly a missing response matters.
+  facilityType String               @default("")
+  status       LocateResponseStatus @default(UNKNOWN)
+  respondedOn  String               @default("")
+  note         String               @default("")
 
   @@unique([ticketId, member])
   @@index([ticketId])

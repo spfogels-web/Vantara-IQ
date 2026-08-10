@@ -121,6 +121,11 @@ export interface ParsedTicket {
   number: string;
   revision: string;
   ticketType: string;
+  lat: number | null;
+  lng: number | null;
+  responseBy: string;
+  updateableOn: string;
+  locateInstructions: string;
   street: string;
   crossStreet: string;
   city: string;
@@ -131,7 +136,14 @@ export interface ParsedTicket {
   updateBy: string;
   expiresOn: string;
   notes: string;
-  members: { member: string; status: string; respondedOn: string; note: string }[];
+  members: {
+    member: string;
+    code: string;
+    facilityType: string;
+    status: string;
+    respondedOn: string;
+    note: string;
+  }[];
 }
 
 const PARSE_SYSTEM = `You read Georgia 811 locate tickets and turn them into structured
@@ -157,18 +169,31 @@ Rules:
    RETRANSMIT, or whatever word the ticket uses. A cancel ticket withdraws a
    previous locate and must be reported as such.
 
-These tickets label their dates in several ways. Treat all of these as the
-same thing and map them to the right field:
+Georgia 811 tickets carry a Dates block. Map it exactly:
 
-   called in      Call Date, Original Call Date, Transmit Date, Date Called
-   work may begin Work to Begin, Legal Start, Legal Dig Date, Start Date,
-                  Excavation Date, Work Date
-   update by      Update By, Restake By, Remark By, Refresh By, Response Due
-   expires        Expiration, Expires, Expiration Date, Good Thru, Valid Thru,
-                  Ticket Expires
+   Date/Time      -> calledInOn      (the header date the ticket was raised)
+   Effective On   -> workToBeginOn
+   Response By    -> responseBy
+   Updateable On  -> updateableOn
+   Update By      -> updateBy
+   Expires On     -> expiresOn
 
-If a date carries a time, keep only the date part. If a field appears twice
-with different values, take the later one and say so in notes.`;
+Other wordings mean the same things: Call Date, Transmit Date, Legal Start,
+Work to Begin, Restake By, Good Thru, Expiration Date. Dates arrive as
+MM/DD/YYYY and often carry a time — convert to YYYY-MM-DD and drop the time.
+
+Also read, when present:
+
+   Sequence Number -> revision
+   Latitude, Longitude -> lat, lng as decimal numbers
+   Locate Instructions -> locateInstructions, verbatim
+   Remarks, Comments -> notes, verbatim
+
+The Members block lists who was notified, with a code, a name and a facility
+type. Return every one of them. On a freshly issued ticket none of them have
+answered yet, so their status is UNKNOWN — that is correct and important, not
+a gap to fill. Only report MARKED or CLEAR where a response is actually
+stated.`;
 
 const TICKET_TOOL: Anthropic.Tool = {
   name: "record_tickets",
@@ -182,7 +207,12 @@ const TICKET_TOOL: Anthropic.Tool = {
           type: "object",
           properties: {
             number: { type: "string", description: "The 811 ticket number" },
-            revision: { type: "string" },
+            revision: { type: "string", description: "Sequence Number, if stated" },
+            lat: { type: "number", description: "Latitude as a decimal, if stated" },
+            lng: { type: "number", description: "Longitude as a decimal, if stated" },
+            responseBy: { type: "string", description: "YYYY-MM-DD or empty" },
+            updateableOn: { type: "string", description: "YYYY-MM-DD or empty" },
+            locateInstructions: { type: "string" },
             ticketType: {
               type: "string",
               description: "NORMAL, CANCEL, UPDATE, EMERGENCY, RETRANSMIT — as stated",
@@ -202,7 +232,9 @@ const TICKET_TOOL: Anthropic.Tool = {
               items: {
                 type: "object",
                 properties: {
-                  member: { type: "string" },
+                  member: { type: "string", description: "The member name as printed" },
+                  code: { type: "string", description: "The 811 member code" },
+                  facilityType: { type: "string", description: "Gas, Electric, Water, Telecommunication" },
                   status: {
                     type: "string",
                     enum: ["MARKED", "CLEAR", "NOT_COMPLETE", "DELAYED", "UNKNOWN"],
@@ -225,6 +257,13 @@ const TICKET_TOOL: Anthropic.Tool = {
 const asDay = (v: unknown) =>
   typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v.trim()) ? v.trim() : "";
 const asText = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+
+/** A coordinate only counts if it is a real number in range. A ticket with a
+ *  garbled latitude should hold none rather than a point in the sea. */
+const asCoord = (v: unknown) => {
+  const n = typeof v === "number" ? v : Number.parseFloat(String(v ?? ""));
+  return Number.isFinite(n) && Math.abs(n) <= 180 && n !== 0 ? n : null;
+};
 
 /**
  * Read one or more tickets out of pasted text.
@@ -263,6 +302,11 @@ export async function parseLocateText(text: string): Promise<ParsedTicket[]> {
         number: asText(r.number).toUpperCase(),
         revision: asText(r.revision),
         ticketType: asText(r.ticketType).toUpperCase(),
+        lat: asCoord(r.lat),
+        lng: asCoord(r.lng),
+        responseBy: asDay(r.responseBy),
+        updateableOn: asDay(r.updateableOn),
+        locateInstructions: asText(r.locateInstructions),
         street: asText(r.street),
         crossStreet: asText(r.crossStreet),
         city: asText(r.city),
@@ -278,6 +322,8 @@ export async function parseLocateText(text: string): Promise<ParsedTicket[]> {
           const status = asText(x.status).toUpperCase();
           return {
             member: asText(x.member),
+            code: asText(x.code),
+            facilityType: asText(x.facilityType),
             status: ["MARKED", "CLEAR", "NOT_COMPLETE", "DELAYED", "UNKNOWN"].includes(status)
               ? status
               : "UNKNOWN",

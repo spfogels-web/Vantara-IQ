@@ -3331,6 +3331,8 @@ export async function getProspectSummary(): Promise<ProspectSummary> {
 export interface LocateResponseRow {
   id: string;
   member: string;
+  code: string;
+  facilityType: string;
   status: string;
   respondedOn: string;
   note: string;
@@ -3350,6 +3352,11 @@ export interface LocateTicketRow {
   /** NORMAL, CANCEL, UPDATE — a cancel withdraws a locate rather than being one. */
   ticketType: string;
   calledInOn: string;
+  responseBy: string;
+  updateableOn: string;
+  lat: number | null;
+  lng: number | null;
+  locateInstructions: string;
   workToBeginOn: string;
   updateBy: string;
   expiresOn: string;
@@ -3372,12 +3379,13 @@ const LOCATE_SELECT = {
   id: true, number: true, revision: true, projectId: true,
   street: true, crossStreet: true, city: true, county: true, workType: true,
   calledInOn: true, workToBeginOn: true, updateBy: true, expiresOn: true,
-  ticketType: true,
+  ticketType: true, responseBy: true, updateableOn: true,
+  lat: true, lng: true, locateInstructions: true,
   closedOn: true, notes: true,
   project: { select: { name: true } },
   responses: {
     orderBy: { member: "asc" as const },
-    select: { id: true, member: true, status: true, respondedOn: true, note: true },
+    select: { id: true, member: true, code: true, facilityType: true, status: true, respondedOn: true, note: true },
   },
 } as const;
 
@@ -3412,6 +3420,11 @@ export async function getLocateTickets(): Promise<LocateTicketRow[]> {
       workType: r.workType,
       ticketType: r.ticketType,
       calledInOn: r.calledInOn,
+      responseBy: r.responseBy,
+      updateableOn: r.updateableOn,
+      lat: r.lat,
+      lng: r.lng,
+      locateInstructions: r.locateInstructions,
       workToBeginOn: r.workToBeginOn,
       updateBy: standing.updateBy,
       expiresOn: standing.expiresOn,
@@ -3423,7 +3436,7 @@ export async function getLocateTickets(): Promise<LocateTicketRow[]> {
       datesStated: standing.stated.expiry,
       dig: canDig(standing, r.responses),
       responses: r.responses.map((x) => ({
-        id: x.id, member: x.member, status: x.status,
+        id: x.id, member: x.member, code: x.code, facilityType: x.facilityType, status: x.status,
         respondedOn: x.respondedOn, note: x.note,
       })),
       awaiting: r.responses

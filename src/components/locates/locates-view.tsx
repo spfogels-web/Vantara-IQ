@@ -336,6 +336,7 @@ function TicketDetail({
     workType: t.workType,
     calledInOn: t.calledInOn,
     workToBeginOn: t.workToBeginOn,
+    responseBy: t.responseBy,
     updateBy: t.datesStated ? t.updateBy : "",
     expiresOn: t.datesStated ? t.expiresOn : "",
     projectId: t.projectId ?? "",
@@ -380,6 +381,9 @@ function TicketDetail({
         <Field label="County"><input value={f.county} onChange={set("county")} className={box} /></Field>
         <Field label="Called in"><input type="date" value={f.calledInOn} onChange={set("calledInOn")} className={cn(box, "num")} /></Field>
         <Field label="Work may begin"><input type="date" value={f.workToBeginOn} onChange={set("workToBeginOn")} className={cn(box, "num")} /></Field>
+        <Field label="Response by" hint="members owe an answer">
+          <input type="date" value={f.responseBy} onChange={set("responseBy")} className={cn(box, "num")} />
+        </Field>
         <Field label="Update by" hint="as stated by 811">
           <input type="date" value={f.updateBy} onChange={set("updateBy")} className={cn(box, "num")} />
         </Field>
@@ -422,6 +426,13 @@ function TicketDetail({
         ) : null}
       </div>
 
+      {t.locateInstructions ? (
+        <div className="mt-2.5 rounded-lg border border-border/60 bg-foreground/[0.02] px-2.5 py-2">
+          <p className="text-[10.5px] uppercase tracking-wide text-muted-foreground">Locate instructions</p>
+          <p className="mt-0.5 text-[12px] leading-relaxed text-foreground">{t.locateInstructions}</p>
+        </div>
+      ) : null}
+
       {/* Per-utility responses. */}
       <div className="mt-3 border-t border-border/50 pt-2.5">
         <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Utility responses</p>
@@ -434,6 +445,20 @@ function TicketDetail({
             {t.responses.map((r) => (
               <li key={r.id} className="flex flex-wrap items-center gap-2 text-[12px]">
                 <span className="min-w-[9rem] text-foreground">{r.member}</span>
+                {r.facilityType ? (
+                  <span
+                    className={cn(
+                      "rounded px-1.5 py-0.5 text-[10px] font-medium",
+                      /gas/i.test(r.facilityType)
+                        ? "bg-critical/12 text-critical"
+                        : /electric/i.test(r.facilityType)
+                          ? "bg-warning/12 text-warning"
+                          : "bg-foreground/[0.06] text-muted-foreground",
+                    )}
+                  >
+                    {r.facilityType}
+                  </span>
+                ) : null}
                 <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-semibold", RESPONSE_STYLE[r.status])}>
                   {RESPONSE_LABEL[r.status] ?? r.status}
                 </span>

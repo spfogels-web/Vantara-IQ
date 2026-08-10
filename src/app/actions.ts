@@ -4954,6 +4954,7 @@ export type LocateTicketInput = {
   workType?: string;
   calledInOn?: string;
   workToBeginOn?: string;
+  responseBy?: string;
   updateBy?: string;
   expiresOn?: string;
   notes?: string;
@@ -4983,6 +4984,7 @@ export async function saveLocateTicket(input: LocateTicketInput) {
     // board shows and refuses to dig on — far better than a silent bad value.
     calledInOn: day(input.calledInOn),
     workToBeginOn: day(input.workToBeginOn),
+    responseBy: day(input.responseBy),
     updateBy: day(input.updateBy),
     expiresOn: day(input.expiresOn),
     notes: (input.notes ?? "").trim(),
@@ -5195,8 +5197,13 @@ export async function importLocateText(text: string, projectId?: string | null) 
       workType: t.workType,
       ticketType: t.ticketType,
       sourceText: text.slice(0, 20000),
+      lat: t.lat,
+      lng: t.lng,
+      locateInstructions: t.locateInstructions,
       calledInOn: t.calledInOn,
       workToBeginOn: t.workToBeginOn,
+      responseBy: t.responseBy,
+      updateableOn: t.updateableOn,
       updateBy: t.updateBy,
       expiresOn: t.expiresOn,
       notes: t.notes,
@@ -5215,11 +5222,15 @@ export async function importLocateText(text: string, projectId?: string | null) 
         create: {
           ticketId: saved.id,
           member: m.member,
+          code: m.code,
+          facilityType: m.facilityType,
           status: m.status as "MARKED" | "CLEAR" | "NOT_COMPLETE" | "DELAYED" | "UNKNOWN",
           respondedOn: m.respondedOn,
           note: m.note,
         },
         update: {
+          code: m.code,
+          facilityType: m.facilityType,
           status: m.status as "MARKED" | "CLEAR" | "NOT_COMPLETE" | "DELAYED" | "UNKNOWN",
           respondedOn: m.respondedOn,
           note: m.note,
