@@ -3347,6 +3347,8 @@ export interface LocateTicketRow {
   city: string;
   county: string;
   workType: string;
+  /** NORMAL, CANCEL, UPDATE — a cancel withdraws a locate rather than being one. */
+  ticketType: string;
   calledInOn: string;
   workToBeginOn: string;
   updateBy: string;
@@ -3370,6 +3372,7 @@ const LOCATE_SELECT = {
   id: true, number: true, revision: true, projectId: true,
   street: true, crossStreet: true, city: true, county: true, workType: true,
   calledInOn: true, workToBeginOn: true, updateBy: true, expiresOn: true,
+  ticketType: true,
   closedOn: true, notes: true,
   project: { select: { name: true } },
   responses: {
@@ -3407,6 +3410,7 @@ export async function getLocateTickets(): Promise<LocateTicketRow[]> {
       city: r.city,
       county: r.county,
       workType: r.workType,
+      ticketType: r.ticketType,
       calledInOn: r.calledInOn,
       workToBeginOn: r.workToBeginOn,
       updateBy: standing.updateBy,
@@ -3417,7 +3421,7 @@ export async function getLocateTickets(): Promise<LocateTicketRow[]> {
       standingLabel: STANDING_LABEL[standing.standing],
       daysToExpiry: standing.daysToExpiry,
       datesStated: standing.stated.expiry,
-      dig: canDig(standing),
+      dig: canDig(standing, r.responses),
       responses: r.responses.map((x) => ({
         id: x.id, member: x.member, status: x.status,
         respondedOn: x.respondedOn, note: x.note,
@@ -3451,3 +3455,4 @@ export async function getLocateSummary(): Promise<LocateSummary> {
     awaitingResponses: open.filter((t) => t.awaiting.length > 0).length,
   };
 }
+

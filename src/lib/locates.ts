@@ -45,6 +45,8 @@ export type LocateStanding =
   | "due"
   /** Past its expiry. The marks cannot be relied on. */
   | "expired"
+  /** A cancellation. It withdraws a ticket rather than being one. */
+  | "cancelled"
   /** No date on file, so the clock is unknown — which is not the same as fine. */
   | "unknown";
 
@@ -131,6 +133,7 @@ export function ticketStanding(
     workToBeginOn?: string | null;
     expiresOn?: string | null;
     updateBy?: string | null;
+    ticketType?: string | null;
   },
   today: string,
   terms: LocateTerms = DEFAULT_TERMS,
@@ -146,6 +149,12 @@ export function ticketStanding(
     updateBy: dates.updateBy,
     stated: dates.stated,
   };
+
+  // A cancellation withdraws a ticket; it is not one. Reading a window onto it
+  // would put a green tick against the act of taking a locate away.
+  if (/cancel/i.test(ticket.ticketType ?? "")) {
+    return { ...base, standing: "cancelled", expiresOn: "", updateBy: "", daysToExpiry: null, daysToUpdate: null };
+  }
 
   // No date at all. Reported as unknown rather than assumed good — a ticket
   // nobody can date is exactly the one worth stopping for.
@@ -168,6 +177,7 @@ export function ticketStanding(
 export const STANDING_LABEL: Record<LocateStanding, string> = {
   waiting: "Not yet in force",
   active: "In force",
+  cancelled: "Cancelled",
   due: "Needs updating",
   expired: "Expired",
   unknown: "No date on file",
@@ -180,14 +190,57 @@ export const STANDING_LABEL: Record<LocateStanding, string> = {
  * reason travels with the answer, because "no" without a reason gets argued
  * with on site and "yes" without a reason gets trusted too far.
  */
-export function canDig(standing: TicketStanding): { ok: boolean; because: string } {
+export function canDig(
+  standing: TicketStanding,
+  /** Every member response recorded against the ticket. */
+  responses: { member: string; status: string }[] = [],
+): { ok: boolean; because: string } {
+  const awaiting = responses
+    .filter((r) => r.status === "UNKNOWN" || r.status === "NOT_COMPLETE" || r.status === "DELAYED")
+    .map((r) => r.member);
+
+  // A cancellation is not a locate however it was answered.
+  if (standing.standing === "cancelled") {
+    return {
+      ok: false,
+      because: "This ticket was cancelled. It withdraws a locate rather than granting one.",
+    };
+  }
+
+  // Nobody has said anything at all. That is not the same as everybody
+  // clearing it, and it is the state a freshly imported ticket sits in.
+  if (responses.length === 0) {
+    return {
+      ok: false,
+      because: "No utility responses recorded, so nothing has cleared this ticket.",
+    };
+  }
+
+  // A live clock is only half the question. A ticket can be perfectly in force
+  // while the gas company has not been out, and a green tick beside that is
+  // the exact mistake this whole feature exists to prevent. Dates decide
+  // whether a ticket is alive; responses decide whether it is answered.
+  if (awaiting.length > 0) {
+    const live = standing.standing === "active" || standing.standing === "due";
+    return {
+      ok: false,
+      because: live
+        ? `In force until ${standing.expiresOn}, but ${awaiting.length} ${
+            awaiting.length === 1 ? "utility has" : "utilities have"
+          } not responded: ${awaiting.join(", ")}.`
+        : `Not answered by ${awaiting.join(", ")}, and the ticket is ${STANDING_LABEL[
+            standing.standing
+          ].toLowerCase()}.`,
+    };
+  }
+
   switch (standing.standing) {
     case "active":
-      return { ok: true, because: `In force until ${standing.expiresOn}.` };
+      return { ok: true, because: `In force until ${standing.expiresOn}, all utilities responded.` };
     case "due":
       return {
         ok: true,
-        because: `In force until ${standing.expiresOn}, but it needs updating${
+        because: `All utilities responded. In force until ${standing.expiresOn}, but it needs updating${
           standing.daysToExpiry !== null ? ` — ${standing.daysToExpiry} day(s) left` : ""
         }.`,
       };

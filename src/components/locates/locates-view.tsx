@@ -40,6 +40,7 @@ const STANDING_STYLE: Record<string, string> = {
   due: "bg-warning/15 text-warning",
   expired: "bg-critical/15 text-critical",
   waiting: "bg-info/12 text-info",
+  cancelled: "bg-foreground/[0.08] text-muted-foreground line-through",
   unknown: "bg-foreground/[0.08] text-muted-foreground",
 };
 
@@ -270,6 +271,13 @@ function TicketRow({
         >
           {t.standingLabel}
         </span>
+        {/* A cancel is not a locate, and the word has to be on the row rather
+            than buried in notes where it reads as an ordinary ticket. */}
+        {t.ticketType && t.ticketType !== "NORMAL" ? (
+          <span className="rounded bg-foreground/[0.08] px-1.5 py-0.5 text-[10px] font-semibold uppercase text-muted-foreground">
+            {t.ticketType}
+          </span>
+        ) : null}
         <span className="min-w-0 flex-1 truncate text-[12px] text-muted-foreground">
           {[t.street, t.crossStreet, t.city].filter(Boolean).join(" · ") || "No address on the ticket"}
           {t.projectName ? ` — ${t.projectName}` : ""}

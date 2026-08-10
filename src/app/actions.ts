@@ -5193,6 +5193,8 @@ export async function importLocateText(text: string, projectId?: string | null) 
       city: t.city,
       county: t.county,
       workType: t.workType,
+      ticketType: t.ticketType,
+      sourceText: text.slice(0, 20000),
       calledInOn: t.calledInOn,
       workToBeginOn: t.workToBeginOn,
       updateBy: t.updateBy,

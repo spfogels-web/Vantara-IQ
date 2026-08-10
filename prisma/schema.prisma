@@ -1560,6 +1560,12 @@ model LocateTicket {
   county      String @default("")
   /// What the ticket says the work is — bore, trench, plow.
   workType    String @default("")
+  /// NORMAL | CANCEL | UPDATE | EMERGENCY | RETRANSMIT, as stated. A cancel
+  /// ticket is not a locate: it withdraws one, and must never read as in force.
+  ticketType  String @default("")
+  /// The text this was read from, kept so a misread can be diagnosed against
+  /// what actually arrived rather than against a memory of it.
+  sourceText  String @default("")
 
   /// The clock. All calendar days.
   calledInOn    String @default("")

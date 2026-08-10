@@ -120,6 +120,7 @@ export async function askAboutLocates(
 export interface ParsedTicket {
   number: string;
   revision: string;
+  ticketType: string;
   street: string;
   crossStreet: string;
   city: string;
@@ -151,7 +152,23 @@ Rules:
    status it states. Map to MARKED, CLEAR, NOT_COMPLETE, DELAYED, or UNKNOWN.
    A member listed with no response yet is UNKNOWN.
 5. Put anything that matters but does not fit a field — dig site remarks,
-   instructions, restrictions — into notes, verbatim.`;
+   instructions, restrictions — into notes, verbatim.
+6. Return the ticket type exactly as stated: NORMAL, CANCEL, UPDATE, EMERGENCY,
+   RETRANSMIT, or whatever word the ticket uses. A cancel ticket withdraws a
+   previous locate and must be reported as such.
+
+These tickets label their dates in several ways. Treat all of these as the
+same thing and map them to the right field:
+
+   called in      Call Date, Original Call Date, Transmit Date, Date Called
+   work may begin Work to Begin, Legal Start, Legal Dig Date, Start Date,
+                  Excavation Date, Work Date
+   update by      Update By, Restake By, Remark By, Refresh By, Response Due
+   expires        Expiration, Expires, Expiration Date, Good Thru, Valid Thru,
+                  Ticket Expires
+
+If a date carries a time, keep only the date part. If a field appears twice
+with different values, take the later one and say so in notes.`;
 
 const TICKET_TOOL: Anthropic.Tool = {
   name: "record_tickets",
@@ -166,6 +183,10 @@ const TICKET_TOOL: Anthropic.Tool = {
           properties: {
             number: { type: "string", description: "The 811 ticket number" },
             revision: { type: "string" },
+            ticketType: {
+              type: "string",
+              description: "NORMAL, CANCEL, UPDATE, EMERGENCY, RETRANSMIT — as stated",
+            },
             street: { type: "string" },
             crossStreet: { type: "string" },
             city: { type: "string" },
@@ -241,6 +262,7 @@ export async function parseLocateText(text: string): Promise<ParsedTicket[]> {
       return {
         number: asText(r.number).toUpperCase(),
         revision: asText(r.revision),
+        ticketType: asText(r.ticketType).toUpperCase(),
         street: asText(r.street),
         crossStreet: asText(r.crossStreet),
         city: asText(r.city),
