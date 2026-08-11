@@ -12,6 +12,7 @@ import {
   MapPin,
   Ruler,
   Sparkles,
+  Trash2,
   X,
 } from "lucide-react";
 
@@ -22,7 +23,7 @@ import { formatCurrency, formatFeet, formatNumber, formatWhen } from "@/lib/form
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { StatusPill } from "@/components/common/status-pill";
 import { Button } from "@/components/ui/button";
-import { reopenDailyReview, reviewDaily, setDailyBillingWeek } from "@/app/actions";
+import { deleteDaily, reopenDailyReview, reviewDaily, setDailyBillingWeek } from "@/app/actions";
 
 const FILTERS: (DailyStatus | "All")[] = [
   "All",
@@ -184,6 +185,8 @@ function DailyDetail({
   const [error, setError] = React.useState<string | null>(null);
   const [movingWeek, setMovingWeek] = React.useState(false);
   const [weekDate, setWeekDate] = React.useState("");
+  /** Armed only after the server has said what the delete would take. */
+  const [confirmDelete, setConfirmDelete] = React.useState(false);
 
   const decided = d.status === "Approved" || d.status === "Denied";
 
@@ -194,7 +197,26 @@ function DailyDetail({
     setError(null);
     setMovingWeek(false);
     setWeekDate("");
+    setConfirmDelete(false);
   }, [d.id]);
+
+  // Two presses, and the first one is a question to the server rather than a
+  // guess in the browser: it comes back with what the delete would take off,
+  // which is the only version of this warning worth showing.
+  async function remove(force: boolean) {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    const res = await deleteDaily(d.id, force);
+    setBusy(false);
+    if (res.ok) {
+      setConfirmDelete(false);
+      router.refresh();
+      return;
+    }
+    setError(res.error);
+    setConfirmDelete("needsConfirm" in res && Boolean(res.needsConfirm));
+  }
 
   async function moveWeek(to: string) {
     if (busy) return;
@@ -402,15 +424,27 @@ function DailyDetail({
                   </p>
                 ) : null}
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void reopen()}
-                disabled={busy}
-                className="h-9 shrink-0 gap-1.5 rounded-lg text-[12.5px] font-medium"
-              >
-                Reopen review
-              </Button>
+              <div className="flex shrink-0 items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void reopen()}
+                  disabled={busy}
+                  className="h-9 gap-1.5 rounded-lg text-[12.5px] font-medium"
+                >
+                  Reopen review
+                </Button>
+                <DeleteDaily
+                  busy={busy}
+                  armed={confirmDelete}
+                  onAsk={() => void remove(false)}
+                  onConfirm={() => void remove(true)}
+                  onCancel={() => {
+                    setConfirmDelete(false);
+                    setError(null);
+                  }}
+                />
+              </div>
             </div>
           ) : (
             <>
@@ -476,6 +510,18 @@ function DailyDetail({
                     Move billing week
                   </button>
                 ) : null}
+                {!movingWeek ? (
+                  <DeleteDaily
+                    busy={busy}
+                    armed={confirmDelete}
+                    onAsk={() => void remove(false)}
+                    onConfirm={() => void remove(true)}
+                    onCancel={() => {
+                      setConfirmDelete(false);
+                      setError(null);
+                    }}
+                  />
+                ) : null}
                 <Button
                   variant="outline"
                   size="sm"
@@ -522,5 +568,63 @@ function DocChip({
       {icon}
       <span className="text-muted-foreground">{label}:</span> {value}
     </span>
+  );
+}
+
+/**
+ * Removing a day.
+ *
+ * Two presses, and the first one asks the server rather than guessing in the
+ * browser — it comes back naming the drafts the day is on and what happens to
+ * the sheet, which is the only version of this warning worth reading. The
+ * server refuses outright when the day is on something already sent, so the
+ * confirm here can never be the thing that lets that through.
+ */
+function DeleteDaily({
+  busy,
+  armed,
+  onAsk,
+  onConfirm,
+  onCancel,
+}: {
+  busy: boolean;
+  armed: boolean;
+  onAsk: () => void;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  if (!armed) {
+    return (
+      <button
+        type="button"
+        onClick={onAsk}
+        disabled={busy}
+        title="Delete this daily"
+        className="focus-ring grid size-9 shrink-0 place-items-center rounded-lg border border-border text-muted-foreground transition hover:border-critical/50 hover:text-critical disabled:opacity-40"
+      >
+        <Trash2 className="size-3.5" />
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex shrink-0 items-center gap-1.5">
+      <button
+        type="button"
+        onClick={onConfirm}
+        disabled={busy}
+        className="focus-ring inline-flex h-9 items-center gap-1.5 rounded-lg bg-critical px-3 text-[12.5px] font-semibold text-white hover:opacity-90 disabled:opacity-40"
+      >
+        <Trash2 className="size-3.5" />
+        {busy ? "Deleting…" : "Delete it"}
+      </button>
+      <button
+        type="button"
+        onClick={onCancel}
+        className="focus-ring h-9 rounded-lg px-2 text-[12.5px] text-muted-foreground hover:text-foreground"
+      >
+        Keep
+      </button>
+    </div>
   );
 }

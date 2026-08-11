@@ -21,7 +21,7 @@ import {
   pdfTextPages,
 } from "@/lib/parse-material-list";
 import { findJobProfile } from "@/lib/job-profiles";
-import { isLabourOrEquipmentCode } from "@/lib/unit-codes";
+import { isLabourOrEquipmentCode, isLinearFootageCode } from "@/lib/unit-codes";
 import { packetStatus } from "@/lib/vendor-packet";
 import { readExif } from "@/lib/exif";
 import { notifyCrew, notifyStaff } from "@/lib/notify";
@@ -52,6 +52,7 @@ import {
 } from "@/lib/auto-invoice";
 import {
   fileApprovedDailyForSub,
+  recalcSubInvoice,
   unfileDailyForSub,
   type SubFileResult,
   type SubUnfileResult,
@@ -1924,7 +1925,16 @@ export async function submitDailySheet(input: SheetPayload) {
       submittedAt: new Date().toISOString(),
       status: "Submitted",
       tone: "info",
-      totalFt: Math.round(lineItems.reduce((s, l) => s + l.quantity, 0)),
+      // Feet are feet. A pedestal, a ground rod and an ant-control unit are
+      // each counted in ones, and adding them to a footage total inflates the
+      // day by however many of them the crew set — which then flows into pace,
+      // percent complete and every production figure downstream. Only plow and
+      // bore advance the route, and only those are counted here.
+      totalFt: Math.round(
+        lineItems
+          .filter((l) => isLinearFootageCode(l.code))
+          .reduce((s, l) => s + l.quantity, 0),
+      ),
       lineItems: lineItems as unknown as Prisma.InputJsonValue,
     },
   });
@@ -5266,4 +5276,106 @@ export async function importLocateText(text: string, projectId?: string | null) 
 
   revalidatePath("/locates");
   return { ok: true as const, created, updated, responses, incomplete };
+}
+
+/**
+ * Delete a daily.
+ *
+ * A daily is referenced by invoice lines through a plain id rather than a
+ * foreign key, so nothing cascades — which is deliberate: deleting a day must
+ * never silently strip a line off a bill somebody has seen. That means the
+ * clean-up is explicit, and it means there is a line it will not cross.
+ *
+ * A draft is fair game. Anything issued is not: a sent invoice or a statement
+ * a crew has been asked to agree is a figure that exists outside this system,
+ * and taking its basis away leaves a total nobody can explain. Those need a
+ * credit or a conversation.
+ *
+ * Call without `confirm` to be told what it would take with it.
+ */
+export async function deleteDaily(id: string, confirm?: boolean) {
+  await requireStaff();
+
+  const daily = await prisma.daily.findUnique({
+    where: { id },
+    select: { id: true, projectName: true, workDate: true, status: true, subcontractor: true, totalFt: true },
+  });
+  if (!daily) return { ok: false as const, error: "Daily not found." };
+
+  const [invLines, subLines, sheets] = await Promise.all([
+    prisma.invoiceLine.findMany({
+      where: { dailyId: id },
+      select: { id: true, invoiceId: true, invoice: { select: { number: true, status: true } } },
+    }),
+    prisma.subInvoiceLine.findMany({
+      where: { dailyId: id },
+      select: { id: true, invoiceId: true, invoice: { select: { number: true, status: true } } },
+    }),
+    prisma.dailySheet.findMany({ where: { dailyId: id }, select: { id: true } }),
+  ]);
+
+  const frozen = [
+    ...invLines.filter((l) => l.invoice.status !== "DRAFT").map((l) => `${l.invoice.number} (${l.invoice.status})`),
+    ...subLines.filter((l) => l.invoice.status !== "DRAFT").map((l) => `${l.invoice.number} (${l.invoice.status})`),
+  ];
+  if (frozen.length > 0) {
+    return {
+      ok: false as const,
+      error: `This day is on ${frozen.join(" and ")}, which has already gone out. Void or credit that first — deleting the day behind it would leave a total nobody can account for.`,
+    };
+  }
+
+  const affected = [
+    ...new Set([
+      ...invLines.map((l) => l.invoice.number),
+      ...subLines.map((l) => l.invoice.number),
+    ]),
+  ];
+
+  if (!confirm) {
+    return {
+      ok: false as const,
+      needsConfirm: true as const,
+      error:
+        `Delete ${daily.projectName.trim() || "this daily"}${daily.workDate ? ` for ${daily.workDate}` : ""}` +
+        `${daily.totalFt ? `, ${daily.totalFt} ft` : ""}?` +
+        (affected.length > 0
+          ? ` It comes off draft ${affected.join(" and ")} and those totals drop.`
+          : "") +
+        (sheets.length > 0 ? " The sheet it came from goes back to a draft." : ""),
+    };
+  }
+
+  await prisma.$transaction([
+    prisma.invoiceLine.deleteMany({ where: { dailyId: id } }),
+    prisma.subInvoiceLine.deleteMany({ where: { dailyId: id } }),
+    // The sheet is the crew's own record of the day and is kept, released back
+    // to a draft so it can be corrected and filed again rather than retyped.
+    prisma.dailySheet.updateMany({ where: { dailyId: id }, data: { dailyId: null, status: "DRAFT" } }),
+    prisma.daily.delete({ where: { id } }),
+  ]);
+
+  // Whatever it was on has to be re-totalled, or the invoice keeps the money.
+  for (const invoiceId of [...new Set(invLines.map((l) => l.invoiceId))]) {
+    await recalcInvoice(invoiceId);
+  }
+  for (const invoiceId of [...new Set(subLines.map((l) => l.invoiceId))]) {
+    await recalcSubInvoice(invoiceId);
+  }
+
+  await prisma.accessLog
+    .create({
+      data: {
+        action: "daily.deleted",
+        actorEmail: (await viewer())?.email ?? "",
+        subjectId: id,
+        detail: `Deleted ${daily.projectName.trim()} ${daily.workDate} (${daily.status}, ${daily.totalFt} ft) filed by ${daily.subcontractor || "—"}`,
+      },
+    })
+    .catch(() => undefined);
+
+  revalidatePath("/dailies");
+  revalidatePath("/invoicing");
+  revalidatePath("/pay");
+  return { ok: true as const };
 }
