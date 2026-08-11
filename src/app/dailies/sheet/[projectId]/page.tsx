@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 
-import { getDailySheet, getProject } from "@/data/queries";
+import { getDailySheet, getProject, getProjectCrews } from "@/data/queries";
 import { getCurrentUser, isStaff } from "@/lib/auth";
 import { PageShell } from "@/components/common/page-shell";
 import { DailyBillingSheet } from "@/components/dailies/daily-billing-sheet";
@@ -26,6 +26,10 @@ export default async function ProjectDailySheetPage({
   ]);
   // Staff review filed sheets; the crew that submitted one cannot reopen it.
   const canReview = me ? isStaff(me.role) : false;
+
+  // Only the office picks who a sheet is for. A crew filing their own is
+  // identified by their login, so they are never offered the choice.
+  const crews = canReview ? await getProjectCrews(project.id) : [];
 
   return (
     <PageShell
@@ -53,6 +57,8 @@ export default async function ProjectDailySheetPage({
         initialSheetId={saved?.id}
         saved={saved}
         canReview={canReview}
+        crews={crews.map((c) => ({ id: c.id, company: c.company }))}
+        initialFiledForId={saved?.filedForId ?? null}
       />
     </PageShell>
   );

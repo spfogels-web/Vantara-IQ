@@ -182,28 +182,36 @@ model DailySheet {
   projectName String   @default("")
   workDate    String   @default("")
   crewNumber  String   @default("")
+
+  /// Which crew this sheet is being filed for, when the office fills it in on
+  /// their behalf. A crew filing their own leaves this null and is identified
+  /// by their login — this exists so a sheet typed up in the office is still
+  /// attributed to the company that did the work, and therefore still becomes
+  /// their pay statement.
+  filedFor   Subcontractor? @relation(fields: [filedForId], references: [id], onDelete: SetNull)
+  filedForId String?
   /// Header block: exchange/WO number, customer, job name, crew names, sign-offs.
-  header      Json     @default("{}")
+  header     Json           @default("{}")
   /// Production grid: unit-code columns plus one entry per row.
-  laborCodes  Json     @default("[]")
-  laborRows   Json     @default("[]")
+  laborCodes Json           @default("[]")
+  laborRows  Json           @default("[]")
   /// Material-only section.
-  matCodes    Json     @default("[]")
-  matRows     Json     @default("[]")
+  matCodes   Json           @default("[]")
+  matRows    Json           @default("[]")
   /// As-built redline drawn over the project map for this day's work.
-  redlines    Json     @default("[]")
+  redlines   Json           @default("[]")
   /// Free-text notes from the crew — conditions, delays, anything the grid
   /// has no column for.
-  notes       String   @default("")
+  notes      String         @default("")
   /// Field photos: peds, handholes, as-built evidence. Each entry carries its
   /// own capture/upload timestamp, so the record shows when it was taken and
   /// not merely when the sheet was submitted.
-  photos      Json     @default("[]")
-  status      String   @default("DRAFT") // DRAFT | SUBMITTED
+  photos     Json           @default("[]")
+  status     String         @default("DRAFT") // DRAFT | SUBMITTED
   /// The Daily this sheet produced on submit, if any.
-  dailyId     String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  dailyId    String?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
 
   @@index([projectId])
 }
@@ -295,6 +303,7 @@ model Subcontractor {
   badges         CrewBadge[]
   ach            AchAuthorization?
   notifications  Notification[]
+  filedSheets    DailySheet[]
   payStatements  SubInvoice[]
   tasks          Task[]            @relation("TaskCrew")
   compliance     Json              @default("[]")

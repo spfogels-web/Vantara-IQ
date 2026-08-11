@@ -1775,6 +1775,8 @@ export type SheetPayload = {
   redlines: unknown;
   notes?: string;
   photos?: unknown;
+  /** Staff only: the crew this sheet is being typed up for. */
+  filedForId?: string | null;
 };
 
 const asJson = (v: unknown) => (v ?? null) as Prisma.InputJsonValue;
@@ -1807,6 +1809,8 @@ export async function saveDailySheet(input: SheetPayload) {
     }
   }
 
+  const actor = await viewer();
+
   const data = {
     projectId: input.projectId || null,
     projectName: input.projectName,
@@ -1820,6 +1824,10 @@ export async function saveDailySheet(input: SheetPayload) {
     redlines: asJson(input.redlines),
     notes: input.notes ?? "",
     photos: asJson(input.photos ?? []),
+    // Only staff may say who a sheet is for. A subcontractor filing their own
+    // is identified by their login, and letting the form carry a crew id would
+    // let one company file production against another.
+    ...(actor && isStaff(actor.role) ? { filedForId: input.filedForId || null } : {}),
   };
 
   const sheet = input.id
@@ -1885,12 +1893,24 @@ export async function submitDailySheet(input: SheetPayload) {
   const header = (sheet.header ?? {}) as Record<string, unknown>;
   const str = (k: string) => (typeof header[k] === "string" ? (header[k] as string) : "");
 
-  // Record which company filed this. The paper sheet has no company field, so
-  // the submitting account is the only authority — and without it a daily can
-  // neither be shown back to the crew that filed it nor turned into their pay
-  // application. Staff submitting a sheet are filing self-perform work.
+  // Which company this day belongs to, which decides whose pay statement it
+  // becomes. A subcontractor is always their own company — the account is the
+  // authority and nothing on the form can override it, or one crew could file
+  // production against another. Staff may nominate the crew they are typing it
+  // up for, and are filing self-perform work when they do not.
   const submitter = await requireUser();
-  const filedBy = submitter.subcontractorName ?? "Fortitude Self-Perform";
+  let filedBy: string;
+  if (submitter.subcontractorName) {
+    filedBy = submitter.subcontractorName;
+  } else {
+    const filedFor = sheet.filedForId
+      ? await prisma.subcontractor.findUnique({
+          where: { id: sheet.filedForId },
+          select: { company: true },
+        })
+      : null;
+    filedBy = filedFor?.company ?? "Fortitude Self-Perform";
+  }
 
   const daily = await prisma.daily.create({
     data: {

@@ -271,6 +271,8 @@ export function DailyBillingSheet({
   initialSheetId,
   saved,
   canReview = false,
+  crews,
+  initialFiledForId,
 }: {
   project?: SheetProject;
   /** Set when reopening a saved draft, so saves update rather than duplicate. */
@@ -279,7 +281,12 @@ export function DailyBillingSheet({
   saved?: SavedSheet | null;
   /** Staff reviewing a filed sheet are not bound by the submit lock. */
   canReview?: boolean;
+  /** Crews on this job. Staff only — the office types a sheet up for one of
+   *  them while they are still learning the system. */
+  crews?: { id: string; company: string }[];
+  initialFiledForId?: string | null;
 }) {
+  const [filedForId, setFiledForId] = React.useState(initialFiledForId ?? "");
   const [header, setHeader] = React.useState<SheetHeader>(() =>
     saved?.header
       ? { ...blankHeader(project), ...(saved.header as Partial<SheetHeader>) }
@@ -360,6 +367,7 @@ export function DailyBillingSheet({
       projectName: project?.name ?? header.jobName,
       workDate: header.dateWorked,
       crewNumber: header.crewNumber,
+      filedForId: filedForId || null,
       header,
       laborCodes,
       laborRows: labor,
@@ -369,7 +377,10 @@ export function DailyBillingSheet({
       notes,
       photos,
     }),
-    [sheetId, project, header, laborCodes, labor, matCodes, mat, redlines, notes, photos],
+    // filedForId belongs here: without it an autosave keeps the crew that was
+    // selected when this closure was made, and quietly files the day against
+    // whoever was picked first.
+    [sheetId, project, header, laborCodes, labor, matCodes, mat, redlines, notes, photos, filedForId],
   );
 
   async function save() {
@@ -437,6 +448,34 @@ export function DailyBillingSheet({
 
   return (
     <div className="flex flex-col gap-3">
+      {/* Who this day belongs to.
+          Screen only, staff only, and above the form rather than buried in it,
+          because it decides whose pay statement the sheet becomes. Left unset,
+          a sheet typed up in the office is self-perform — which is the right
+          default and the wrong answer for a crew's work. */}
+      {crews && crews.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/70 bg-foreground/[0.02] px-3 py-2.5 print:hidden">
+          <span className="text-[12px] font-medium text-foreground">Filing this for</span>
+          <select
+            value={filedForId}
+            onChange={(e) => setFiledForId(e.target.value)}
+            className="focus-ring h-8 rounded-lg border border-border bg-foreground/[0.03] px-2 text-[12px] text-foreground"
+          >
+            <option value="">Fortitude — self-perform</option>
+            {crews.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.company}
+              </option>
+            ))}
+          </select>
+          <span className="text-[11px] text-muted-foreground">
+            {filedForId
+              ? "Their work, their pay statement — priced at their rate card once approved."
+              : "Nobody gets paid for this. Pick a crew if they did the work."}
+          </span>
+        </div>
+      ) : null}
+
       {/* Toolbar — screen only */}
       <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
         <Link

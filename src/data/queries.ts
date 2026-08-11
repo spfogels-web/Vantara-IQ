@@ -1113,6 +1113,8 @@ export interface SavedDailySheet {
   crewNumber: string;
   status: string;
   dailyId: string | null;
+  /** The crew the office typed this up for, if it was not filed by them. */
+  filedForId: string | null;
   header: unknown;
   laborCodes: unknown;
   laborRows: unknown;
@@ -1130,6 +1132,7 @@ function toSavedSheet(r: {
   crewNumber: string;
   status: string;
   dailyId: string | null;
+  filedForId: string | null;
   header: unknown;
   laborCodes: unknown;
   laborRows: unknown;
