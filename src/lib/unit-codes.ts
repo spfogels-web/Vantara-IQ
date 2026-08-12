@@ -386,3 +386,62 @@ export function relatedCodes(typed: string, available: string[]): string[] {
     return n !== t && (n.startsWith(t) || t.startsWith(n));
   });
 }
+
+/* ---- The microduct depth adder ------------------------------------------- */
+
+/**
+ * The code the depth adder is billed under.
+ *
+ * Written the way Exhibit A writes it, because that is the card the rate is
+ * read from. `normalizeCode` reconciles it with the material list's
+ * `12IN DEPTH` spelling.
+ */
+export const DEPTH_ADDER_CODE = 'BFOV(12.7)(2W)12"DEPTH(D)';
+
+/**
+ * Microduct placed at 12in depth, whichever duct went in the ground.
+ *
+ * The 8.5 is on the paperwork but not on the truck — it is placed as 12.7 2W
+ * because the 8.5 is unavailable — so both carry the adder. Anything already
+ * in duct (RI, I) is a second pass down a route already opened and carries
+ * nothing.
+ */
+export function isDepthAdderBase(code: string): boolean {
+  const c = normalizeCode(code);
+  if (isAdderCode(c) || isInDuctCode(c)) return false;
+  return /^BFOV\((?:12\.7|8\.5)\)/.test(c);
+}
+
+export interface AdderLine {
+  code: string;
+  quantity: number;
+}
+
+/**
+ * How much depth adder a set of quantities earns.
+ *
+ * The adder rides every foot of 12.7 and converted 8.5, so the amount owed is
+ * the whole of that footage. Anything already written down is subtracted
+ * rather than added to: a list that states the adder in full earns nothing
+ * further, and one that states part of it is topped up to the total. Billing
+ * the same foot twice is the failure this guards against.
+ *
+ * Returns null when there is nothing to add, so a caller can tell "no adder
+ * due" from "adder of zero".
+ */
+export function depthAdderDue(items: { code: string; quantity: number }[]): AdderLine | null {
+  let base = 0;
+  let already = 0;
+
+  for (const it of items) {
+    const qty = Number.isFinite(it.quantity) ? it.quantity : 0;
+    if (isDepthAdderBase(it.code)) base += qty;
+    else if (isAdderCode(it.code) && /^BFOV\((?:12\.7|8\.5)\)/.test(normalizeCode(it.code))) {
+      already += qty;
+    }
+  }
+
+  const due = Math.round((base - already) * 100) / 100;
+  if (base <= 0 || due <= 0) return null;
+  return { code: DEPTH_ADDER_CODE, quantity: due };
+}

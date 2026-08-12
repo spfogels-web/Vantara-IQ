@@ -1,4 +1,4 @@
-import { normalizeCode } from "@/lib/unit-codes";
+import { depthAdderDue, normalizeCode } from "@/lib/unit-codes";
 
 /**
  * Pricing quantities against a rate card.
@@ -55,6 +55,12 @@ export interface PricedLine {
   amount: number;
   /** The card the matched rate came from, so a figure can be traced back. */
   source: string;
+  /**
+   * True when a rule produced this line rather than somebody writing it — at
+   * present only the microduct depth adder. Shown as derived wherever it
+   * appears, because a billed line nobody typed should say so.
+   */
+  derived: boolean;
 }
 
 export interface UnpricedLine {
@@ -141,7 +147,16 @@ export function priceQuantities(
   const lines: PricedLine[] = [];
   const unpriced: UnpricedLine[] = [];
 
-  for (const q of quantities) {
+  // The 12in depth adder rides every foot of 12.7 microduct, and of the 8.5
+  // that goes in as 12.7 because the 8.5 is not available. It is on both rate
+  // cards and is routinely left off the paperwork, so it is worked out here
+  // rather than depended on being typed. Whatever is already stated is
+  // subtracted, so a list that carries it in full earns nothing further and
+  // no foot is ever billed for it twice.
+  const adder = depthAdderDue(quantities);
+  const all = adder ? [...quantities, { ...adder, derived: true }] : quantities;
+
+  for (const q of all as (QuantityRow & { derived?: boolean })[]) {
     const code = normalizeCode(q.code);
     if (!code || !Number.isFinite(q.quantity) || q.quantity === 0) continue;
 
@@ -163,6 +178,7 @@ export function priceQuantities(
       rate: match.rate,
       amount: q.quantity * match.rate,
       source: match.source ?? "",
+      derived: q.derived ?? false,
     });
   }
 
