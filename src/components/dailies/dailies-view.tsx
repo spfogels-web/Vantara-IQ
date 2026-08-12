@@ -38,6 +38,7 @@ export function DailiesView({
   initialId,
   sheetByDaily,
   reviewerName,
+  canReview = false,
 }: {
   dailies: DailyReport[];
   initialId?: string;
@@ -45,6 +46,12 @@ export function DailiesView({
   sheetByDaily?: Record<string, { sheetId: string; projectId: string }>;
   /** Who is signed in — recorded on the approval or denial. */
   reviewerName?: string;
+  /**
+   * Whether this viewer decides dailies. A crew files them and reads the
+   * verdict; approving their own work is not a thing to offer and then refuse
+   * on the server, which is what a button they cannot use amounts to.
+   */
+  canReview?: boolean;
 }) {
   const [items, setItems] = React.useState(dailies);
   const [filter, setFilter] = React.useState<(typeof FILTERS)[number]>("All");
@@ -157,6 +164,7 @@ export function DailiesView({
             onSetStatus={setStatus}
             sheet={sheetByDaily?.[selected.id]}
             reviewerName={reviewerName}
+            canReview={canReview}
           />
         ) : (
           <Panel className="items-center justify-center py-24 text-center text-[13px] text-muted-foreground">
@@ -173,11 +181,13 @@ function DailyDetail({
   onSetStatus,
   sheet,
   reviewerName,
+  canReview,
 }: {
   daily: DailyReport;
   onSetStatus: (id: string, status: DailyStatus, tone: DailyReport["tone"]) => void;
   sheet?: { sheetId: string; projectId: string };
   reviewerName?: string;
+  canReview: boolean;
 }) {
   const router = useRouter();
   const [note, setNote] = React.useState("");
@@ -403,9 +413,47 @@ function DailyDetail({
         </div>
 
         {/* Supervisor decision. Denials require a reason — "denied" with no
-            explanation sends the crew back to guess what to fix. */}
+            explanation sends the crew back to guess what to fix.
+
+            A crew sees the verdict and never the controls. Approving is a
+            staff action and the server refuses it either way, so showing the
+            buttons only produced a click that appeared to do nothing — which
+            reads as broken rather than as forbidden. */}
         <div className="mt-auto flex flex-col gap-2 border-t border-border/70 px-4 py-3 sm:px-5">
-          {decided ? (
+          {!canReview ? (
+            <div className="flex flex-wrap items-start gap-2">
+              {decided ? (
+                <>
+                  <p
+                    className={cn(
+                      "text-[12.5px] font-medium",
+                      d.status === "Approved" ? "text-success" : "text-critical",
+                    )}
+                  >
+                    {d.status === "Approved"
+                      ? "Approved by Fortitude"
+                      : "Sent back by Fortitude"}
+                    {d.reviewedAt ? ` · ${formatWhen(d.reviewedAt)}` : ""}
+                  </p>
+                  {d.reviewNote ? (
+                    <p className="w-full whitespace-pre-wrap text-[12px] text-muted-foreground">
+                      {d.reviewNote}
+                    </p>
+                  ) : null}
+                  {d.status === "Approved" ? (
+                    <p className="w-full text-[11.5px] text-muted-foreground">
+                      It will appear on your next pay statement.
+                    </p>
+                  ) : null}
+                </>
+              ) : (
+                <p className="text-[12.5px] text-muted-foreground">
+                  Filed and waiting on Fortitude to review it. You will see the
+                  decision here, and the reason if anything needs changing.
+                </p>
+              )}
+            </div>
+          ) : decided ? (
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
                 <p

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { FileText } from "lucide-react";
 
 import { getDailies, getSheetIndexByDaily } from "@/data/queries";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, isStaff } from "@/lib/auth";
 import { PageShell } from "@/components/common/page-shell";
 import { DailiesView } from "@/components/dailies/dailies-view";
 
@@ -21,6 +21,8 @@ export default async function DailiesPage({
     searchParams,
   ]);
 
+  const staff = !!me && isStaff(me.role);
+
   // The Globe billing sheet is the only way work gets filed — it is the form
   // Globe pays against. The thin "New daily" alongside it collected a different,
   // smaller set of fields and was a second answer to the same question, so the
@@ -29,7 +31,11 @@ export default async function DailiesPage({
     <PageShell
       eyebrow="Overview"
       title="Dailies"
-      description="Every crew's daily production, digitized from the field. The AI reads each sheet, reconciles quantities and documentation, and stages it for your team's review."
+      description={
+        staff
+          ? "Every crew's daily production, digitized from the field. The AI reads each sheet, reconciles quantities and documentation, and stages it for your team's review."
+          : "The days your crew has filed, and where each one stands with Fortitude."
+      }
       actions={
         <Link
           href="/dailies/sheet"
@@ -44,6 +50,7 @@ export default async function DailiesPage({
         initialId={sp.sheet}
         sheetByDaily={sheetByDaily}
         reviewerName={me?.name}
+        canReview={staff}
       />
     </PageShell>
   );
