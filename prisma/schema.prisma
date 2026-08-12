@@ -495,6 +495,8 @@ model SubInvoiceLine {
   quantity    Float      @default(0)
   rate        Float      @default(0)
   amount      Float      @default(0)
+  /// Produced by a rule rather than written on a sheet. See InvoiceLine.
+  derived     Boolean    @default(false)
 
   /// Which rate card priced this line, recorded when it was priced. A crew is
   /// paid from a signed card, and "which card was that" is the first question
@@ -860,6 +862,9 @@ model Invoice {
 /// The rate is stored on the line rather than looked up, for the same reason
 /// the totals are: this is the number the customer was billed, not the number
 /// the card happens to say today.
+/// A billed unit.  marks a line a rule produced rather than a person
+/// wrote — the microduct depth adder — so a figure nobody typed can always be
+/// explained when a customer asks where it came from.
 model InvoiceLine {
   id          String  @id @default(cuid())
   invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
@@ -874,6 +879,7 @@ model InvoiceLine {
   quantity    Float   @default(0)
   rate        Float   @default(0)
   amount      Float   @default(0)
+  derived     Boolean @default(false)
 
   @@index([invoiceId])
   @@index([dailyId])

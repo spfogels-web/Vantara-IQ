@@ -213,7 +213,14 @@ function LineRow({
         {line.code}
         {/* A hand-added line has no daily behind it, and that should be visible
             on the bill rather than discovered when somebody goes looking. */}
-        {!line.dailyId ? (
+        {line.derived ? (
+          <span
+            title="Added by rule: the depth adder rides every foot of 12.7 and converted 8.5 microduct"
+            className="ml-1 rounded bg-info/15 px-1 py-px text-[9.5px] font-semibold text-info"
+          >
+            adder
+          </span>
+        ) : !line.dailyId ? (
           <span className="ml-1 rounded bg-warning/15 px-1 py-px text-[9.5px] font-semibold text-warning">
             manual
           </span>

@@ -2476,6 +2476,8 @@ export type InvoiceLineRow = {
   quantity: number;
   rate: number;
   amount: number;
+  /** Produced by a rule rather than typed — currently the depth adder. */
+  derived: boolean;
 };
 
 /**
@@ -2514,6 +2516,7 @@ export async function getInvoiceLines(invoiceId: string): Promise<{
       quantity: l.quantity,
       rate: l.rate,
       amount: l.amount,
+      derived: l.derived,
     })),
   };
 }

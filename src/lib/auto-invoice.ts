@@ -191,6 +191,7 @@ export async function fileApprovedDaily(dailyId: string): Promise<FileResult> {
       quantity: l.quantity,
       rate: l.rate,
       amount: Math.round(l.amount * 100) / 100,
+      derived: l.derived,
     })),
   });
 

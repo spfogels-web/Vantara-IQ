@@ -174,6 +174,7 @@ export async function fileApprovedDailyForSub(dailyId: string): Promise<SubFileR
       quantity: l.quantity,
       rate: l.rate,
       amount: Math.round(l.amount * 100) / 100,
+      derived: l.derived,
       sourceCard: l.source,
     })),
   });
