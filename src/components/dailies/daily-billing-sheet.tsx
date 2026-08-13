@@ -693,10 +693,13 @@ export function DailyBillingSheet({
       {!locked && unknownCodes.length > 0 ? (
         <div className="rounded-xl border border-warning/45 bg-warning/[0.07] px-3 py-2.5 print:hidden">
           <p className="text-[12.5px] font-semibold text-foreground">
-            {unknownCodes.length === 1
-              ? "1 code isn't on this customer's rate card"
-              : `${unknownCodes.length} codes aren't on this customer's rate card`}{" "}
-            — they will bill $0.00
+            {unknownCodes.length === 1 ? "1 code isn't" : `${unknownCodes.length} codes aren't`}{" "}
+            {canReview
+              ? // The office is the one who needs to know what it costs.
+                "on this customer's rate card — they will bill $0.00"
+              : // A crew gets told their sheet is wrong, not what the customer
+                // pays for it. The rate card is not theirs to see.
+                "valid for this job — the work on them won't be counted"}
           </p>
           <p className="mt-1 flex flex-wrap gap-1.5">
             {unknownCodes.map((c) => (
@@ -710,7 +713,7 @@ export function DailyBillingSheet({
           </p>
           <p className="mt-1.5 text-[11.5px] text-muted-foreground">
             These were typed before the code row became a dropdown. Reopen each code
-            and pick it from the list — the card spells it{" "}
+            and pick it from the list — the full code is{" "}
             <code className="text-foreground">BFOV(12.7)(2W)12&quot;DEPTH</code>, not{" "}
             <code className="text-foreground">BFOV 12.7(2W)</code>. The 12&quot; depth adder is
             added for you once the base code matches.
