@@ -1,6 +1,11 @@
 import { notFound } from "next/navigation";
 
-import { getDailySheet, getProject, getProjectCrews } from "@/data/queries";
+import {
+  getBillableCodes,
+  getDailySheet,
+  getProject,
+  getProjectCrews,
+} from "@/data/queries";
 import { getCurrentUser, isStaff } from "@/lib/auth";
 import { PageShell } from "@/components/common/page-shell";
 import { DailyBillingSheet } from "@/components/dailies/daily-billing-sheet";
@@ -20,9 +25,10 @@ export default async function ProjectDailySheetPage({
   const project = await getProject(projectId);
   if (!project) notFound();
 
-  const [saved, me] = await Promise.all([
+  const [saved, me, billableCodes] = await Promise.all([
     sp.sheet ? getDailySheet(sp.sheet) : Promise.resolve(null),
     getCurrentUser(),
+    getBillableCodes(project.id),
   ]);
   // Staff review filed sheets; the crew that submitted one cannot reopen it.
   const canReview = me ? isStaff(me.role) : false;
@@ -59,6 +65,7 @@ export default async function ProjectDailySheetPage({
         canReview={canReview}
         crews={crews.map((c) => ({ id: c.id, company: c.company }))}
         initialFiledForId={saved?.filedForId ?? null}
+        billableCodes={billableCodes}
       />
     </PageShell>
   );

@@ -36,6 +36,7 @@ import {
   isLinearFootageCode,
   normalizeCode,
   isAerialCode,
+  isOutOfScopeCode,
   isPriorityCode,
   productionMethod,
   type ProductionMethod,
@@ -3472,3 +3473,59 @@ export async function getLocateSummary(): Promise<LocateSummary> {
   };
 }
 
+
+/**
+ * The unit codes a crew can actually bill on this job.
+ *
+ * Read off the customer's own rate card, narrowed to the underground families
+ * this work uses, because the full card runs to thousands of rows and a picker
+ * nobody can find anything in gets typed over.
+ *
+ * The point is not convenience. A code typed by hand does not have to match the
+ * card, and when it does not the line prices at nothing — a day that bored 210
+ * ft and placed 1,162 ft of microduct billed $395 because BFOV12.7(2W) is not
+ * a code and BFOV(12.7)(2W)12"DEPTH is. Offering the real strings is what stops
+ * that happening again.
+ */
+export async function getBillableCodes(projectId: string): Promise<
+  { code: string; description: string; rate: number | null; common: boolean }[]
+> {
+  // The crew filling out their own sheet needs this list more than anyone —
+  // they are the ones typing codes in a truck. Guarded by project access, not
+  // by staff, or the picker would be empty for exactly the people it is for.
+  const user = await assertProjectAccess(projectId);
+  const staff = isStaff(user.role);
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { customerId: true },
+  });
+  if (!project?.customerId) return [];
+
+  const rows = await prisma.customerRate.findMany({
+    where: { customerId: project.customerId },
+    select: { code: true, description: true, rate: true },
+    orderBy: { code: "asc" },
+  });
+
+  // Every code on the card, not just the priority families. Narrowing the list
+  // to what crews usually bore would leave a crew who hit something unusual
+  // with nothing to choose and no way to say what they did.
+  const seen = new Set<string>();
+  return rows
+    .filter((r) => !isOutOfScopeCode(r.code))
+    .filter((r) => {
+      const k = normalizeCode(r.code);
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    })
+    .map((r) => ({
+      code: r.code,
+      description: r.description,
+      // What Globe pays us is ours. A subcontractor sees the code they worked,
+      // never the rate it earns — their own card is the only money they see.
+      rate: staff ? r.rate : null,
+      common: isPriorityCode(r.code),
+    }));
+}

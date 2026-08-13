@@ -174,6 +174,104 @@ function Cell({
   );
 }
 
+/**
+ * A code on the customer's rate card, as offered in the picker.
+ *
+ * `rate` is null for a subcontractor — they pick the code they worked, they do
+ * not get told what it earns us. `common` marks the underground families crews
+ * bill most days, which float to the top of the list.
+ */
+export type BillableCode = {
+  code: string;
+  description: string;
+  rate: number | null;
+  common: boolean;
+};
+
+/**
+ * The unit-code header cell: a dropdown of the customer's card, not a text box.
+ *
+ * It used to be typed. "Bfov 12.7(2w)" is what a foreman writes for
+ * BFOV(12.7)(2W)12"DEPTH, and the two are not the same string — so the line
+ * matched no rate, priced at zero, and the sheet still filed clean. One Charles
+ * Hart day billed $395 against a card that said $4,192.30. A code that can only
+ * be chosen cannot be spelled wrong.
+ *
+ * A sheet reopened from before the picker may hold a code the card has never
+ * had. That value is kept as its own option rather than snapping to blank —
+ * losing what the crew wrote down is worse than showing something unpayable,
+ * and the banner above the sheet names it either way.
+ */
+function CodeSelect({
+  value,
+  onChange,
+  codes,
+  label,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  codes: BillableCode[];
+  label: string;
+}) {
+  const onCard = React.useMemo(
+    () => codes.some((c) => c.code.toUpperCase() === value.trim().toUpperCase()),
+    [codes, value],
+  );
+
+  // The card runs to a couple of thousand codes. The dozen families a crew
+  // bills most days go first so the common case is a short scroll, and the
+  // rest stays reachable underneath rather than being cut.
+  const groups = React.useMemo(() => {
+    const common = codes.filter((c) => c.common);
+    const rest = codes.filter((c) => !c.common);
+    return [
+      common.length ? { label: "Underground — usual codes", codes: common } : null,
+      rest.length ? { label: "Everything else on this card", codes: rest } : null,
+    ].filter((g): g is { label: string; codes: BillableCode[] } => g !== null);
+  }, [codes]);
+
+  // No card loaded (a blank sheet with no project) — fall back to typing rather
+  // than offering an empty dropdown with no way out.
+  if (codes.length === 0) {
+    return (
+      <Cell
+        aria-label={label}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="mt-0.5 h-8 px-0.5 text-[12px] font-semibold uppercase text-foreground print:h-5"
+      />
+    );
+  }
+
+  return (
+    <select
+      aria-label={label}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className={cn(
+        // Looks like the cell next to it, not like a form control: no chrome,
+        // no arrow, inherits the table border. Tall enough to hit with gloves.
+        "mt-0.5 h-8 w-full cursor-pointer appearance-none bg-transparent px-0.5 text-center",
+        "text-[12px] font-semibold uppercase outline-none focus:bg-brand/10",
+        "print:h-5 print:text-[9px]",
+        value && !onCard ? "text-warning" : "text-foreground",
+      )}
+    >
+      <option value="">—</option>
+      {value && !onCard ? <option value={value}>{value} (not on card)</option> : null}
+      {groups.map((g) => (
+        <optgroup key={g.label} label={g.label}>
+          {g.codes.map((c) => (
+            <option key={c.code} value={c.code}>
+              {c.rate == null ? c.code : `${c.code} · $${c.rate.toFixed(2)}`}
+            </option>
+          ))}
+        </optgroup>
+      ))}
+    </select>
+  );
+}
+
 /** A labelled box from the header block: micro caps label above a write-in line. */
 function Field({
   label,
@@ -273,6 +371,7 @@ export function DailyBillingSheet({
   canReview = false,
   crews,
   initialFiledForId,
+  billableCodes = [],
 }: {
   project?: SheetProject;
   /** Set when reopening a saved draft, so saves update rather than duplicate. */
@@ -285,6 +384,12 @@ export function DailyBillingSheet({
    *  them while they are still learning the system. */
   crews?: { id: string; company: string }[];
   initialFiledForId?: string | null;
+  /**
+   * The codes on this customer’s card. Offered as you type so what goes in
+   * the box is a code that exists — a hand-typed near-miss prices at nothing,
+   * and a day that bored 210 ft billed $395 because of exactly that.
+   */
+  billableCodes?: BillableCode[];
 }) {
   const [filedForId, setFiledForId] = React.useState(initialFiledForId ?? "");
   const [header, setHeader] = React.useState<SheetHeader>(() =>
@@ -437,6 +542,27 @@ export function DailyBillingSheet({
     [mat],
   );
 
+  /**
+   * Codes on this sheet the customer’s card has never heard of.
+   *
+   * A near-miss spelling — "Bfov 12.7(2w)" for BFOV(12.7)(2W)12"DEPTH — does not
+   * error. It prices at zero and bills nothing, and the day looks filed. One
+   * Charles Hart sheet went out at $395 that way when the card said $4,192. So
+   * the mismatch is named on the sheet, while it can still be retyped.
+   */
+  const unknownCodes = React.useMemo(() => {
+    if (billableCodes.length === 0) return [];
+    const card = new Set(billableCodes.map((c) => c.code.toUpperCase().replace(/\s+/g, "")));
+    const seen = new Map<string, string>();
+    for (const raw of [...laborCodes, ...matCodes]) {
+      const code = raw.trim();
+      if (!code) continue;
+      const key = code.toUpperCase().replace(/\s+/g, "");
+      if (!card.has(key) && !seen.has(key)) seen.set(key, code);
+    }
+    return [...seen.values()];
+  }, [billableCodes, laborCodes, matCodes]);
+
   function reset() {
     setHeader(blankHeader(project));
     setLabor(Array.from({ length: LABOR_ROWS }, blankLaborRow));
@@ -559,6 +685,37 @@ export function DailyBillingSheet({
         >
           {saveError ?? `Draft saved ${savedAt}. Submitting turns the grid into billable line items.`}
         </p>
+      ) : null}
+
+      {/* Codes the card can't pay. Loud, on the sheet, while it can still be
+          retyped — a code that misses bills nothing rather than erroring, so
+          nothing else on this page would say a word about it. */}
+      {!locked && unknownCodes.length > 0 ? (
+        <div className="rounded-xl border border-warning/45 bg-warning/[0.07] px-3 py-2.5 print:hidden">
+          <p className="text-[12.5px] font-semibold text-foreground">
+            {unknownCodes.length === 1
+              ? "1 code isn't on this customer's rate card"
+              : `${unknownCodes.length} codes aren't on this customer's rate card`}{" "}
+            — they will bill $0.00
+          </p>
+          <p className="mt-1 flex flex-wrap gap-1.5">
+            {unknownCodes.map((c) => (
+              <code
+                key={c}
+                className="rounded-md border border-warning/40 bg-background px-1.5 py-0.5 text-[11.5px] text-foreground"
+              >
+                {c}
+              </code>
+            ))}
+          </p>
+          <p className="mt-1.5 text-[11.5px] text-muted-foreground">
+            These were typed before the code row became a dropdown. Reopen each code
+            and pick it from the list — the card spells it{" "}
+            <code className="text-foreground">BFOV(12.7)(2W)12&quot;DEPTH</code>, not{" "}
+            <code className="text-foreground">BFOV 12.7(2W)</code>. The 12&quot; depth adder is
+            added for you once the base code matches.
+          </p>
+        </div>
       ) : null}
 
       {/* A filed daily is read-only. `inert` blocks focus, typing and clicks on
@@ -783,13 +940,13 @@ export function DailyBillingSheet({
                     className="border border-border px-0.5 py-1 align-bottom text-[7px] font-semibold uppercase leading-tight tracking-[0.03em] text-muted-foreground print:text-[5.5px]"
                   >
                     Hourly / Unit Code
-                    <Cell
-                      aria-label={`Unit code ${i + 1}`}
+                    <CodeSelect
+                      label={`Unit code ${i + 1}`}
+                      codes={billableCodes}
                       value={laborCodes[i]}
-                      onChange={(e) =>
-                        setLaborCodes((c) => c.map((v, j) => (j === i ? e.target.value : v)))
+                      onChange={(v) =>
+                        setLaborCodes((c) => c.map((old, j) => (j === i ? v : old)))
                       }
-                      className="mt-0.5 h-8 px-0.5 text-[12px] font-semibold uppercase text-foreground print:h-5"
                     />
                   </th>
                 ))}
@@ -920,13 +1077,13 @@ export function DailyBillingSheet({
                     className="border border-border px-0.5 py-1 align-bottom text-[7px] font-semibold uppercase leading-tight tracking-[0.03em] text-muted-foreground print:text-[5.5px]"
                   >
                     Mat / Unit Code
-                    <Cell
-                      aria-label={`Material code ${i + 1}`}
+                    <CodeSelect
+                      label={`Material code ${i + 1}`}
+                      codes={billableCodes}
                       value={matCodes[i]}
-                      onChange={(e) =>
-                        setMatCodes((c) => c.map((v, j) => (j === i ? e.target.value : v)))
+                      onChange={(v) =>
+                        setMatCodes((c) => c.map((old, j) => (j === i ? v : old)))
                       }
-                      className="mt-0.5 h-8 px-0.5 text-[12px] font-semibold uppercase text-foreground print:h-5"
                     />
                   </th>
                 ))}
