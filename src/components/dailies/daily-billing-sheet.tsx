@@ -185,7 +185,6 @@ export type BillableCode = {
   code: string;
   description: string;
   rate: number | null;
-  common: boolean;
 };
 
 /**
@@ -218,17 +217,6 @@ function CodeSelect({
     [codes, value],
   );
 
-  // The card runs to a couple of thousand codes. The dozen families a crew
-  // bills most days go first so the common case is a short scroll, and the
-  // rest stays reachable underneath rather than being cut.
-  const groups = React.useMemo(() => {
-    const common = codes.filter((c) => c.common);
-    const rest = codes.filter((c) => !c.common);
-    return [
-      common.length ? { label: "Underground — usual codes", codes: common } : null,
-      rest.length ? { label: "Everything else on this card", codes: rest } : null,
-    ].filter((g): g is { label: string; codes: BillableCode[] } => g !== null);
-  }, [codes]);
 
   // No card loaded (a blank sheet with no project) — fall back to typing rather
   // than offering an empty dropdown with no way out.
@@ -259,14 +247,10 @@ function CodeSelect({
     >
       <option value="">—</option>
       {value && !onCard ? <option value={value}>{value} (not on card)</option> : null}
-      {groups.map((g) => (
-        <optgroup key={g.label} label={g.label}>
-          {g.codes.map((c) => (
-            <option key={c.code} value={c.code}>
-              {c.rate == null ? c.code : `${c.code} · $${c.rate.toFixed(2)}`}
-            </option>
-          ))}
-        </optgroup>
+      {codes.map((c) => (
+        <option key={c.code} value={c.code}>
+          {c.rate == null ? c.code : `${c.code} · $${c.rate.toFixed(2)}`}
+        </option>
       ))}
     </select>
   );

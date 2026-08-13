@@ -36,6 +36,7 @@ import {
   isLinearFootageCode,
   normalizeCode,
   isAerialCode,
+  isMainBillableCode,
   isOutOfScopeCode,
   isPriorityCode,
   productionMethod,
@@ -3488,7 +3489,7 @@ export async function getLocateSummary(): Promise<LocateSummary> {
  * that happening again.
  */
 export async function getBillableCodes(projectId: string): Promise<
-  { code: string; description: string; rate: number | null; common: boolean }[]
+  { code: string; description: string; rate: number | null }[]
 > {
   // The crew filling out their own sheet needs this list more than anyone —
   // they are the ones typing codes in a truck. Guarded by project access, not
@@ -3508,12 +3509,12 @@ export async function getBillableCodes(projectId: string): Promise<
     orderBy: { code: "asc" },
   });
 
-  // Every code on the card, not just the priority families. Narrowing the list
-  // to what crews usually bore would leave a crew who hit something unusual
-  // with nothing to choose and no way to say what they did.
+  // The work we actually sell, not everything the card can price. A crew
+  // scrolling 2,472 codes picks the wrong one, and the wrong one still prices,
+  // so nothing downstream catches it. See MAIN_BILLABLE_CODES to add a code.
   const seen = new Set<string>();
   return rows
-    .filter((r) => !isOutOfScopeCode(r.code))
+    .filter((r) => isMainBillableCode(r.code))
     .filter((r) => {
       const k = normalizeCode(r.code);
       if (seen.has(k)) return false;
@@ -3526,6 +3527,5 @@ export async function getBillableCodes(projectId: string): Promise<
       // What Globe pays us is ours. A subcontractor sees the code they worked,
       // never the rate it earns — their own card is the only money they see.
       rate: staff ? r.rate : null,
-      common: isPriorityCode(r.code),
     }));
 }

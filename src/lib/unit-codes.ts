@@ -43,6 +43,62 @@ export const PRIORITY_UNDERGROUND_CODES = [
   "BDO",
 ] as const;
 
+/**
+ * The codes offered on a daily sheet. Exact codes, not prefixes.
+ *
+ * PRIORITY_UNDERGROUND_CODES matches by family, which pulls 231 codes off the
+ * Globe card — every duct size and depth variant Windstream has ever priced,
+ * most of which Fortitude will never build. A crew scrolling that to find
+ * BM61(2)F is a crew about to pick the wrong one, and the wrong one still
+ * prices, so nothing catches it.
+ *
+ * This is the work we actually sell: every code billed on a daily so far, plus
+ * every code a subcontractor carries a rate for. Adding one is a decision
+ * someone makes on purpose — put the exact code here, spelled the way the
+ * customer's card spells it, and it appears in the dropdown. Spell it wrong
+ * here and it simply won't show up, which is the safe direction to fail.
+ */
+export const MAIN_BILLABLE_CODES = [
+  // Plow / vibratory bore — the bulk of the linear footage.
+  'BFOV(12.7)(2W)12"DEPTH',
+  'BFOV(12.7)(2W)12"DEPTH(D)', // the 12" depth adder, billed on every foot
+  'BFOV(8.5)(1W)12"DEPTH',
+  "BFOV(1)(1.25)",
+  // Missile / directional bore.
+  "BM61(2)F",
+  "BM61(2)F12IN DEPTH",
+  "BM60(1)(1 1/4)P",
+  "BM60(1)(1 1/4)PFF",
+  "BM60(2)(1 1/4)PF",
+  // Cable placement.
+  "BFO12",
+  "BFO24",
+  "BFO48",
+  "BFO144",
+  // Splice and misc buried.
+  "BM2F",
+  "BM2AF",
+  "BM26F",
+  "BM53F",
+  "BMFAF",
+  // Restoration and hand work.
+  "BD4MPF",
+  "BD5MPF",
+  // Handholes and pedestals.
+  "BHF(6)P",
+  "BHF(10)P",
+  "BDO",
+] as const;
+
+const MAIN_CODE_SET = new Set(
+  MAIN_BILLABLE_CODES.map((c) => c.toUpperCase().replace(/\s+/g, "")),
+);
+
+/** Is this one of the codes a crew is offered on a daily sheet? */
+export function isMainBillableCode(code: string): boolean {
+  return MAIN_CODE_SET.has(String(code).toUpperCase().replace(/\s+/g, ""));
+}
+
 /** Uppercase, strip whitespace — "bm61(2)f " and "BM61(2)F" are the same code. */
 export function normalizeCode(code: string): string {
   return (
