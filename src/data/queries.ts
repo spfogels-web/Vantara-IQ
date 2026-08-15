@@ -3488,14 +3488,13 @@ export async function getLocateSummary(): Promise<LocateSummary> {
  * a code and BFOV(12.7)(2W)12"DEPTH is. Offering the real strings is what stops
  * that happening again.
  */
-export async function getBillableCodes(projectId: string): Promise<
-  { code: string; description: string; rate: number | null }[]
-> {
+export async function getBillableCodes(
+  projectId: string,
+): Promise<{ code: string; description: string }[]> {
   // The crew filling out their own sheet needs this list more than anyone —
   // they are the ones typing codes in a truck. Guarded by project access, not
   // by staff, or the picker would be empty for exactly the people it is for.
-  const user = await assertProjectAccess(projectId);
-  const staff = isStaff(user.role);
+  await assertProjectAccess(projectId);
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },
@@ -3503,9 +3502,12 @@ export async function getBillableCodes(projectId: string): Promise<
   });
   if (!project?.customerId) return [];
 
+  // No rate is selected. The picker only has to name the code correctly, and a
+  // rate on an <option> ends up in the collapsed select, which is what the
+  // browser prints onto the sheet Globe receives. Nobody is sent the number.
   const rows = await prisma.customerRate.findMany({
     where: { customerId: project.customerId },
-    select: { code: true, description: true, rate: true },
+    select: { code: true, description: true },
     orderBy: { code: "asc" },
   });
 
@@ -3521,11 +3523,5 @@ export async function getBillableCodes(projectId: string): Promise<
       seen.add(k);
       return true;
     })
-    .map((r) => ({
-      code: r.code,
-      description: r.description,
-      // What Globe pays us is ours. A subcontractor sees the code they worked,
-      // never the rate it earns — their own card is the only money they see.
-      rate: staff ? r.rate : null,
-    }));
+    .map((r) => ({ code: r.code, description: r.description }));
 }

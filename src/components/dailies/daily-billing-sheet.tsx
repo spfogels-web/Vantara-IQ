@@ -178,14 +178,14 @@ function Cell({
 /**
  * A code on the customer's rate card, as offered in the picker.
  *
- * `rate` is null for a subcontractor — they pick the code they worked, they do
- * not get told what it earns us. `common` marks the underground families crews
- * bill most days, which float to the top of the list.
+ * No rate. The picker exists to stop a code being spelled wrong, and a rate
+ * here bought nothing: a <select> shows the chosen option's text in its
+ * collapsed box, the browser prints that box, and the sheet goes to Globe. Not
+ * sending the number at all beats hiding it.
  */
 export type BillableCode = {
   code: string;
   description: string;
-  rate: number | null;
 };
 
 /**
@@ -248,9 +248,13 @@ function CodeSelect({
     >
       <option value="">—</option>
       {value && !onCard ? <option value={value}>{value} (not on card)</option> : null}
+      {/* The code and nothing else. The rate used to ride along as a find-me
+          aid, which a <select> then showed in the collapsed box — and that box
+          is what the browser prints. Our rate was landing on the sheet that
+          goes to Globe. */}
       {codes.map((c) => (
         <option key={c.code} value={c.code}>
-          {c.rate == null ? c.code : `${c.code} · $${c.rate.toFixed(2)}`}
+          {c.code}
         </option>
       ))}
     </select>
