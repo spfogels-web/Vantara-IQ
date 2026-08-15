@@ -1,10 +1,16 @@
 import Link from "next/link";
 import { FileText } from "lucide-react";
 
-import { getDailies, getSheetIndexByDaily } from "@/data/queries";
+import {
+  getDailies,
+  getProjects,
+  getSheetIndexByDaily,
+  getSubcontractors,
+} from "@/data/queries";
 import { getCurrentUser, isStaff } from "@/lib/auth";
 import { PageShell } from "@/components/common/page-shell";
 import { DailiesView } from "@/components/dailies/dailies-view";
+import { ImportDaily } from "@/components/dailies/import-daily";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Dailies · Vantara IQ" };
@@ -22,6 +28,12 @@ export default async function DailiesPage({
   ]);
 
   const staff = !!me && isStaff(me.role);
+
+  // Only fetched for the importer, which is staff-only — a crew has no use for
+  // the full job list or the roster of other companies.
+  const [projects, crews] = staff
+    ? await Promise.all([getProjects(), getSubcontractors()])
+    : [[], []];
 
   // The Globe billing sheet is the only way work gets filed — it is the form
   // Globe pays against. The thin "New daily" alongside it collected a different,
@@ -45,6 +57,18 @@ export default async function DailiesPage({
         </Link>
       }
     >
+      {/* Reading a sheet a crew emailed in. Staff only: it writes a draft
+          against a chosen job and can attribute it to any crew, which is the
+          office’s call, not a crew’s. */}
+      {staff && projects.length > 0 ? (
+        <div className="mb-4">
+          <ImportDaily
+            projects={projects.map((p) => ({ id: p.id, name: p.name, number: p.number }))}
+            crews={crews.map((c) => ({ id: c.id, company: c.company }))}
+          />
+        </div>
+      ) : null}
+
       <DailiesView
         dailies={dailies}
         initialId={sp.sheet}

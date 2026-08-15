@@ -37,7 +37,6 @@ import {
   normalizeCode,
   isAerialCode,
   isMainBillableCode,
-  isOutOfScopeCode,
   isPriorityCode,
   productionMethod,
   type ProductionMethod,

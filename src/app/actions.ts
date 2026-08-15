@@ -21,7 +21,12 @@ import {
   pdfTextPages,
 } from "@/lib/parse-material-list";
 import { findJobProfile } from "@/lib/job-profiles";
-import { isLabourOrEquipmentCode, isLinearFootageCode } from "@/lib/unit-codes";
+import {
+  isLabourOrEquipmentCode,
+  isLinearFootageCode,
+  isMainBillableCode,
+} from "@/lib/unit-codes";
+import { checkFooting, dailyImportReady, extractDailySheet } from "@/lib/daily-import";
 import { packetStatus } from "@/lib/vendor-packet";
 import { readExif } from "@/lib/exif";
 import { notifyCrew, notifyStaff } from "@/lib/notify";
@@ -5381,4 +5386,165 @@ export async function deleteDaily(id: string, confirm?: boolean) {
   revalidatePath("/invoicing");
   revalidatePath("/pay");
   return { ok: true as const };
+}
+
+/**
+ * Import a daily off a file a crew sent in — a scan, a photo, or the PDF that
+ * came attached to an email — and land it as a draft.
+ *
+ * A draft, never a submission. The reader is transcribing handwriting off a
+ * photo taken in a truck; it is a first pass at the paper, and the paper is
+ * still the record. Someone opens the draft, checks it against the original,
+ * fixes what needs fixing and submits it themselves.
+ *
+ * Two things make the draft safe to hand over:
+ *
+ *   - A code the customer's card does not carry is written into the sheet as
+ *     the crew wrote it, not as a guess. The sheet already warns about codes
+ *     that are not on the card and already offers the card in a dropdown, so
+ *     an unresolved column arrives somewhere it will be seen and fixed rather
+ *     than somewhere it will quietly bill nothing.
+ *
+ *   - Every column is footed against the TOTALS row the crew printed. That row
+ *     is an independent statement of the same numbers, so it catches a misread
+ *     digit arithmetically instead of by eye.
+ */
+export async function importDailyFromFile(input: {
+  fileUrl: string;
+  mediaType: string;
+  projectId: string;
+  /** Which crew this day belongs to. Staff only, as with any other sheet. */
+  filedForId?: string | null;
+}) {
+  await assertProjectAccess(input.projectId);
+  const actor = await viewer();
+
+  if (!dailyImportReady()) {
+    return {
+      ok: false as const,
+      error: "ANTHROPIC_API_KEY isn't set in this environment, so files can't be read yet.",
+    };
+  }
+
+  const project = await prisma.project.findUnique({
+    where: { id: input.projectId },
+    select: { id: true, name: true, number: true, client: true, customerId: true },
+  });
+  if (!project) return { ok: false as const, error: "Project not found." };
+
+  // The codes this customer will actually pay. Passed to the reader so it
+  // matches against the right card — the same paper sheet means different
+  // codes on a different job.
+  const allowed = project.customerId
+    ? (
+        await prisma.customerRate.findMany({
+          where: { customerId: project.customerId },
+          select: { code: true },
+        })
+      )
+        .filter((r) => isMainBillableCode(r.code))
+        .map((r) => r.code)
+    : [];
+
+  let file: ArrayBuffer;
+  try {
+    const res = await fetch(input.fileUrl);
+    if (!res.ok) return { ok: false as const, error: `Couldn't fetch that file (${res.status}).` };
+    file = await res.arrayBuffer();
+  } catch {
+    return { ok: false as const, error: "Couldn't fetch that file." };
+  }
+
+  // Guard the size before spending a model call on it. Say the number rather
+  // than "too large", so it is obvious whether to re-scan or split.
+  const MB = file.byteLength / 1_048_576;
+  if (MB > 20) {
+    return {
+      ok: false as const,
+      error: `That file is ${MB.toFixed(1)} MB. Daily sheets are usually well under 1 MB — this looks like a map or a multi-job scan. Send the sheet on its own.`,
+    };
+  }
+
+  let read: Awaited<ReturnType<typeof extractDailySheet>>;
+  try {
+    read = await extractDailySheet(
+      Buffer.from(file).toString("base64"),
+      input.mediaType,
+      allowed.length ? allowed : undefined,
+    );
+  } catch (e) {
+    return {
+      ok: false as const,
+      error: e instanceof Error ? e.message : "Couldn't read that file.",
+    };
+  }
+
+  if (!read.columns.length && !read.rows.length) {
+    return {
+      ok: false as const,
+      error: "Nothing on that file looked like a daily billing sheet.",
+    };
+  }
+
+  // An unresolved column keeps what the crew wrote. Blanking it would lose the
+  // work; guessing it would bill the wrong code. The sheet flags it either way.
+  const laborCodes = read.columns.map((c) => c.resolved ?? c.asWritten);
+  const laborRows = read.rows.map((r) => ({
+    print: r.print,
+    location: r.location,
+    cells: r.cells,
+    remarks: r.remarks,
+  }));
+
+  const footing = checkFooting(read);
+  const unresolved = read.columns.filter((c) => !c.resolved);
+
+  const sheet = await prisma.dailySheet.create({
+    data: {
+      projectId: project.id,
+      projectName: project.name,
+      workDate: read.header.dateWorked,
+      crewNumber: read.header.crewNumber,
+      header: asJson({
+        exchange: read.header.exchange || project.number,
+        crewNumber: read.header.crewNumber,
+        customer: read.header.customer || project.client,
+        dateWorked: read.header.dateWorked,
+        projectNumber: read.header.projectNumber || project.number,
+        jobName: read.header.jobName || project.name,
+        employees: read.header.employees,
+        complete: read.header.complete,
+        supervisorSignature: "",
+        supervisorDate: "",
+        subcontractorSignature: "",
+        subcontractorDate: "",
+        sheet: "",
+        sheetOf: "",
+      }),
+      laborCodes: asJson(laborCodes),
+      laborRows: asJson(laborRows),
+      matCodes: asJson([]),
+      matRows: asJson([]),
+      redlines: asJson([]),
+      notes: read.notes,
+      photos: asJson([]),
+      ...(actor && isStaff(actor.role) ? { filedForId: input.filedForId || null } : {}),
+    },
+  });
+
+  revalidatePath("/dailies");
+
+  return {
+    ok: true as const,
+    id: sheet.id,
+    columns: read.columns.map((c) => ({
+      asWritten: c.asWritten,
+      resolved: c.resolved,
+      printedTotal: c.printedTotal,
+    })),
+    rowCount: laborRows.length,
+    unresolved: unresolved.map((c) => c.asWritten),
+    footing,
+    problems: read.problems,
+  };
 }
