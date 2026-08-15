@@ -3,6 +3,8 @@ import "server-only";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import type { Prisma } from "@prisma/client";
 
+import { safe } from "@/lib/pdf-text";
+
 export type InvoiceWith = Prisma.InvoiceGetPayload<{
   include: {
     customer: { select: { name: true; billingEmail: true; paymentTerms: true } };
@@ -15,32 +17,6 @@ const PAGE = { w: 612, h: 792 };
 const M = 48;
 const money = (n: number) =>
   `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-/**
- * Make a string the standard fonts can actually draw.
- *
- * pdf-lib's built-in fonts encode WinAnsi and *throw* on anything outside it.
- * A single stray character therefore took down the whole download — a minus
- * sign in the retainage line did exactly that, and every invoice with
- * retainage returned an error page the browser dutifully saved as a .pdf.
- *
- * Rather than hunt for the next one, everything drawn goes through here.
- * Descriptions come off imported rate cards and customer names are typed by
- * hand, so the character that breaks this next was never going to be one we
- * predicted. The common typographic ones are mapped to their plain equivalents
- * so the page still reads correctly; anything else is dropped.
- */
-function safe(text: string): string {
-  return text
-    .replace(/[\u2212\u2012\u2013\u2014\u2015]/g, "-")
-    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
-    .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
-    .replace(/\u2026/g, "...")
-    .replace(/\u00A0/g, " ")
-    // Anything left outside Latin-1 has no glyph in these fonts. Dropping it
-    // loses a character; keeping it loses the invoice.
-    .replace(/[^\x20-\x7E\u00A0-\u00FF]/g, "");
-}
 
 export async function buildInvoicePdf(invoice: InvoiceWith, company: string): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();

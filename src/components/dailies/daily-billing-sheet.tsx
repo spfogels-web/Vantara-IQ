@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
   Check,
+  Download,
   Loader2,
   Map as MapIcon,
   Pencil,
@@ -611,12 +612,33 @@ export function DailyBillingSheet({
           >
             <Printer className="size-3.5" /> Print
           </Button>
+          {/* Built server-side at a fixed landscape size, so unlike Print it
+              cannot be cropped by whatever the dialog was left on. This is the
+              one to attach to an email or a text.
+
+              Needs a saved sheet — the PDF is rendered from the database, not
+              from what is currently on screen, so an unsaved draft has nothing
+              to render. Save first rather than silently sending a stale one. */}
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => {
+              if (sheetId) window.open(`/api/daily-sheet/${sheetId}`, "_blank");
+            }}
+            disabled={!sheetId}
+            title={sheetId ? "Landscape PDF, ready to email or text" : "Save the sheet first"}
+            className="h-8 gap-1.5 rounded-lg border border-border bg-transparent px-2.5 text-[12px] font-medium text-muted-foreground hover:text-foreground disabled:opacity-40"
+          >
+            <Download className="size-3.5" /> PDF
+          </Button>
           {/* The form is 17 columns wide and only fits the page sideways. The
               stylesheet asks for landscape, but a print dialog left on
               portrait overrides it and quietly crops the right-hand unit code
               columns — which reads as "the codes are missing" rather than as a
               paper setting. Say so where the button is. */}
-          <span className="text-[11px] text-muted-foreground">Set the dialog to landscape</span>
+          <span className="text-[11px] text-muted-foreground">
+            Print needs landscape · PDF is always landscape
+          </span>
           {locked ? (
             // The numbers are closed; the photos are not. Fortitude cannot
             // approve a daily with no evidence, and a crew is often out of
