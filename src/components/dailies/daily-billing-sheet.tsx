@@ -611,6 +611,12 @@ export function DailyBillingSheet({
           >
             <Printer className="size-3.5" /> Print
           </Button>
+          {/* The form is 17 columns wide and only fits the page sideways. The
+              stylesheet asks for landscape, but a print dialog left on
+              portrait overrides it and quietly crops the right-hand unit code
+              columns — which reads as "the codes are missing" rather than as a
+              paper setting. Say so where the button is. */}
+          <span className="text-[11px] text-muted-foreground">Set the dialog to landscape</span>
           {locked ? (
             // The numbers are closed; the photos are not. Fortitude cannot
             // approve a daily with no evidence, and a crew is often out of
@@ -716,8 +722,13 @@ export function DailyBillingSheet({
       >
         {/* Wide enough for the widest of the two grids (the material section,
             at 1410px) so neither table is squeezed. It scrolls horizontally on
-            a narrow screen, which beats cramming the columns. */}
-        <div className="min-w-[1420px] print:min-w-0">
+            a narrow screen, which beats cramming the columns.
+
+            `sheet-grid` holds this width at print time too — printing used to
+            try to collapse it with a `print:min-w-0` utility that emits no CSS
+            at all, so the grid stayed wide and the page simply cut off half
+            the unit code columns. It is scaled to fit in globals.css now. */}
+        <div className="sheet-grid min-w-[1420px]">
           {/* Everything except the photo strip is frozen once filed. A disabled
               fieldset switches off every control inside it in one place, so no
               individual input has to remember — and the strip sits outside it,

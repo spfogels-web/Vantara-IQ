@@ -695,12 +695,49 @@
     visibility: visible !important;
   }
 
+  /* Print the grid at its real width and shrink the whole sheet to the page,
+     rather than handing the page a 1420px table and letting it clip.
+
+     It used to rely on a `print:min-w-0` class to collapse the grid at print
+     time. That class emits no CSS — the utility was never generated — so the
+     grid stayed 1420px wide, ran off the right edge and took half the unit
+     code columns with it. A sheet printed to PDF for a text message showed 5
+     of 10 unit codes and 3 of 7 material codes, with nothing to say the rest
+     existed.
+
+     Scaling is done with `zoom` rather than `transform` on purpose: zoom
+     affects layout, so the sheet's height shrinks with its width and the page
+     count stays right. A transform would scale the pixels and leave a full
+     page of empty box behind it. */
   .sheet-page {
     position: absolute;
     top: 0;
     left: 0;
-    width: 100%;
+    /* The material grid is the wider of the two. Keep them both intact. */
+    width: 1420px;
+    /* Letter landscape less 0.35in margins is 10.3in ≈ 989px of printable
+       width. 1420 × 0.69 ≈ 980px — the full sheet, with room to spare. */
+    zoom: 0.69;
     background: #fff !important;
+  }
+
+  /* The grid wrapper, pinned to the sheet width in a rule that actually
+     exists rather than a utility class that may or may not be generated. */
+  .sheet-grid {
+    min-width: 1420px;
+    width: 1420px;
+  }
+
+  /* The redlined map is the other half of what gets emailed, so keep a page
+     break from landing in the middle of it.
+
+     Deliberately no width or height override here: the redline marks are an
+     SVG absolutely positioned over the map image, and the two only line up
+     while they share a box. Resizing either one on its own slides every mark
+     off the map it is describing. */
+  .sheet-page figure,
+  .sheet-page .map-preview {
+    break-inside: avoid;
   }
 
   .sheet-page * {
