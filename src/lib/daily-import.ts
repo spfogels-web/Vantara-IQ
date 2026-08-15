@@ -158,7 +158,7 @@ Matching guidance, in order:
 - A column whose header says ADDER, DUAL, (D), or DEPTH(D) and whose quantities equal the BFOV column beside it is the depth adder, BFOV(12.7)(2W)12"DEPTH(D). The adder is billed on every foot, so equal quantities are expected, not a mistake.
 - "BM61" means BM61(2)F12IN DEPTH. "BM60" means one of the BM60 codes - if you cannot tell which, leave it empty and say so in problems.
 - "BD4" means BD4MPF. "BM2F" means BM2F. "BMFAF" means BMFAF.
-- Handholes: "BHF 17X30" and similar sizes are NOT on the list above. Leave those unresolved and say so.
+- Handholes are sized WxLxD and the size is the price, so only match one when the sheet gives you the whole size. "BHF 30X48X24" is BHF(30x48x24)T. "BHF 17X30" is NOT enough - the card has both BHF(17X30X18)T and BHF(17X30X24)T and nothing on the sheet says which depth was set, so leave it unresolved and name both in problems. A round "flower pot" handhole is BHF(6)P or BHF(10)P by diameter; "BHF" with no size at all is unresolvable.
 
 NEVER put a code in "resolved" that is not in the list, and never pick between two plausible codes on a coin flip. An unresolved column is fixed by a person in thirty seconds. A wrongly resolved column bills the wrong number and nobody notices.
 

@@ -85,8 +85,22 @@ export const MAIN_BILLABLE_CODES = [
   "BD4MPF",
   "BD5MPF",
   // Handholes and pedestals.
+  //
+  // The two P codes are the round "flower pot" style. The rest are the
+  // rectangular buried handholes, sized WxLxD — "T" is traffic rated, "ST" is
+  // traffic rated with the two-piece FFDH lid. They are listed individually
+  // rather than as a family because the size is the price: 17x30x18 is
+  // $264.48 and 30x48x36 is $471.18, and a crew writing "BHF" on a sheet has
+  // not told anyone which one they set.
   "BHF(6)P",
   "BHF(10)P",
+  "BHF(14x19x12)P",
+  "BHF(17X30X18)T",
+  "BHF(17X30X24)T",
+  "BHF(24X36X24)T",
+  "BHF(30x48x24)T",
+  "BHF(30X48X30)ST",
+  "BHF(30X48X36)ST",
   "BDO",
 ] as const;
 
