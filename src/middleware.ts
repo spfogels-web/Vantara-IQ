@@ -27,8 +27,26 @@ const SESSION_COOKIE = "vq_session";
  */
 const PUBLIC_PREFIXES = ["/login", "/invite", "/api/blob", "/api/agreement", "/api/nda"];
 
-/** What a subcontractor login is allowed to reach. */
-const SUB_ALLOWED_PREFIXES = ["/dailies", "/projects", "/company", "/badges", "/pay", "/tasks", "/support", "/settings"];
+/**
+ * What a subcontractor login is allowed to reach.
+ *
+ * `/api/daily-sheet` is the PDF of a crew's own daily. It needs naming here
+ * because it sits under /api rather than /dailies, and without it a crew
+ * pressing the PDF button on their own sheet is bounced to the login page.
+ * Reaching the route is not the same as being handed the sheet: it checks the
+ * requester against the project's assignments before it renders anything.
+ */
+const SUB_ALLOWED_PREFIXES = [
+  "/dailies",
+  "/projects",
+  "/company",
+  "/badges",
+  "/pay",
+  "/tasks",
+  "/support",
+  "/settings",
+  "/api/daily-sheet",
+];
 
 /**
  * Carved back out of the allowed prefixes above. Creating and editing projects
