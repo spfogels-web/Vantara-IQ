@@ -93,7 +93,10 @@ function KpiCard({ kpi, index }: { kpi: Kpi; index: number }) {
 
 export function KpiRow({ kpis }: { kpis: Kpi[] }) {
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+    // Seven tiles now that production is split into today / this week / last
+    // week. Four across on a laptop and all seven on a wide screen — a fixed
+    // six left the seventh stranded alone on a second row.
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-7">
       {kpis.map((kpi, index) => (
         <KpiCard key={kpi.id} kpi={kpi} index={index} />
       ))}

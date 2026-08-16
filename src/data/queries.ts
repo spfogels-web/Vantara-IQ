@@ -13,7 +13,7 @@ import {
 import { packetStatus } from "@/lib/vendor-packet";
 import { badgeReadiness } from "@/lib/badge";
 import { isStaff } from "@/lib/auth";
-import { balanceOf, billingWeekFor, isPastDue } from "@/lib/billing";
+import { addDays, balanceOf, billingWeekFor, isPastDue, weekOf } from "@/lib/billing";
 import { amountPayable, canElectFastPay, dueDateFromCutoff } from "@/lib/fast-pay";
 import { schedulePosition, type SchedulePosition } from "@/lib/schedule";
 import {
@@ -41,18 +41,15 @@ import {
   productionMethod,
   type ProductionMethod,
 } from "@/lib/unit-codes";
+// The operations centre no longer reads fixtures. What is left here is
+// awaiting the same treatment: invoices and materials have real tables behind
+// them, pay applications and reports do not exist yet.
 import {
-  brief,
-  deadlines,
-  healthSummary,
   invoices,
   materials,
-  missingDocuments,
   organization,
   payApplications,
-  productionSummary,
   reportDefinitions,
-  revenueSummary,
 } from "@/data/mock";
 import type {
   AppNotification,
@@ -377,7 +374,7 @@ export async function getOrganization(): Promise<Organization> {
  * plausible number that is fiction tells you nothing and hides the gap.
  */
 export async function getKpis(): Promise<Kpi[]> {
-  const [projects, dailies] = await Promise.all([
+  const [projects, rows] = await Promise.all([
     prisma.project.findMany({ select: { tone: true, status: true } }),
     prisma.daily.findMany({
       select: {
@@ -385,11 +382,24 @@ export async function getKpis(): Promise<Kpi[]> {
         workDate: true,
         submittedAt: true,
         totalFt: true,
-        billableAmount: true,
+        billingWeekEnd: true,
+        // Priced below rather than read off the row. `billableAmount` is a
+        // stored column that nothing writes — every daily in the database has
+        // 0 in it — so reading it made "Revenue ready to bill" a permanent
+        // $0 with a caption blaming missing rates. The rates were loaded; the
+        // number was never being calculated.
+        customer: true,
+        subcontractor: true,
+        projectId: true,
         lineItems: true,
       },
     }),
   ]);
+
+  // priceDailies returns the money for each row in the order it was given, so
+  // zip it back onto the row it belongs to.
+  const priced = await priceDailies(rows);
+  const dailies = rows.map((r, i) => ({ ...r, ...priced[i] }));
 
   /** Local calendar day for a daily — work date if usable, else submission. */
   const dayOf = (d: { workDate: string; submittedAt: string }) => {
@@ -417,12 +427,38 @@ export async function getKpis(): Promise<Kpi[]> {
     if (back >= 0 && back < 12) ftByDay[11 - back] += d.totalFt;
   }
 
+  // Production by billing week — Saturday through Friday, the same weeks the
+  // invoices are cut on, not a rolling seven days. A crew asking "what did we
+  // do this week" means the week they get paid for.
+  const thisWeek = weekOf(new Date().toISOString().slice(0, 10));
+  const lastWeekEnd = thisWeek ? addDays(thisWeek.end, -7) : null;
+  const inWeek = (d: (typeof dailies)[number], end: string) =>
+    billingWeekFor({ workDate: d.workDate, billingWeekEnd: d.billingWeekEnd })?.end === end;
+
+  const ftThisWeek = thisWeek
+    ? dailies.filter((d) => inWeek(d, thisWeek.end)).reduce((s, d) => s + d.totalFt, 0)
+    : 0;
+  const ftLastWeek = lastWeekEnd
+    ? dailies.filter((d) => inWeek(d, lastWeekEnd)).reduce((s, d) => s + d.totalFt, 0)
+    : 0;
+
   const awaiting = dailies.filter(
     (d) => d.status === "Submitted" || d.status === "In review",
   ).length;
   const approved = dailies.filter((d) => d.status === "Approved");
   const readyToBill = approved.reduce((s, d) => s + d.billableAmount, 0);
   const atRisk = projects.filter((p) => p.tone === "critical" || p.tone === "warning").length;
+
+  /** Short date for a week label — "Aug 9–15". */
+  const weekLabel = (end: string) => {
+    const s = new Date(`${addDays(end, -6)}T00:00:00Z`);
+    const e = new Date(`${end}T00:00:00Z`);
+    const m = (d: Date) => d.toLocaleDateString("en-US", { month: "short", timeZone: "UTC" });
+    const day = (d: Date) => d.getUTCDate();
+    return m(s) === m(e)
+      ? `${m(s)} ${day(s)}–${day(e)}`
+      : `${m(s)} ${day(s)} – ${m(e)} ${day(e)}`;
+  };
 
   const pctChange = (now: number, before: number) =>
     before === 0 ? (now === 0 ? 0 : 100) : Number((((now - before) / before) * 100).toFixed(1));
@@ -457,33 +493,52 @@ export async function getKpis(): Promise<Kpi[]> {
       series: ftByDay,
     },
     {
+      id: "production-week",
+      label: "Production this week",
+      value: ftThisWeek,
+      format: "feet",
+      delta: pctChange(ftThisWeek, ftLastWeek),
+      deltaLabel: thisWeek ? `${weekLabel(thisWeek.end)} · billing week` : "this billing week",
+      trend: ftThisWeek > ftLastWeek ? "up" : ftThisWeek < ftLastWeek ? "down" : "flat",
+      tone: "success",
+      icon: "trending",
+      href: "/dailies",
+      series: flat(ftThisWeek),
+    },
+    {
+      id: "production-last-week",
+      label: "Production last week",
+      value: ftLastWeek,
+      format: "feet",
+      delta: null,
+      deltaLabel: lastWeekEnd ? `${weekLabel(lastWeekEnd)} · closed` : "previous billing week",
+      trend: "flat",
+      tone: "info",
+      icon: "trending",
+      href: "/dailies",
+      series: flat(ftLastWeek),
+    },
+    {
       id: "revenue-ready",
       label: "Revenue ready to bill",
       value: readyToBill,
       format: "currency",
       delta: null,
+      // Say which of the two zeros this is. "Needs customer rates loaded" was
+      // printed whenever the figure was 0, including when the real reason was
+      // that no daily had been approved yet — sending you to fix a rate card
+      // that was never the problem.
       deltaLabel:
         readyToBill > 0
           ? `${approved.length} approved ${approved.length === 1 ? "daily" : "dailies"}`
-          : "needs customer rates loaded",
+          : approved.length === 0
+            ? "no approved dailies yet"
+            : `${approved.length} approved, none priced — check the codes`,
       trend: "flat",
       tone: readyToBill > 0 ? "success" : "neutral",
       icon: "dollar",
       href: "/invoicing",
       series: flat(readyToBill),
-    },
-    {
-      id: "approved-pay-apps",
-      label: "Approved pay apps",
-      value: 0,
-      format: "currency",
-      delta: null,
-      deltaLabel: "no pay applications yet",
-      trend: "flat",
-      tone: "neutral",
-      icon: "payapps",
-      href: "/pay-applications",
-      series: flat(0),
     },
     {
       id: "dailies-waiting",
@@ -514,28 +569,422 @@ export async function getKpis(): Promise<Kpi[]> {
   ];
 }
 
-export async function getHealthSummary(): Promise<HealthSummary> {
-  return healthSummary;
+/**
+ * The operations centre reads live data from here down.
+ *
+ * These six used to return fixtures out of data/mock.ts, and the dashboard
+ * showed them as fact: a crew reassignment on a job called Piedmont Water, a
+ * $482,350 cash figure, a milestone in May. None of it existed. A number you
+ * cannot act on is bad; a number you *can* act on that was invented is worse,
+ * and it sat on the first screen of the morning.
+ *
+ * Everything below is computed from projects, dailies and invoices. Where
+ * there is nothing to report they return empty or zero, which is a true answer
+ * and reads as one.
+ */
+
+/**
+ * Compliance rows not in good standing, judged against the documents actually
+ * on file.
+ *
+ * It has to go through complianceFrom with the filed sections, not read the
+ * stored JSON directly. That column is written when a crew is created and is
+ * not updated by an upload, so reading it alone reports a crew who has sent
+ * in every certificate as missing all of them - which is what it did to J&P.
+ */
+function lapsedDocs(
+  stored: unknown,
+  documents: { section: string }[],
+): string[] {
+  return complianceFrom(
+    (stored as Subcontractor["compliance"]) ?? [],
+    documents.map((d) => d.section),
+  )
+    .filter((c) => c.status !== "valid" && c.status !== "expiring")
+    .map((c) => c.label);
 }
 
+export async function getHealthSummary(): Promise<HealthSummary> {
+  const projects = await prisma.project.findMany({
+    select: { tone: true, health: true, pctComplete: true, actualFtPerDay: true, requiredFtPerDay: true },
+  });
+
+  const total = projects.length;
+  const score = total
+    ? Math.round(projects.reduce((s, p) => s + p.health, 0) / total)
+    : 0;
+
+  const bucket = (label: string, tone: Tone, match: (p: (typeof projects)[number]) => boolean) => {
+    const count = projects.filter(match).length;
+    return { label, tone, count, share: total ? count / total : 0 };
+  };
+
+  // On time means keeping up with the footage the schedule needs. A project
+  // with no required rate is not counted either way rather than counted good.
+  const paced = projects.filter((p) => p.requiredFtPerDay > 0);
+  const onPace = paced.filter((p) => p.actualFtPerDay >= p.requiredFtPerDay).length;
+
+  return {
+    score,
+    delta: 0,
+    totalProjects: total,
+    buckets: [
+      bucket("Healthy", "success", (p) => p.tone === "success" || p.tone === "info"),
+      bucket("Watch", "warning", (p) => p.tone === "warning"),
+      bucket("At risk", "critical", (p) => p.tone === "critical"),
+    ],
+    onTimeRate: paced.length ? onPace / paced.length : 0,
+    // Not tracked yet. Zero rather than an invented percentage — the card
+    // renders it as "not tracked" instead of implying we measured it.
+    budgetVariance: 0,
+    safetyDays: 0,
+  };
+}
+
+/**
+ * What actually needs someone's attention, found in the data.
+ *
+ * Not a forecast and not a model's opinion — each item is a query result with
+ * the number that produced it, so every line can be checked. Ordered by how
+ * much money or risk is sitting behind it.
+ */
 export async function getBrief(): Promise<BriefItem[]> {
-  return brief;
+  const [rows, projects, subs] = await Promise.all([
+    prisma.daily.findMany({
+      select: {
+        status: true, workDate: true, submittedAt: true, crew: true, projectName: true,
+        customer: true, subcontractor: true, projectId: true, lineItems: true,
+        billingWeekEnd: true, totalFt: true,
+      },
+    }),
+    prisma.project.findMany({ select: { name: true, tone: true, deadline: true, remainingFt: true, actualFtPerDay: true, requiredFtPerDay: true } }),
+    prisma.subcontractor.findMany({
+      select: {
+        company: true,
+        state: true,
+        compliance: true,
+        documents: { select: { section: true } },
+      },
+    }),
+  ]);
+
+  const priced = await priceDailies(rows);
+  const dailies = rows.map((r, i) => ({ ...r, ...priced[i] }));
+  const items: BriefItem[] = [];
+
+  // Unpriced codes are the expensive one: the day is filed, it looks complete,
+  // and it bills nothing. This is the $395-instead-of-$4,192 failure.
+  const unpriced = dailies.filter((d) => d.unpricedCodes > 0);
+  if (unpriced.length) {
+    const codes = unpriced.reduce((s, d) => s + d.unpricedCodes, 0);
+    items.push({
+      id: "unpriced-codes",
+      severity: "critical",
+      title: `${codes} line${codes === 1 ? "" : "s"} on ${unpriced.length} dail${unpriced.length === 1 ? "y" : "ies"} bill nothing`,
+      detail:
+        "These carry a code the customer's rate card doesn't have, so they price at $0 and the sheet still reads as filed. Open the daily and re-pick the code from the dropdown.",
+      confidence: 1,
+      impact: `${unpriced.length} dail${unpriced.length === 1 ? "y" : "ies"}`,
+      action: "Fix the codes",
+      icon: "alert",
+    });
+  }
+
+  const waiting = dailies.filter((d) => d.status === "Submitted" || d.status === "In review");
+  if (waiting.length) {
+    const ft = waiting.reduce((s, d) => s + d.totalFt, 0);
+    items.push({
+      id: "dailies-waiting",
+      severity: waiting.length > 5 ? "critical" : "info",
+      title: `${waiting.length} dail${waiting.length === 1 ? "y is" : "ies are"} waiting on review`,
+      detail: `${ft.toLocaleString()} ft of production can't be invoiced until these are approved.`,
+      confidence: 1,
+      impact: `${ft.toLocaleString()} ft`,
+      action: "Review dailies",
+      icon: "clipboard",
+    });
+  }
+
+  const ready = dailies.filter((d) => d.status === "Approved" && d.billableAmount > 0);
+  if (ready.length) {
+    const amount = ready.reduce((s, d) => s + d.billableAmount, 0);
+    items.push({
+      id: "ready-to-bill",
+      severity: "opportunity",
+      title: `$${Math.round(amount).toLocaleString()} approved and not yet invoiced`,
+      detail: `${ready.length} approved dail${ready.length === 1 ? "y" : "ies"} priced against the customer card and ready to go on an invoice.`,
+      confidence: 1,
+      impact: `$${Math.round(amount).toLocaleString()}`,
+      action: "Create invoice",
+      icon: "dollar",
+    });
+  }
+
+  const denied = dailies.filter((d) => d.status === "Denied");
+  if (denied.length) {
+    items.push({
+      id: "denied-dailies",
+      severity: "info",
+      title: `${denied.length} dail${denied.length === 1 ? "y was" : "ies were"} denied`,
+      detail:
+        "Denied work is not billed and not paid. If the crew is meant to correct and refile these, someone has to tell them.",
+      confidence: 1,
+      impact: `${denied.length} denied`,
+      action: "Open dailies",
+      icon: "alert",
+    });
+  }
+
+  const blocked = subs.filter(
+    (s) => s.state === "ACTIVE" && lapsedDocs(s.compliance, s.documents).length > 0,
+  );
+  if (blocked.length) {
+    items.push({
+      id: "sub-documents",
+      severity: "critical",
+      title: `${blocked.length} active crew${blocked.length === 1 ? " is" : "s are"} short on paperwork`,
+      // Name the crew and the document. "Missing documents" sends someone to
+      // go and look; naming the gap means they can go and ask for it.
+      detail: blocked
+        .map((s) => `${s.company}: ${lapsedDocs(s.compliance, s.documents).join(", ")}`)
+        .join(" · "),
+      confidence: 1,
+      impact: "Compliance",
+      action: "Open subcontractors",
+      icon: "shield",
+    });
+  }
+
+  const behind = projects.filter(
+    (p) => p.requiredFtPerDay > 0 && p.actualFtPerDay < p.requiredFtPerDay,
+  );
+  if (behind.length) {
+    const worst = behind.sort(
+      (a, b) => a.actualFtPerDay - a.requiredFtPerDay - (b.actualFtPerDay - b.requiredFtPerDay),
+    )[0];
+    items.push({
+      id: "behind-pace",
+      severity: "critical",
+      title: `${behind.length} project${behind.length === 1 ? "" : "s"} running under the pace the schedule needs`,
+      detail: `${worst.name} needs ${worst.requiredFtPerDay.toLocaleString()} ft/day and is running ${worst.actualFtPerDay.toLocaleString()} ft/day, with ${worst.remainingFt.toLocaleString()} ft left.`,
+      confidence: 1,
+      impact: `${behind.length} project${behind.length === 1 ? "" : "s"}`,
+      action: "Open projects",
+      icon: "trending",
+    });
+  }
+
+  return items;
 }
 
 export async function getProductionSummary(): Promise<ProductionSummary> {
-  return productionSummary;
+  const dailies = await prisma.daily.findMany({
+    select: { workDate: true, submittedAt: true, totalFt: true, crew: true, subcontractor: true, billingWeekEnd: true },
+  });
+  const projects = await prisma.project.findMany({ select: { requiredFtPerDay: true } });
+
+  const DAY = 86_400_000;
+  const now = new Date();
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+
+  const dayOf = (d: { workDate: string; submittedAt: string }) => {
+    const t = Date.parse(d.workDate) || Date.parse(d.submittedAt);
+    if (!t || Number.isNaN(t)) return null;
+    const dt = new Date(t);
+    return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).getTime();
+  };
+
+  // Seven days ending today, oldest first.
+  const series = Array.from({ length: 7 }, (_, i) => {
+    const ts = startOfToday - (6 - i) * DAY;
+    const date = new Date(ts);
+    const actual = dailies
+      .filter((d) => dayOf(d) === ts)
+      .reduce((s, d) => s + d.totalFt, 0);
+    return {
+      day: date.toLocaleDateString("en-US", { weekday: "short" }),
+      date: date.toISOString().slice(0, 10),
+      actual,
+      // The target is what the open jobs collectively need per day, not a
+      // number picked to make the chart look reachable.
+      target: projects.reduce((s, p) => s + p.requiredFtPerDay, 0),
+    };
+  });
+
+  const thisWeek = weekOf(new Date().toISOString().slice(0, 10));
+  const lastWeekEnd = thisWeek ? addDays(thisWeek.end, -7) : null;
+  const weekFt = (end: string | null) =>
+    end
+      ? dailies
+          .filter(
+            (d) =>
+              billingWeekFor({ workDate: d.workDate, billingWeekEnd: d.billingWeekEnd })?.end === end,
+          )
+          .reduce((s, d) => s + d.totalFt, 0)
+      : 0;
+
+  const weekTotal = weekFt(thisWeek?.end ?? null);
+  const lastTotal = weekFt(lastWeekEnd);
+
+  // Footage by the crew that actually did it.
+  const byCrewMap = new Map<string, number>();
+  for (const d of dailies) {
+    const who = (d.subcontractor || d.crew || "Unassigned").trim();
+    byCrewMap.set(who, (byCrewMap.get(who) ?? 0) + d.totalFt);
+  }
+  const byCrew = [...byCrewMap.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6)
+    .map(([crew, ft]) => ({
+      crew,
+      ft,
+      tone: (ft > 0 ? "success" : "neutral") as Tone,
+    }));
+
+  return {
+    today: series[6]?.actual ?? 0,
+    target: projects.reduce((s, p) => s + p.requiredFtPerDay, 0),
+    weekTotal,
+    weekDelta:
+      lastTotal === 0
+        ? weekTotal === 0
+          ? 0
+          : 100
+        : Number((((weekTotal - lastTotal) / lastTotal) * 100).toFixed(1)),
+    series,
+    byCrew,
+  };
 }
 
 export async function getRevenueSummary(): Promise<RevenueSummary> {
-  return revenueSummary;
+  const [rows, invoices] = await Promise.all([
+    prisma.daily.findMany({
+      select: {
+        status: true, workDate: true, customer: true, subcontractor: true,
+        projectId: true, lineItems: true,
+      },
+    }),
+    prisma.invoice.findMany({
+      select: {
+        status: true,
+        amountDue: true,
+        dueAt: true,
+        payments: { select: { amount: true } },
+      },
+    }),
+  ]);
+
+  const priced = await priceDailies(rows);
+  const dailies = rows.map((r, i) => ({ ...r, ...priced[i] }));
+
+  const readyRows = dailies.filter((d) => d.status === "Approved");
+  const ready = readyRows.reduce((s, d) => s + d.billableAmount, 0);
+
+  // Balance is amountDue less payments received, which is what balanceOf
+  // exists to work out - the Invoice row has no paid or total column.
+  const withBalance = invoices.map((i) => ({
+    ...i,
+    ...balanceOf(i.amountDue, i.payments),
+  }));
+  const open = withBalance.filter((i) => i.status !== "VOID" && !i.settled);
+  const outstanding = open.reduce((s, i) => s + i.balance, 0);
+  const overdueRows = open.filter((i) => isPastDue(i.dueAt, i.balance));
+  const overdue = overdueRows.reduce((s, i) => s + i.balance, 0);
+  const collected = withBalance.reduce((s, i) => s + i.paid, 0);
+
+  const total = ready + outstanding;
+  const share = (n: number) => (total > 0 ? n / total : 0);
+
+  return {
+    total,
+    buckets: [
+      {
+        id: "ready",
+        label: "Ready to bill",
+        amount: ready,
+        count: readyRows.length,
+        caption: readyRows.length ? "approved dailies, not yet invoiced" : "no approved dailies yet",
+        tone: ready > 0 ? "success" : "neutral",
+        icon: "dollar",
+        share: share(ready),
+      },
+      {
+        id: "outstanding",
+        label: "Invoiced, unpaid",
+        amount: outstanding,
+        count: open.length,
+        caption: open.length ? "issued and awaiting payment" : "nothing outstanding",
+        tone: outstanding > 0 ? "info" : "neutral",
+        icon: "billing",
+        share: share(outstanding),
+      },
+      {
+        id: "overdue",
+        label: "Past due",
+        amount: overdue,
+        count: overdueRows.length,
+        caption: overdueRows.length ? "past the due date" : "nothing past due",
+        tone: overdue > 0 ? "critical" : "success",
+        icon: "alert",
+        share: share(overdue),
+      },
+    ],
+    // Not measured until invoices have been paid; 0 rather than a plausible 38.
+    avgDaysToPay: 0,
+    collectedThisMonth: collected,
+  };
 }
 
 export async function getDeadlines(): Promise<Deadline[]> {
-  return deadlines;
+  const projects = await prisma.project.findMany({
+    select: { id: true, name: true, deadline: true, crew: true, tone: true, remainingFt: true },
+  });
+
+  const today = Date.now();
+  return projects
+    .filter((p) => p.deadline?.trim())
+    .map((p) => {
+      const t = Date.parse(p.deadline);
+      const daysOut = Number.isNaN(t) ? 0 : Math.round((t - today) / 86_400_000);
+      return {
+        id: p.id,
+        project: p.name,
+        milestone: p.remainingFt > 0 ? `${p.remainingFt.toLocaleString()} ft remaining` : "Completion",
+        date: p.deadline,
+        daysOut,
+        tone: (daysOut < 0 ? "critical" : daysOut <= 7 ? "warning" : "info") as Tone,
+        owner: p.crew || "Unassigned",
+      };
+    })
+    .sort((a, b) => a.daysOut - b.daysOut);
 }
 
 export async function getMissingDocuments(): Promise<MissingDocument[]> {
-  return missingDocuments;
+  const subs = await prisma.subcontractor.findMany({
+    select: {
+      id: true,
+      company: true,
+      state: true,
+      compliance: true,
+      documents: { select: { section: true } },
+    },
+  });
+
+  return subs
+    .map((s) => {
+      const missing = lapsedDocs(s.compliance, s.documents);
+      return {
+        id: s.id,
+        project: s.company,
+        documents: missing,
+        // An active crew missing paperwork is on a job right now, which is the
+        // difference between a to-do and a problem.
+        blocking: s.state === "ACTIVE" && missing.length > 0,
+        daysOverdue: 0,
+      };
+    })
+    .filter((m) => m.documents.length > 0)
+    .sort((a, b) => Number(b.blocking) - Number(a.blocking));
 }
 
 /**
