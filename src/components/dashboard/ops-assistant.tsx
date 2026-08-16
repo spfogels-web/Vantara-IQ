@@ -173,7 +173,13 @@ export function OpsAssistant() {
       );
       if (preferred) u.voice = preferred;
 
-      u.onstart = () => setSpeaking(true);
+      // Tracked rather than polled: a short line can be over before any timer
+      // fires, and "it finished" must never be mistaken for "it never played".
+      let started = false;
+      u.onstart = () => {
+        started = true;
+        setSpeaking(true);
+      };
       u.onend = () => setSpeaking(false);
       // A silent failure is the worst outcome — it looks like the feature is
       // simply broken. Say what happened instead.
@@ -196,21 +202,24 @@ export function OpsAssistant() {
       // question is being answered, and the first speak() after that wakes it
       // without playing — the second one plays.
       window.setTimeout(() => {
-        if (utterance.current !== u || synth.speaking || synth.pending) return;
+        if (started || utterance.current !== u || synth.speaking || synth.pending) return;
         synth.resume();
         const retry = new SpeechSynthesisUtterance(line);
         retry.rate = u.rate;
         retry.pitch = u.pitch;
         if (u.voice) retry.voice = u.voice;
-        retry.onstart = () => setSpeaking(true);
+        let retried = false;
+        retry.onstart = () => {
+          retried = true;
+          setSpeaking(true);
+        };
         retry.onend = () => setSpeaking(false);
         utterance.current = retry;
         synth.speak(retry);
 
         window.setTimeout(() => {
-          if (utterance.current === retry && !synth.speaking && !synth.pending) {
-            setDiag("The answer is above but wouldn't play. Tap the speaker on a reply to hear it.");
-          }
+          if (retried || synth.speaking || synth.pending) return;
+          setDiag("The answer is above but wouldn't play. Tap Play on the reply to hear it.");
         }, 900);
       }, 700);
     },
@@ -396,21 +405,26 @@ export function OpsAssistant() {
               );
               if (pick) u.voice = pick;
 
-              // Report what the browser actually did, rather than leaving a
-              // silent speaker to be interpreted as a broken feature.
-              u.onstart = () => setDiag(null);
+              // Whether it *started* is the fact worth knowing. Polling
+              // `speaking` on a timer says nothing — "Voice on." is over in
+              // under a second, so the check fired after it had finished and
+              // reported a failure for speech you had just heard.
+              let started = false;
+              u.onstart = () => {
+                started = true;
+                setDiag(null);
+              };
               u.onerror = (e) => setDiag(`Browser refused: ${e.error}.`);
               utterance.current = u;
               synth.speak(u);
 
               window.setTimeout(() => {
-                if (!synth.speaking && !synth.pending) {
-                  setDiag(
-                    `No sound came out. Engine present, ${voices.length} voices loaded${
-                      pick ? `, using "${pick.name}"` : ", none matched so using the default"
-                    }. Check the tab isn't muted (right-click the tab) and the system output device.`,
-                  );
-                }
+                if (started) return;
+                setDiag(
+                  `No sound came out. Engine present, ${voices.length} voices loaded${
+                    pick ? `, using "${pick.name}"` : ", none matched so using the default"
+                  }. Check the tab isn't muted (right-click the tab) and the system output device.`,
+                );
               }, 1500);
             }}
             title={voice ? "Answers are spoken — tap to silence" : "Tap to turn the voice on"}
