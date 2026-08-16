@@ -866,3 +866,15 @@
     animation: none;
   }
 }
+
+/* The brain's bloom. Strong against the dark app; on white it only hazes the
+   mesh, so it is cut right back and the mesh itself carries the contrast. */
+.light .vq-ai-frame [style*="--vq-brain-glow"] {
+  opacity: calc(var(--vq-brain-glow) * 0.3) !important;
+}
+
+/* The two drifting blooms behind the panel are washes on dark and grey smears
+   on white, for the same reason. */
+.light .vq-ai-glow {
+  opacity: 0.14 !important;
+}

@@ -100,6 +100,28 @@ export function NeuralBrain({
       typeof window !== "undefined" &&
       window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
+    /**
+     * Two palettes. The mesh is pale blue so it glows against the dark app,
+     * and pale blue on white is very nearly nothing — so light mode gets deep
+     * saturated blues that read as ink instead.
+     */
+    const PALETTE = {
+      dark: { edge: "96,165,250", node: "219,234,254", dust: "125,190,255", lift: 0.15 },
+      light: { edge: "29,78,216", node: "30,58,138", dust: "37,99,235", lift: 0.3 },
+    };
+    let ink = PALETTE.dark;
+    const readTheme = () => {
+      const light = document.documentElement.classList.contains("light");
+      ink = light ? PALETTE.light : PALETTE.dark;
+    };
+    readTheme();
+    // The theme is a class on <html>, so watch it rather than sampling once.
+    const themeWatch = new MutationObserver(readTheme);
+    themeWatch.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+
     const { nodes, edges } = buildMesh(320);
     // Sparks travel an edge and respawn; more of them when it is talking.
     const sparks = Array.from({ length: 70 }, (_, i) => ({
@@ -169,8 +191,8 @@ export function NeuralBrain({
         const a = nodes[e.a];
         const b = nodes[e.b];
         // Nearer pairs are brighter — gives the mesh depth without shading.
-        const alpha = (1 - e.d / 0.085) * 0.32 * (0.6 + energy * 0.8);
-        ctx.strokeStyle = `rgba(96,165,250,${alpha.toFixed(3)})`;
+        const alpha = (1 - e.d / 0.085) * 0.32 * (0.6 + energy * 0.8) + ink.lift * 0.35;
+        ctx.strokeStyle = `rgba(${ink.edge},${alpha.toFixed(3)})`;
         ctx.beginPath();
         ctx.moveTo(px(a), py(a));
         ctx.lineTo(px(b), py(b));
@@ -190,8 +212,8 @@ export function NeuralBrain({
         const y = py(a) + (py(b) - py(a)) * sp.t;
 
         const g = ctx.createRadialGradient(x, y, 0, x, y, 7);
-        g.addColorStop(0, `rgba(190,225,255,${0.85 * energy})`);
-        g.addColorStop(1, "rgba(96,165,250,0)");
+        g.addColorStop(0, `rgba(${ink.node},${(0.85 * energy + ink.lift).toFixed(3)})`);
+        g.addColorStop(1, `rgba(${ink.edge},0)`);
         ctx.fillStyle = g;
         ctx.beginPath();
         ctx.arc(x, y, 7, 0, Math.PI * 2);
@@ -210,7 +232,7 @@ export function NeuralBrain({
       for (const n of nodes) {
         const tw = 0.55 + 0.45 * Math.sin(t * 1.6 + n.ph);
         const r = n.r * (1 + energy * 0.5) * (0.7 + tw * 0.5);
-        ctx.fillStyle = `rgba(219,234,254,${(0.35 + tw * 0.5 * energy + 0.15).toFixed(3)})`;
+        ctx.fillStyle = `rgba(${ink.node},${(0.35 + tw * 0.5 * energy + ink.lift).toFixed(3)})`;
         ctx.beginPath();
         ctx.arc(px(n), py(n), r, 0, Math.PI * 2);
         ctx.fill();
@@ -227,7 +249,7 @@ export function NeuralBrain({
           if (d.y > 1) d.y = 0;
         }
         const tw = 0.4 + 0.6 * Math.sin(t * 1.1 + d.ph);
-        ctx.fillStyle = `rgba(125,190,255,${(0.12 + tw * 0.4 * energy).toFixed(3)})`;
+        ctx.fillStyle = `rgba(${ink.dust},${(0.12 + tw * 0.4 * energy + ink.lift * 0.5).toFixed(3)})`;
         ctx.beginPath();
         ctx.arc(px(d), py(d), d.r * (0.8 + energy * 0.6), 0, Math.PI * 2);
         ctx.fill();
@@ -240,6 +262,7 @@ export function NeuralBrain({
     return () => {
       cancelAnimationFrame(raf);
       ro.disconnect();
+      themeWatch.disconnect();
     };
   }, []);
 

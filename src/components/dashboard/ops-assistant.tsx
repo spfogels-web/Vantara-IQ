@@ -278,15 +278,22 @@ export function OpsAssistant() {
       <div className="relative z-10 flex flex-col lg:flex-row">
         <div className="relative flex shrink-0 items-center justify-center border-b border-border/70 px-6 py-6 lg:w-[340px] lg:border-b-0 lg:border-r">
           {/* Glow behind the mesh, brightening as it wakes up. */}
+          {/* A bloom lifts the mesh off a dark background; on white it just
+              hazes it. Kept strong in dark, barely there in light. */}
           <span
             aria-hidden
-            className="pointer-events-none absolute inset-0 blur-3xl"
-            style={{
-              background:
-                "radial-gradient(circle at 50% 48%, var(--vq-blue) 0%, transparent 62%)",
-              opacity: speaking ? 0.65 : listening ? 0.5 : busy ? 0.42 : 0.26,
-              transition: "opacity 500ms ease",
-            }}
+            className={cn(
+              "pointer-events-none absolute inset-0 blur-3xl",
+              "opacity-[var(--vq-brain-glow)]",
+            )}
+            style={
+              {
+                background:
+                  "radial-gradient(circle at 50% 48%, var(--vq-blue) 0%, transparent 62%)",
+                "--vq-brain-glow": speaking ? 0.65 : listening ? 0.5 : busy ? 0.42 : 0.26,
+                transition: "opacity 500ms ease",
+              } as React.CSSProperties
+            }
           />
           <div className="relative w-full max-w-[300px]">
             <NeuralBrain
