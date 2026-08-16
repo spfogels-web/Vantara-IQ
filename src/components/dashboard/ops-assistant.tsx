@@ -77,6 +77,43 @@ export function OpsAssistant() {
   const scroller = React.useRef<HTMLDivElement | null>(null);
   const input = React.useRef<HTMLTextAreaElement | null>(null);
 
+  /**
+   * Chrome garbage-collects an utterance that nothing references, mid-sentence,
+   * and it simply stops. Holding it here is the documented workaround.
+   */
+  const utterance = React.useRef<SpeechSynthesisUtterance | null>(null);
+
+  /**
+   * Browsers will not speak until something the user did has unlocked audio,
+   * and by the time an answer arrives — several seconds and several database
+   * reads later — the tap that started it is long gone. So the engine is
+   * unlocked on the tap itself with an empty utterance, and stays unlocked.
+   */
+  const unlocked = React.useRef(false);
+  const unlock = React.useCallback(() => {
+    if (unlocked.current || typeof window === "undefined" || !window.speechSynthesis) return;
+    try {
+      window.speechSynthesis.speak(new SpeechSynthesisUtterance(""));
+      unlocked.current = true;
+    } catch {
+      // Nothing to do — say() reports it properly if speech really is blocked.
+    }
+  }, []);
+
+  /**
+   * getVoices() is empty on the first call in Chrome and fills in later. Asking
+   * once at mount and again on voiceschanged means the good voice is available
+   * by the time there is something to say.
+   */
+  const [voices, setVoices] = React.useState<SpeechSynthesisVoice[]>([]);
+  React.useEffect(() => {
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
+    const load = () => setVoices(window.speechSynthesis.getVoices());
+    load();
+    window.speechSynthesis.addEventListener("voiceschanged", load);
+    return () => window.speechSynthesis.removeEventListener("voiceschanged", load);
+  }, []);
+
   React.useEffect(() => {
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" });
   }, [turns, busy]);
@@ -91,30 +128,62 @@ export function OpsAssistant() {
 
   const say = React.useCallback(
     (line: string) => {
-      if (!voice || !line || typeof window === "undefined" || !window.speechSynthesis) return;
-      window.speechSynthesis.cancel();
+      if (!voice || !line) return;
+      if (typeof window === "undefined" || !window.speechSynthesis) {
+        setError("This browser has no speech engine, so answers stay on screen.");
+        return;
+      }
+
+      const synth = window.speechSynthesis;
+      synth.cancel();
 
       const u = new SpeechSynthesisUtterance(line);
       // Slightly quick and slightly low reads as composed rather than chirpy.
       u.rate = 1.04;
       u.pitch = 0.92;
-      const preferred = window.speechSynthesis
-        .getVoices()
-        .find((v) => /Daniel|Google UK English Male|Microsoft Guy|Alex/i.test(v.name));
+      const preferred = voices.find((v) =>
+        /Daniel|Google UK English Male|Microsoft Guy|Alex/i.test(v.name),
+      );
       if (preferred) u.voice = preferred;
 
       u.onstart = () => setSpeaking(true);
       u.onend = () => setSpeaking(false);
-      u.onerror = () => setSpeaking(false);
-      window.speechSynthesis.speak(u);
+      // A silent failure is the worst outcome — it looks like the feature is
+      // simply broken. Say what happened instead.
+      u.onerror = (e) => {
+        setSpeaking(false);
+        if (e.error !== "canceled" && e.error !== "interrupted") {
+          setError(
+            `The browser wouldn't speak (${e.error}). The answer is above — check the tab isn't muted, or turn the speaker off.`,
+          );
+        }
+      };
+
+      utterance.current = u;
+      synth.speak(u);
+
+      // Chrome will accept speak(), report nothing, and stay silent when audio
+      // was never unlocked. If it has not started shortly, say so rather than
+      // leave the user tapping a mic that appears to do nothing.
+      window.setTimeout(() => {
+        if (utterance.current === u && !synth.speaking && !synth.pending) {
+          setError(
+            "The answer is above, but the browser didn't play it. Tap the speaker icon once to allow audio, then ask again.",
+          );
+        }
+      }, 1200);
     },
-    [voice],
+    [voice, voices],
   );
 
   const send = React.useCallback(
     async (text: string) => {
       const question = text.trim();
       if (!question || busy) return;
+
+      // Unlock audio while the click is still in scope — the answer that will
+      // be spoken is several seconds and several database reads away.
+      unlock();
 
       setDraft("");
       setError(null);
@@ -134,12 +203,13 @@ export function OpsAssistant() {
 
       input.current?.focus();
     },
-    [busy, turns, say],
+    [busy, turns, say, unlock],
   );
 
   /** Tap to talk. Talking over it stops it talking. */
   const toggleMic = React.useCallback(() => {
     if (typeof window === "undefined") return;
+    unlock();
     hush();
 
     if (listening) {
@@ -174,7 +244,7 @@ export function OpsAssistant() {
     recognition.current = rec;
     rec.start();
     setListening(true);
-  }, [listening, hush, send]);
+  }, [listening, hush, send, unlock]);
 
   const started = turns.length > 0 || busy;
 
@@ -228,10 +298,26 @@ export function OpsAssistant() {
           <button
             type="button"
             onClick={() => {
-              if (voice) hush();
-              setVoice((v) => !v);
+              if (voice) {
+                hush();
+                setVoice(false);
+                return;
+              }
+              // Turning it on says something straight away. That proves the
+              // speakers work and unlocks audio for every answer after it,
+              // rather than leaving the first real answer to fail silently.
+              setVoice(true);
+              setError(null);
+              unlocked.current = true;
+              const u = new SpeechSynthesisUtterance("Voice on.");
+              u.rate = 1.04;
+              u.pitch = 0.92;
+              u.onerror = () =>
+                setError("The browser blocked audio — check the tab isn't muted.");
+              utterance.current = u;
+              window.speechSynthesis?.speak(u);
             }}
-            title={voice ? "Answers are spoken" : "Answers are silent"}
+            title={voice ? "Answers are spoken — tap to silence" : "Tap to turn the voice on"}
             className={cn(
               "focus-ring grid size-8 shrink-0 place-items-center rounded-lg border transition",
               voice
