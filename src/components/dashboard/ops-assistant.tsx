@@ -5,6 +5,7 @@ import { ArrowUp, Loader2, Mic, Square, Volume2, VolumeX } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { askOperations } from "@/app/actions";
+import { NeuralBrain } from "@/components/dashboard/neural-brain";
 
 /**
  * The operations assistant — ask the business a question and hear the answer.
@@ -89,11 +90,15 @@ export function OpsAssistant() {
    * reads later — the tap that started it is long gone. So the engine is
    * unlocked on the tap itself with an empty utterance, and stays unlocked.
    */
+  const [diag, setDiag] = React.useState<string | null>(null);
   const unlocked = React.useRef(false);
   const unlock = React.useCallback(() => {
     if (unlocked.current || typeof window === "undefined" || !window.speechSynthesis) return;
     try {
-      window.speechSynthesis.speak(new SpeechSynthesisUtterance(""));
+      // A space, not an empty string: Chrome drops empty utterances without
+      // unlocking anything. resume() clears the known stuck-paused state.
+      window.speechSynthesis.resume();
+      window.speechSynthesis.speak(new SpeechSynthesisUtterance(" "));
       unlocked.current = true;
     } catch {
       // Nothing to do — say() reports it properly if speech really is blocked.
@@ -136,6 +141,7 @@ export function OpsAssistant() {
 
       const synth = window.speechSynthesis;
       synth.cancel();
+      synth.resume();
 
       const u = new SpeechSynthesisUtterance(line);
       // Slightly quick and slightly low reads as composed rather than chirpy.
@@ -270,14 +276,22 @@ export function OpsAssistant() {
       <div className="relative z-10 flex flex-col">
         {/* ── Header ─────────────────────────────────────────────── */}
         <div className="flex items-center gap-3 border-b border-border/70 px-4 py-3">
-          <span
-            className={cn(
-              "grid size-9 shrink-0 place-items-center rounded-xl text-white",
-              (speaking || listening) && "vq-ai-core",
-            )}
-            style={{ background: "var(--grad-brand)" }}
-          >
-            {listening ? <Mic className="size-[17px]" /> : <Volume2 className="size-[17px]" />}
+          {/* The face. It idles, quickens while reading, and lights up while
+              speaking, so the movement reports state rather than looping. */}
+          <span className="relative grid size-14 shrink-0 place-items-center">
+            <span
+              aria-hidden
+              className="absolute inset-0 rounded-full blur-xl"
+              style={{
+                background: "radial-gradient(circle, var(--vq-blue) 0%, transparent 68%)",
+                opacity: speaking ? 0.75 : listening ? 0.55 : 0.3,
+                transition: "opacity 400ms ease",
+              }}
+            />
+            <NeuralBrain
+              state={speaking ? "speaking" : busy || listening ? "thinking" : "idle"}
+              className="relative size-14"
+            />
           </span>
           <div className="min-w-0 flex-1">
             <p className="flex items-center gap-2 text-[14px] font-semibold tracking-[-0.01em] text-foreground">
@@ -309,13 +323,39 @@ export function OpsAssistant() {
               setVoice(true);
               setError(null);
               unlocked.current = true;
+
+              const synth = window.speechSynthesis;
+              if (!synth) {
+                setDiag("No speech engine in this browser.");
+                return;
+              }
+
+              synth.cancel();
+              synth.resume();
               const u = new SpeechSynthesisUtterance("Voice on.");
               u.rate = 1.04;
               u.pitch = 0.92;
-              u.onerror = () =>
-                setError("The browser blocked audio — check the tab isn't muted.");
+              const pick = voices.find((v) =>
+                /Daniel|Google UK English Male|Microsoft Guy|Alex/i.test(v.name),
+              );
+              if (pick) u.voice = pick;
+
+              // Report what the browser actually did, rather than leaving a
+              // silent speaker to be interpreted as a broken feature.
+              u.onstart = () => setDiag(null);
+              u.onerror = (e) => setDiag(`Browser refused: ${e.error}.`);
               utterance.current = u;
-              window.speechSynthesis?.speak(u);
+              synth.speak(u);
+
+              window.setTimeout(() => {
+                if (!synth.speaking && !synth.pending) {
+                  setDiag(
+                    `No sound came out. Engine present, ${voices.length} voices loaded${
+                      pick ? `, using "${pick.name}"` : ", none matched so using the default"
+                    }. Check the tab isn't muted (right-click the tab) and the system output device.`,
+                  );
+                }
+              }, 1500);
             }}
             title={voice ? "Answers are spoken — tap to silence" : "Tap to turn the voice on"}
             className={cn(
@@ -386,6 +426,15 @@ export function OpsAssistant() {
           {error ? (
             <p className="rounded-xl border border-critical/40 bg-critical/[0.07] px-3 py-2 text-[12px] text-foreground">
               {error}
+            </p>
+          ) : null}
+
+          {/* What the speech engine reported, in its own words. Guessing at
+              this from here is how it stayed broken twice. */}
+          {diag ? (
+            <p className="rounded-xl border border-warning/40 bg-warning/[0.07] px-3 py-2 text-[12px] text-foreground">
+              <span className="font-semibold">Voice check: </span>
+              {diag}
             </p>
           ) : null}
         </div>
