@@ -25,7 +25,21 @@ const SESSION_COOKIE = "vq_session";
  * requires a session for the one operation that matters (minting an upload
  * token) and verifies the callback's signature for the other.
  */
-const PUBLIC_PREFIXES = ["/login", "/invite", "/api/blob", "/api/agreement", "/api/nda"];
+const PUBLIC_PREFIXES = [
+  "/login",
+  "/invite",
+  "/api/blob",
+  "/api/agreement",
+  "/api/nda",
+  // A carrier vetting the SMS campaign opens these in a clean browser with
+  // no account. Behind the login they are a sign-in page, which reads as a
+  // company with nothing to show and gets the campaign rejected.
+  "/privacy",
+  "/terms",
+  // Twilio POSTs opt-outs here and cannot carry a session. It authenticates
+  // instead by verifying Twilio’s signature over the body.
+  "/api/sms",
+];
 
 /**
  * What a subcontractor login is allowed to reach.

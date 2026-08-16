@@ -878,3 +878,53 @@
 .light .vq-ai-glow {
   opacity: 0.14 !important;
 }
+
+/* ── Public legal pages ───────────────────────────────────────────
+   Plain readable prose. These are read once, by a stranger vetting the
+   business, so legibility beats house style. */
+.legal-prose {
+  color: var(--foreground);
+  font-size: 14.5px;
+  line-height: 1.75;
+}
+.legal-prose h1 {
+  font-size: 26px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.35rem;
+}
+.legal-prose h2 {
+  font-size: 17px;
+  font-weight: 620;
+  letter-spacing: -0.01em;
+  margin-top: 2rem;
+  margin-bottom: 0.5rem;
+}
+.legal-prose h3 {
+  font-size: 14.5px;
+  font-weight: 620;
+  margin-top: 1.25rem;
+  margin-bottom: 0.35rem;
+}
+.legal-prose p,
+.legal-prose ul {
+  margin-bottom: 0.9rem;
+}
+.legal-prose ul {
+  padding-left: 1.15rem;
+  list-style: disc;
+}
+.legal-prose li {
+  margin-bottom: 0.4rem;
+}
+.legal-prose .lede {
+  color: var(--muted-foreground);
+  font-size: 12.5px;
+}
+.legal-prose strong {
+  font-weight: 620;
+}
+.legal-prose a {
+  color: var(--vq-blue-bright);
+  text-decoration: underline;
+}
