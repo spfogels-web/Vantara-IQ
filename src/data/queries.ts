@@ -1123,22 +1123,26 @@ export async function getProjects(): Promise<Project[]> {
     // every job read 0 ft at 0/0 pace on health 80 while Charles Hart had
     // 7,326 ft in the ground.
     const perDay = b.days > 0 ? Math.round(b.total / b.days) : 0;
-    const planned = b.total + r.remainingFt;
-    const pct = r.remainingFt > 0 ? Math.round((b.total / planned) * 100) : p.pctComplete;
+
+    // `remainingFt` holds the whole route, entered once on the project form.
+    // What is left is that less what the dailies have put in the ground, so
+    // nobody has to remember to count it down.
+    const planned = r.remainingFt;
+    const left = planned > 0 ? Math.max(0, planned - b.total) : 0;
+    const pct = planned > 0 ? Math.min(100, Math.round((b.total / planned) * 100)) : p.pctComplete;
 
     // Required pace only means something with footage left and a date to hit.
     const daysLeft = daysUntil(r.deadline);
     const required =
-      r.remainingFt > 0 && daysLeft !== null && daysLeft > 0
-        ? Math.ceil(r.remainingFt / daysLeft)
-        : r.requiredFtPerDay;
+      left > 0 && daysLeft !== null && daysLeft > 0 ? Math.ceil(left / daysLeft) : 0;
 
     return {
       ...p,
+      remainingFt: planned > 0 ? left : p.remainingFt,
       pctComplete: pct,
       actualFtPerDay: perDay,
       requiredFtPerDay: required,
-      health: healthFrom({ perDay, required, daysLeft, remainingFt: r.remainingFt }) ?? p.health,
+      health: healthFrom({ perDay, required, daysLeft, remainingFt: left }) ?? p.health,
     };
   });
 }

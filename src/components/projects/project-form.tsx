@@ -114,16 +114,34 @@ export function ProjectForm({
       </Panel>
 
       <Panel>
-        <PanelHeader title="Production & schedule" description="Drives the health ring, pace bar and forecast." />
+        <PanelHeader
+          title="Production & schedule"
+          description="Enter the route length once. Pace, percent complete and health are worked out from the dailies against it."
+        />
         <PanelBody className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <Field label="Remaining ft">
-            <input type="number" min={0} value={f.remainingFt || ""} onChange={(e) => set("remainingFt", Number(e.target.value))} className={cn(inputClass, "num")} />
+          {/* The one number a person has to supply. Everything else on this
+              panel used to be typed too, which meant it was typed once and
+              then quietly went stale — every project sat on health 80 at 0/0
+              pace while the dailies knew better. */}
+          <Field label="Total route footage">
+            <input
+              type="number"
+              min={0}
+              value={f.remainingFt || ""}
+              onChange={(e) => set("remainingFt", Number(e.target.value))}
+              placeholder="e.g. 12000"
+              className={cn(inputClass, "num")}
+            />
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Plow and bore combined, start to finish. Footage placed is
+              subtracted from this as dailies are filed.
+            </p>
           </Field>
           <Field label="Required ft/day">
-            <input type="number" min={0} value={f.requiredFtPerDay || ""} onChange={(e) => set("requiredFtPerDay", Number(e.target.value))} className={cn(inputClass, "num")} />
+            <input type="number" min={0} value={f.requiredFtPerDay || ""} onChange={(e) => set("requiredFtPerDay", Number(e.target.value))} className={cn(inputClass, "num")} disabled placeholder="from the deadline" />
           </Field>
           <Field label="Actual ft/day">
-            <input type="number" min={0} value={f.actualFtPerDay || ""} onChange={(e) => set("actualFtPerDay", Number(e.target.value))} className={cn(inputClass, "num")} />
+            <input type="number" min={0} value={f.actualFtPerDay || ""} onChange={(e) => set("actualFtPerDay", Number(e.target.value))} className={cn(inputClass, "num")} disabled placeholder="from the dailies" />
           </Field>
           <Field label="% complete">
             <input type="number" min={0} max={100} value={f.pctComplete || ""} onChange={(e) => set("pctComplete", Number(e.target.value))} className={cn(inputClass, "num")} />
