@@ -757,3 +757,112 @@
     print-color-adjust: exact;
   }
 }
+
+/* ── The operations assistant ──────────────────────────────────────
+   A panel that reads as live rather than static. Everything here is
+   decorative and sits behind pointer-events:none layers, so none of it can
+   swallow a click on the input. All of it stops under
+   prefers-reduced-motion — a moving border is a nice touch for one person and
+   a genuine problem for another. */
+
+/* A hairline of light travelling the panel's edge. */
+@keyframes vq-orbit {
+  to {
+    --vq-angle: 360deg;
+  }
+}
+
+@property --vq-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.vq-ai-frame {
+  position: relative;
+  isolation: isolate;
+}
+
+.vq-ai-frame::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: conic-gradient(
+    from var(--vq-angle),
+    transparent 0%,
+    color-mix(in srgb, var(--vq-blue-bright) 85%, transparent) 12%,
+    transparent 26%,
+    transparent 100%
+  );
+  /* Punch out the middle so only the rim lights up. */
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation: vq-orbit 6s linear infinite;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Slow drifting glow under the content. */
+@keyframes vq-breathe {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: translate3d(0, -6px, 0) scale(1.06);
+  }
+}
+
+.vq-ai-glow {
+  animation: vq-breathe 7s ease-in-out infinite;
+}
+
+/* The idle pulse on the core, and the listening state. */
+@keyframes vq-core {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--vq-blue-bright) 45%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 10px transparent;
+  }
+}
+
+.vq-ai-core {
+  animation: vq-core 2.8s ease-out infinite;
+}
+
+/* Equaliser bars while it is thinking. */
+@keyframes vq-bar {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+.vq-ai-bar {
+  transform-origin: center;
+  animation: vq-bar 1s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vq-ai-frame::before,
+  .vq-ai-glow,
+  .vq-ai-core,
+  .vq-ai-bar {
+    animation: none;
+  }
+}

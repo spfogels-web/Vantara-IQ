@@ -126,17 +126,21 @@ export default async function OperationsCenterPage() {
           </Suspense>
         </div>
 
+        {/* Directly under the numbers, because it is the thing that explains
+            them. One account only — it sees every rate, every crew’s pay and
+            the whole money position at once. */}
+        <div className="xl:col-span-12">
+          <Suspense fallback={null}>
+            <AssistantSection />
+          </Suspense>
+        </div>
+
         <div className="xl:col-span-8">
           <Suspense fallback={<ProjectsTableSkeleton />}>
             <ProjectsSection />
           </Suspense>
         </div>
-        <div className="space-y-4 xl:col-span-4">
-          {/* One account only — the assistant sees every rate, every crew’s pay
-              and the whole money position in one place. */}
-          <Suspense fallback={null}>
-            <AssistantSection />
-          </Suspense>
+        <div className="xl:col-span-4">
           <Suspense fallback={<AiBriefSkeleton />}>
             <BriefSection />
           </Suspense>
