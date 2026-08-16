@@ -143,6 +143,7 @@ const PROJECT_LIST_SELECT = {
   forecast: true,
   forecastTone: true,
   health: true,
+  deadline: true,
   pctComplete: true,
   crew: true,
   updatedAt: true,
@@ -1110,7 +1111,111 @@ export async function getProjects(): Promise<Project[]> {
     select: PROJECT_LIST_SELECT,
   });
   const maps = await mapSummaries(rows.map((r) => r.id));
-  return rows.map((r) => toProject({ ...r, ...maps.get(r.id) }));
+  const built = await placedFootage(rows.map((r) => r.id));
+
+  return rows.map((r) => {
+    const p = toProject({ ...r, ...maps.get(r.id) });
+    const b = built.get(r.id);
+    if (!b || b.total === 0) return p;
+
+    // Everything below comes off filed dailies. The stored columns it replaces
+    // are written once when a project is created and never again, which is why
+    // every job read 0 ft at 0/0 pace on health 80 while Charles Hart had
+    // 7,326 ft in the ground.
+    const perDay = b.days > 0 ? Math.round(b.total / b.days) : 0;
+    const planned = b.total + r.remainingFt;
+    const pct = r.remainingFt > 0 ? Math.round((b.total / planned) * 100) : p.pctComplete;
+
+    // Required pace only means something with footage left and a date to hit.
+    const daysLeft = daysUntil(r.deadline);
+    const required =
+      r.remainingFt > 0 && daysLeft !== null && daysLeft > 0
+        ? Math.ceil(r.remainingFt / daysLeft)
+        : r.requiredFtPerDay;
+
+    return {
+      ...p,
+      pctComplete: pct,
+      actualFtPerDay: perDay,
+      requiredFtPerDay: required,
+      health: healthFrom({ perDay, required, daysLeft, remainingFt: r.remainingFt }) ?? p.health,
+    };
+  });
+}
+
+/**
+ * Plow and bore footage placed on each project, from filed dailies.
+ *
+ * Linear-footage codes only. A handhole, a pedestal and a splice are all real
+ * work and all billed, but none of them advance the route — a day of nothing
+ * but handholes moves a job zero feet down the road, and progress has to mean
+ * distance or it stops meaning anything.
+ */
+async function placedFootage(
+  projectIds: string[],
+): Promise<Map<string, { total: number; days: number }>> {
+  const out = new Map<string, { total: number; days: number }>();
+  if (projectIds.length === 0) return out;
+
+  const dailies = await prisma.daily.findMany({
+    where: { projectId: { in: projectIds } },
+    select: { projectId: true, workDate: true, lineItems: true },
+  });
+
+  const days = new Map<string, Set<string>>();
+  for (const d of dailies) {
+    if (!d.projectId) continue;
+    const items = (Array.isArray(d.lineItems) ? d.lineItems : []) as {
+      code?: unknown;
+      quantity?: unknown;
+    }[];
+    const ft = items
+      .filter((l) => typeof l?.code === "string" && isLinearFootageCode(l.code as string))
+      .reduce((s, l) => s + (typeof l.quantity === "number" ? l.quantity : 0), 0);
+
+    const cur = out.get(d.projectId) ?? { total: 0, days: 0 };
+    cur.total += ft;
+    out.set(d.projectId, cur);
+
+    if (!days.has(d.projectId)) days.set(d.projectId, new Set());
+    days.get(d.projectId)!.add(String(d.workDate).slice(0, 10));
+  }
+
+  for (const [id, set] of days) {
+    const cur = out.get(id);
+    if (cur) cur.days = set.size;
+  }
+  return out;
+}
+
+/** Whole days from today to a YYYY-MM-DD deadline; null when there isn't one. */
+function daysUntil(deadline: string): number | null {
+  const t = Date.parse((deadline ?? "").trim());
+  if (Number.isNaN(t)) return null;
+  return Math.ceil((t - Date.now()) / 86_400_000);
+}
+
+/**
+ * A health score that means something: is the crew keeping up with the pace
+ * the remaining footage and the deadline demand?
+ *
+ * Returns null when there is nothing to judge — no deadline, or no footage
+ * left to place. The caller keeps the stored value in that case rather than
+ * this inventing an 80, which is what every project was showing.
+ */
+function healthFrom(x: {
+  perDay: number;
+  required: number;
+  daysLeft: number | null;
+  remainingFt: number;
+}): number | null {
+  if (x.remainingFt <= 0 || x.required <= 0) return null;
+  if (x.daysLeft !== null && x.daysLeft < 0) return 25; // deadline already gone
+
+  const ratio = x.perDay / x.required;
+  // 100 at double the required pace, 50 at exactly on pace, worse below.
+  const score = Math.round(Math.max(5, Math.min(100, 50 * ratio + 25)));
+  return score;
 }
 
 /** Sorted worst-first — the dashboard table is an attention queue. */
