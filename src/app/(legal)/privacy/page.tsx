@@ -119,7 +119,7 @@ export default function PrivacyPage() {
         <br />
         Phone: (864) 365-1521
         <br />
-        Email: office@fortitude-infra.com
+        Email: sean.fogelson@fortitude-infra.com
       </p>
     </>
   );

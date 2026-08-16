@@ -89,7 +89,7 @@ export async function POST(request: Request) {
 
   if (word === "HELP" || word === "INFO") {
     return new NextResponse(
-      '<?xml version="1.0" encoding="UTF-8"?><Response><Message>Fortitude Infrastructure job alerts. Call (864) 365-1521 or email office@fortitude-infra.com. Reply STOP to opt out.</Message></Response>',
+      '<?xml version="1.0" encoding="UTF-8"?><Response><Message>Fortitude Infrastructure job alerts. Call (864) 365-1521 or email sean.fogelson@fortitude-infra.com. Reply STOP to opt out.</Message></Response>',
       { headers: { "Content-Type": "text/xml" } },
     );
   }
