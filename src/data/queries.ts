@@ -1208,11 +1208,13 @@ async function placedFootage(
  * match would have quietly added twelve thousand feet of work Fortitude is not
  * doing to two of the five jobs.
  */
-const ROUTE_FAMILIES = [/^BFO12$/i, /^BFO24$/i, /^BFO48$/i, /^BFO144$/i, /^BFOV12\.7/i, /^BM61/i];
-
 function isRouteMaterial(code: string): boolean {
-  const c = code.replace(/\s+/g, "");
-  return ROUTE_FAMILIES.some((re) => re.test(c));
+  // productionMethod already knows plow from bore, and it knows the real
+  // shapes — the codes on a list are "BFOV(12.7)(2W)12IN DEPTH", not
+  // "BFOV12.7". A regex written against the short form matched none of them,
+  // which is how every route total came out missing its entire plowed length.
+  const m = productionMethod(code);
+  return m === "plow" || m === "bore";
 }
 
 /**
