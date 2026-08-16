@@ -252,7 +252,19 @@ export interface Customer {
  * banking, equipment and a running performance scorecard.
  * ------------------------------------------------------------------ */
 
-export type ComplianceStatus = "valid" | "expiring" | "expired" | "missing";
+/**
+ * "waived" is a document the office has seen but that is not in the system
+ * yet - a COI read off an email while the broker sends the PDF. It is its own
+ * status rather than a "valid", because a crew working on a promise is a
+ * different fact from a crew working on a filed certificate, and the
+ * difference is the one that matters if something happens on site.
+ */
+export type ComplianceStatus =
+  | "valid"
+  | "expiring"
+  | "expired"
+  | "missing"
+  | "waived";
 
 export interface ComplianceDoc {
   label: string;
@@ -260,6 +272,17 @@ export interface ComplianceDoc {
   /** Human date or "—" when not on file. */
   expires: string;
   daysOut: number | null;
+  /**
+   * A short-dated pass, granted by a named person, on the promise that the
+   * document is coming. It carries its own expiry so it lapses on its own -
+   * a waiver nobody has to remember to revoke is just a hole in the file.
+   */
+  waiver?: {
+    until: string;
+    by: string;
+    reason: string;
+    grantedOn: string;
+  };
 }
 
 export interface SubScorecard {

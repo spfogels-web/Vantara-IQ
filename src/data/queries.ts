@@ -261,11 +261,31 @@ function complianceFrom(
   filedSections: string[],
 ): Subcontractor["compliance"] {
   const filed = new Set(filedSections);
+  const today = new Date().toISOString().slice(0, 10);
+
   return stored.map((item) => {
     if (item.status === "valid" || item.status === "expiring") return item;
+
     const source = COMPLIANCE_SOURCE[labelKey(item.label)];
-    if (!source || !filed.has(source)) return item;
-    return { ...item, status: "valid" as const, expires: item.expires || "On file" };
+    if (source && filed.has(source)) {
+      // The document arrived. A waiver that has been honoured is spent, so it
+      // is dropped rather than left on the record looking still-granted.
+      const { waiver: _spent, ...rest } = item;
+      return { ...rest, status: "valid" as const, expires: item.expires || "On file" };
+    }
+
+    // Nothing on file, but the office has vouched for it and said until when.
+    // Checked against today every read, so it lapses without anyone revoking
+    // it — the whole point of putting a date on it.
+    if (item.waiver && item.waiver.until >= today) {
+      return {
+        ...item,
+        status: "waived" as const,
+        expires: `Waived to ${item.waiver.until}`,
+      };
+    }
+
+    return item;
   });
 }
 
@@ -600,7 +620,9 @@ function lapsedDocs(
     (stored as Subcontractor["compliance"]) ?? [],
     documents.map((d) => d.section),
   )
-    .filter((c) => c.status !== "valid" && c.status !== "expiring")
+    .filter(
+      (c) => c.status !== "valid" && c.status !== "expiring" && c.status !== "waived",
+    )
     .map((c) => c.label);
 }
 

@@ -5595,3 +5595,116 @@ export async function importDailyFromFile(input: {
     problems: read.problems,
   };
 }
+
+/**
+ * Vouch for a compliance document that has not arrived yet.
+ *
+ * A crew is on site and the certificate is in an email or with the broker. The
+ * honest way to record that is not to mark the document received - it isn't -
+ * but to say who vouched for it and until when, and let it lapse on its own.
+ *
+ * Short-dated on purpose. A waiver nobody has to remember to revoke is just a
+ * hole in the file with a nicer name, so this caps at two weeks and the
+ * document goes back to missing the moment the date passes.
+ */
+export async function waiveComplianceDoc(input: {
+  subcontractorId: string;
+  /** The compliance row's label, e.g. "General liability COI". */
+  label: string;
+  /** YYYY-MM-DD. */
+  until: string;
+  reason: string;
+}) {
+  const actor = await requireStaff();
+
+  const sub = await prisma.subcontractor.findUnique({
+    where: { id: input.subcontractorId },
+    select: { id: true, company: true, compliance: true },
+  });
+  if (!sub) return { ok: false as const, error: "Crew not found." };
+
+  const today = new Date().toISOString().slice(0, 10);
+  const until = input.until.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(until) || until < today) {
+    return { ok: false as const, error: "Give a date on or after today for the waiver to run to." };
+  }
+
+  const cap = new Date();
+  cap.setDate(cap.getDate() + 14);
+  if (until > cap.toISOString().slice(0, 10)) {
+    return {
+      ok: false as const,
+      error: `Two weeks is the longest a document can be waived (to ${cap.toISOString().slice(0, 10)}). If it needs longer than that, it isn't coming.`,
+    };
+  }
+
+  if (!input.reason.trim()) {
+    return { ok: false as const, error: "Say why — this is the record of who let them work without it." };
+  }
+
+  const rows = (Array.isArray(sub.compliance) ? sub.compliance : []) as {
+    label?: string;
+  }[];
+  const target = rows.find(
+    (r) => (r.label ?? "").trim().toLowerCase() === input.label.trim().toLowerCase(),
+  );
+  if (!target) return { ok: false as const, error: `"${input.label}" isn't a document on this crew's list.` };
+
+  const updated = rows.map((r) =>
+    r === target
+      ? {
+          ...r,
+          waiver: {
+            until,
+            by: actor.name || actor.email || "Administrator",
+            reason: input.reason.trim(),
+            grantedOn: today,
+          },
+        }
+      : r,
+  );
+
+  await prisma.subcontractor.update({
+    where: { id: sub.id },
+    data: { compliance: updated as Prisma.InputJsonValue },
+  });
+
+  await notifyStaff({
+    title: `${input.label} waived for ${sub.company}`,
+    detail: `${actor.name || "An administrator"} vouched for it until ${until}. ${input.reason.trim()}`,
+    category: "compliance",
+    tone: "warning",
+  });
+
+  revalidatePath("/subcontractors");
+  revalidatePath("/");
+  return { ok: true as const, until };
+}
+
+/** Take a waiver back before it lapses. */
+export async function clearComplianceWaiver(subcontractorId: string, label: string) {
+  await requireStaff();
+  const sub = await prisma.subcontractor.findUnique({
+    where: { id: subcontractorId },
+    select: { id: true, compliance: true },
+  });
+  if (!sub) return { ok: false as const, error: "Crew not found." };
+
+  const rows = (Array.isArray(sub.compliance) ? sub.compliance : []) as {
+    label?: string;
+    waiver?: unknown;
+  }[];
+  const updated = rows.map((r) => {
+    if ((r.label ?? "").trim().toLowerCase() !== label.trim().toLowerCase()) return r;
+    const { waiver: _dropped, ...rest } = r;
+    return rest;
+  });
+
+  await prisma.subcontractor.update({
+    where: { id: sub.id },
+    data: { compliance: updated as Prisma.InputJsonValue },
+  });
+  revalidatePath("/subcontractors");
+  revalidatePath("/");
+  return { ok: true as const };
+}

@@ -47,6 +47,9 @@ const complianceTone: Record<ComplianceStatus, "success" | "warning" | "critical
   expiring: "warning",
   expired: "critical",
   missing: "neutral",
+  // Amber, not green. A waiver is a crew working on a promise, and it should
+  // not sit on the page looking like a filed certificate.
+  waived: "warning",
 };
 
 const complianceLabel: Record<ComplianceStatus, string> = {
@@ -54,6 +57,7 @@ const complianceLabel: Record<ComplianceStatus, string> = {
   expiring: "Expiring",
   expired: "Expired",
   missing: "Missing",
+  waived: "Waived",
 };
 
 /**
