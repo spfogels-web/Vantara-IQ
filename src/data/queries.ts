@@ -1112,6 +1112,7 @@ export async function getProjects(): Promise<Project[]> {
   });
   const maps = await mapSummaries(rows.map((r) => r.id));
   const built = await placedFootage(rows.map((r) => r.id));
+  const routes = await plannedRoute(rows.map((r) => r.id));
 
   return rows.map((r) => {
     const p = toProject({ ...r, ...maps.get(r.id) });
@@ -1127,7 +1128,10 @@ export async function getProjects(): Promise<Project[]> {
     // `remainingFt` holds the whole route, entered once on the project form.
     // What is left is that less what the dailies have put in the ground, so
     // nobody has to remember to count it down.
-    const planned = r.remainingFt;
+    // The route length comes off the material list, which already carries the
+    // plan for the job. The form field is only the fallback for a job whose
+    // list has not been loaded yet.
+    const planned = routes.get(r.id) || r.remainingFt;
     const left = planned > 0 ? Math.max(0, planned - b.total) : 0;
     const pct = planned > 0 ? Math.min(100, Math.round((b.total / planned) * 100)) : p.pctComplete;
 
@@ -1188,6 +1192,48 @@ async function placedFootage(
   for (const [id, set] of days) {
     const cur = out.get(id);
     if (cur) cur.days = set.size;
+  }
+  return out;
+}
+
+/**
+ * The route codes on a material list — the ones that measure distance.
+ *
+ * Cable placement and bore. A handhole or a splice is on the same list and is
+ * real billable work, but neither advances the route, so neither belongs in a
+ * total that answers "how long is this job".
+ *
+ * Matched on the exact families, not on a BFO prefix: BFO12RI and BFO24RI are
+ * ribbon-in-duct and arrive on these lists flagged out of scope, and a prefix
+ * match would have quietly added twelve thousand feet of work Fortitude is not
+ * doing to two of the five jobs.
+ */
+const ROUTE_FAMILIES = [/^BFO12$/i, /^BFO24$/i, /^BFO48$/i, /^BFO144$/i, /^BFOV12\.7/i, /^BM61/i];
+
+function isRouteMaterial(code: string): boolean {
+  const c = code.replace(/\s+/g, "");
+  return ROUTE_FAMILIES.some((re) => re.test(c));
+}
+
+/**
+ * Total route footage per project, off the material list.
+ *
+ * The list is the plan for the job, so the length of the route is already in
+ * it and nobody should be typing it a second time. Out-of-scope lines are
+ * skipped — they are on the list for reference, not to be built.
+ */
+async function plannedRoute(projectIds: string[]): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (projectIds.length === 0) return out;
+
+  const rows = await prisma.projectMaterial.findMany({
+    where: { projectId: { in: projectIds }, inScope: true },
+    select: { projectId: true, code: true, planned: true },
+  });
+
+  for (const m of rows) {
+    if (!isRouteMaterial(m.code)) continue;
+    out.set(m.projectId, (out.get(m.projectId) ?? 0) + m.planned);
   }
   return out;
 }
