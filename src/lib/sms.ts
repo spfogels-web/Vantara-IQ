@@ -1,0 +1,156 @@
+import "server-only";
+
+import { prisma } from "@/lib/prisma";
+
+/**
+ * Text messages to crews.
+ *
+ * A foreman is in a truck. He is not going to open a dashboard to find out he
+ * has been moved to a different job, and a locate that expires before anyone
+ * reads the email is a hole in the ground next to a live gas main. Text is the
+ * only channel that reaches these people, which is exactly why it is also the
+ * one with rules attached.
+ *
+ * Three of those rules are enforced here rather than left to whoever writes
+ * the next caller:
+ *
+ *   - Nothing is sent to a crew who has not consented in writing.
+ *   - Nothing is sent to a crew who has replied STOP, ever again, unless they
+ *     themselves reply START.
+ *   - Every message says how to stop receiving them.
+ *
+ * A send that is refused is not an error. It returns a reason and the caller
+ * carries on — a missing phone number must never be able to fail the thing
+ * that was being reported.
+ */
+
+export function smsReady(): boolean {
+  return Boolean(
+    process.env.TWILIO_ACCOUNT_SID &&
+      process.env.TWILIO_AUTH_TOKEN &&
+      process.env.TWILIO_FROM_NUMBER,
+  );
+}
+
+/**
+ * Put a number in the shape Twilio needs.
+ *
+ * The three on file are written three different ways — "678-682-5902",
+ * "8706374292", "843-925-6970" — because people type phone numbers however
+ * they like. Anything that is not a plausible US number comes back null and is
+ * not sent to; guessing at a malformed number risks texting a stranger.
+ */
+export function toE164(raw: string | null | undefined): string | null {
+  const digits = (raw ?? "").replace(/\D/g, "");
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+  // Already E.164 with a country code we are not going to second-guess.
+  if ((raw ?? "").trim().startsWith("+") && digits.length >= 11) return `+${digits}`;
+  return null;
+}
+
+export type SmsResult =
+  | { sent: true; sid: string }
+  | { sent: false; reason: string };
+
+/** The line carriers look for. Appended once, never twice. */
+const OPT_OUT = "Reply STOP to opt out.";
+
+function withOptOut(body: string): string {
+  return /reply stop/i.test(body) ? body : `${body} ${OPT_OUT}`;
+}
+
+/**
+ * Send one message. Twilio's REST API over fetch rather than their SDK — one
+ * form POST is not worth a dependency, and this keeps the bundle honest.
+ */
+async function post(to: string, body: string): Promise<SmsResult> {
+  const sid = process.env.TWILIO_ACCOUNT_SID!;
+  const token = process.env.TWILIO_AUTH_TOKEN!;
+  const from = process.env.TWILIO_FROM_NUMBER!;
+
+  const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString("base64")}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({ To: to, From: from, Body: withOptOut(body) }),
+  });
+
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    // Twilio's own message is far more useful than "send failed" — 21610 is a
+    // number that opted out, 21408 is a region not enabled, and so on.
+    return { sent: false, reason: `Twilio ${res.status}: ${detail.slice(0, 300)}` };
+  }
+
+  const json = (await res.json()) as { sid?: string };
+  return { sent: true, sid: json.sid ?? "" };
+}
+
+/**
+ * Text a subcontractor, if they may be texted.
+ *
+ * Never throws. The caller is usually reporting something that already
+ * happened — a daily approved, a crew assigned — and that must stand whether
+ * or not a text got out.
+ */
+export async function textCrew(
+  subcontractorId: string,
+  body: string,
+): Promise<SmsResult> {
+  try {
+    if (!smsReady()) return { sent: false, reason: "Twilio isn't configured in this environment." };
+
+    const sub = await prisma.subcontractor.findUnique({
+      where: { id: subcontractorId },
+      select: { company: true, phone: true, smsConsentAt: true, smsOptOutAt: true },
+    });
+    if (!sub) return { sent: false, reason: "No such crew." };
+
+    if (sub.smsOptOutAt) return { sent: false, reason: `${sub.company.trim()} replied STOP.` };
+    if (!sub.smsConsentAt) {
+      return { sent: false, reason: `${sub.company.trim()} hasn't agreed to texts yet.` };
+    }
+
+    const to = toE164(sub.phone);
+    if (!to) return { sent: false, reason: `${sub.company.trim()} has no usable phone number.` };
+
+    return await post(to, body);
+  } catch (e) {
+    return { sent: false, reason: e instanceof Error ? e.message : "Send failed." };
+  }
+}
+
+/**
+ * Record a STOP or a START.
+ *
+ * Matched on the phone number rather than an id, because the person replying
+ * is a handset, not a session. Every crew whose number normalises to the same
+ * E.164 is updated — the same yard phone can appear on two records, and
+ * honouring STOP on only one of them is the kind of thing that gets a campaign
+ * shut down.
+ */
+export async function applyOptOut(from: string, keyword: "STOP" | "START"): Promise<number> {
+  const e164 = toE164(from);
+  if (!e164) return 0;
+
+  const subs = await prisma.subcontractor.findMany({
+    select: { id: true, phone: true },
+  });
+  const hit = subs.filter((s) => toE164(s.phone) === e164).map((s) => s.id);
+  if (hit.length === 0) return 0;
+
+  await prisma.subcontractor.updateMany({
+    where: { id: { in: hit } },
+    data:
+      keyword === "STOP"
+        ? { smsOptOutAt: new Date() }
+        : // START clears the opt-out. Consent is not re-granted here: someone
+          // who never consented cannot opt back into something they never
+          // agreed to in the first place.
+          { smsOptOutAt: null },
+  });
+  return hit.length;
+}

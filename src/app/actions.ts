@@ -2197,6 +2197,7 @@ export type VendorPacketInput = {
   mobilePhone: string;
   emergencyContactName: string;
   emergencyContactPhone: string;
+  smsConsent?: boolean;
   billingContactName: string;
   billingContactTitle: string;
   billingEmail: string;
@@ -2236,6 +2237,12 @@ function normalizeEin(raw: string): string {
 export async function saveVendorPacket(subcontractorId: string, input: VendorPacketInput) {
   await assertOwnSubcontractor(subcontractorId);
 
+  const prior = await prisma.subcontractor.findUnique({
+    where: { id: subcontractorId },
+    select: { smsConsentAt: true },
+  });
+  const priorConsentAt = prior?.smsConsentAt ?? null;
+
   if (!clean(input.legalName)) {
     return { ok: false as const, error: "Legal business name is required — it has to match your W-9." };
   }
@@ -2266,6 +2273,11 @@ export async function saveVendorPacket(subcontractorId: string, input: VendorPac
       mobilePhone: clean(input.mobilePhone),
       emergencyContactName: clean(input.emergencyContactName),
       emergencyContactPhone: clean(input.emergencyContactPhone),
+      // The date consent was first given, kept. Restamping it on every save
+      // would quietly rewrite the proof to today — and the one question a
+      // carrier asks in a complaint is when they agreed, not whether a box is
+      // ticked now. Unticking clears it, because that is a withdrawal.
+      smsConsentAt: input.smsConsent ? (priorConsentAt ?? new Date()) : null,
       billingContactName: clean(input.billingContactName),
       billingContactTitle: clean(input.billingContactTitle),
       billingEmail: clean(input.billingEmail),

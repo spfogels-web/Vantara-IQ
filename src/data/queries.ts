@@ -2731,6 +2731,8 @@ export interface VendorPacketView {
   stateRegion: string; postalCode: string;
   phone: string; mobilePhone: string;
   emergencyContactName: string; emergencyContactPhone: string;
+  /** Whether this crew has agreed to operational texts. */
+  smsConsent: boolean;
   signatoryName: string; signatoryTitle: string;
   apContactName: string; apEmail: string; apPhone: string;
   billingContactName: string; billingContactTitle: string; billingEmail: string;
@@ -2763,6 +2765,7 @@ export async function getVendorPacket(subcontractorId: string): Promise<VendorPa
     stateRegion: s.stateRegion, postalCode: s.postalCode,
     phone: s.phone, mobilePhone: s.mobilePhone,
     emergencyContactName: s.emergencyContactName, emergencyContactPhone: s.emergencyContactPhone,
+    smsConsent: Boolean(s.smsConsentAt),
     signatoryName: s.signatoryName, signatoryTitle: s.signatoryTitle,
     apContactName: s.apContactName, apEmail: s.apEmail, apPhone: s.apPhone,
     billingContactName: s.billingContactName, billingContactTitle: s.billingContactTitle,

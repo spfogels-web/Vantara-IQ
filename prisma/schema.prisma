@@ -306,6 +306,13 @@ model Subcontractor {
   filedSheets    DailySheet[]
   payStatements  SubInvoice[]
   tasks          Task[]            @relation("TaskCrew")
+  /// When this crew agreed, in writing, to receive operational texts. A date
+  /// rather than a flag: carriers require proof of consent, and "true" with
+  /// no date proves nothing about when or under what wording.
+  smsConsentAt   DateTime?
+  /// Set the moment they reply STOP. Kept forever rather than cleared, so a
+  /// re-onboarding can never quietly resubscribe someone who opted out.
+  smsOptOutAt    DateTime?
   compliance     Json              @default("[]")
   complianceTone String            @default("neutral")
   scorecard      Json              @default("{}")

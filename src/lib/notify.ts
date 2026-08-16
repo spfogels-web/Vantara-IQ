@@ -1,6 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
+import { textCrew } from "@/lib/sms";
 
 /**
  * Recording that something happened, for whoever needs to know.
@@ -58,6 +59,13 @@ export async function notifyCrew(
     category?: Category;
     tone?: Tone;
     actor?: string;
+    /**
+     * Also text it. Off by default — a crew who gets a text for every document
+     * upload stops reading them, and then the one that mattered is the one
+     * they scrolled past. Reserve it for what a person has to act on: work
+     * assigned, a daily returned, a schedule moved.
+     */
+    sms?: boolean;
   },
 ): Promise<void> {
   if (!subcontractorId) return;
@@ -75,4 +83,13 @@ export async function notifyCrew(
       },
     })
     .catch(() => undefined);
+
+  // Best-effort, exactly like the notification above it. textCrew checks
+  // consent and opt-out itself and never throws, so a crew with no phone or no
+  // consent simply does not get a text — it cannot fail the thing being
+  // reported.
+  if (input.sms) {
+    const line = input.detail ? `${input.title} — ${input.detail}` : input.title;
+    await textCrew(subcontractorId, `Fortitude: ${line}`.slice(0, 320)).catch(() => undefined);
+  }
 }

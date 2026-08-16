@@ -173,6 +173,28 @@ export function VendorPacketForm({
         <Field label="Mobile phone" value={f.mobilePhone} onChange={(v) => set("mobilePhone", v)} />
         <Field label="Emergency contact" value={f.emergencyContactName} onChange={(v) => set("emergencyContactName", v)} />
         <Field label="Emergency phone" value={f.emergencyContactPhone} onChange={(v) => set("emergencyContactPhone", v)} />
+
+        {/* The written consent carriers require before a business may text
+            anyone. It has to be a deliberate tick with the wording visible —
+            a pre-ticked box or consent buried in terms is not consent, and
+            the campaign registration says in as many words that this is how
+            it is collected. */}
+        <label className="flex items-start gap-2.5 rounded-xl border border-border bg-foreground/[0.02] p-3 sm:col-span-2">
+          <input
+            type="checkbox"
+            checked={f.smsConsent}
+            onChange={(e) => set("smsConsent", e.target.checked)}
+            className="mt-0.5 size-4 shrink-0 accent-[var(--vq-blue)]"
+          />
+          <span className="text-[12.5px] leading-relaxed text-muted-foreground">
+            <span className="font-medium text-foreground">Text me job alerts.</span> I agree to
+            receive operational text messages from Fortitude Infrastructure LLC at the office
+            phone number above — work assignments, priorities and due dates, schedule changes,
+            and daily sheet status. Message frequency varies with job activity. Message and data
+            rates may apply. Reply STOP at any time to stop receiving them, or HELP for help.
+            This is not marketing and consent is not a condition of being awarded work.
+          </span>
+        </label>
       </Section>
 
       <Section title="Who signs" hint="Authorised to bind the company to a contract">
