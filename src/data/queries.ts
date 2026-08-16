@@ -2729,6 +2729,8 @@ export interface VendorPacketView {
   stateOfIncorporation: string; ein: string; website: string;
   addressLine1: string; addressLine2: string; city: string;
   stateRegion: string; postalCode: string;
+  /** Who to ring. Captured first so an abandoned packet still has a person. */
+  lead: string; email: string;
   phone: string; mobilePhone: string;
   emergencyContactName: string; emergencyContactPhone: string;
   /** Whether this crew has agreed to operational texts. */
@@ -2766,6 +2768,7 @@ export async function getVendorPacket(subcontractorId: string): Promise<VendorPa
     phone: s.phone, mobilePhone: s.mobilePhone,
     emergencyContactName: s.emergencyContactName, emergencyContactPhone: s.emergencyContactPhone,
     smsConsent: Boolean(s.smsConsentAt),
+    lead: s.lead, email: s.email,
     signatoryName: s.signatoryName, signatoryTitle: s.signatoryTitle,
     apContactName: s.apContactName, apEmail: s.apEmail, apPhone: s.apPhone,
     billingContactName: s.billingContactName, billingContactTitle: s.billingContactTitle,

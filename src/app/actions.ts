@@ -5778,3 +5778,41 @@ export async function askOperations(history: { role: "user" | "assistant"; conte
     };
   }
 }
+
+/**
+ * Save just who this is — name, phone, email — the moment it is typed.
+ *
+ * The rest of the vendor packet saves in one go, which is right for a banking
+ * block but wrong for the first three fields: a crew who starts the form and
+ * gives up at the EIN used to leave nothing behind at all, and nobody could
+ * ring them to ask what stopped them. These three write on their own, so an
+ * abandoned packet still says who abandoned it.
+ *
+ * Consent rides along because it is about the phone number beside it, and
+ * because a crew who ticks it and then closes the tab has still agreed.
+ */
+export async function saveCrewContact(
+  subcontractorId: string,
+  input: { lead?: string; email?: string; phone?: string; smsConsent?: boolean },
+) {
+  await assertOwnSubcontractor(subcontractorId);
+
+  const prior = await prisma.subcontractor.findUnique({
+    where: { id: subcontractorId },
+    select: { smsConsentAt: true },
+  });
+
+  const data: Prisma.SubcontractorUpdateInput = {};
+  if (input.lead !== undefined) data.lead = clean(input.lead);
+  if (input.email !== undefined) data.email = clean(input.email);
+  if (input.phone !== undefined) data.phone = clean(input.phone);
+  if (input.smsConsent !== undefined) {
+    data.smsConsentAt = input.smsConsent ? (prior?.smsConsentAt ?? new Date()) : null;
+  }
+  if (Object.keys(data).length === 0) return { ok: true as const };
+
+  await prisma.subcontractor.update({ where: { id: subcontractorId }, data });
+  revalidatePath("/company");
+  revalidatePath("/subcontractors");
+  return { ok: true as const };
+}

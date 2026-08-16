@@ -9,7 +9,7 @@ import { ENTITY_TYPES, PAYMENT_METHODS, packetStatus } from "@/lib/vendor-packet
 import type { VendorPacketView } from "@/data/queries";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { Button } from "@/components/ui/button";
-import { saveVendorPacket } from "@/app/actions";
+import { saveCrewContact, saveVendorPacket } from "@/app/actions";
 
 /**
  * The vendor packet — what a crew supplies before they can be given work.
@@ -81,6 +81,30 @@ export function VendorPacketForm({
    * is empty, so a half-typed name never overwrites a good one and the
    * "required" complaint waits until somebody actually tries to finish.
    */
+  /**
+   * Write who they are, on its own, straight away.
+   *
+   * The autosave above is gated on a legal business name, so a crew who typed
+   * their name, number and email and then stopped at the EIN saved absolutely
+   * nothing — and there was no way to ring and ask what stopped them. This
+   * does not wait for the rest of the form to be valid, because a phone number
+   * is worth keeping whether or not the packet is ever finished.
+   */
+  async function saveContact(extra?: { smsConsent?: boolean }) {
+    if (!canEdit) return;
+    try {
+      await saveCrewContact(packet.id, {
+        lead: f.lead,
+        email: f.email,
+        phone: f.phone,
+        ...(extra ?? {}),
+      });
+    } catch {
+      // Silent. The full save reports its own failures, and a blur is not a
+      // moment to interrupt somebody mid-form.
+    }
+  }
+
   const save = React.useRef(submit);
   save.current = submit;
   const mounted = React.useRef(false);
@@ -149,6 +173,62 @@ export function VendorPacketForm({
         ) : null}
       </Panel>
 
+      {/* First, and saved on its own.
+          Everything below this writes in one go when Save packet is pressed,
+          which is right for a banking block and wrong for the three fields
+          that say who you are: a crew who started the form and gave up at the
+          EIN left nothing behind, and nobody could ring to ask what stopped
+          them. These write the moment you leave the field. */}
+      <Section
+        title="Who you are"
+        hint="Saved as soon as you type it, so we can reach you even if you finish the rest later"
+      >
+        <Field
+          label="Your name"
+          required
+          value={f.lead}
+          onChange={(v) => set("lead", v)}
+          onBlur={() => void saveContact()}
+        />
+        <Field
+          label="Mobile phone"
+          required
+          value={f.phone}
+          onChange={(v) => set("phone", v)}
+          onBlur={() => void saveContact()}
+        />
+        <Field
+          label="Email"
+          required
+          value={f.email}
+          onChange={(v) => set("email", v)}
+          onBlur={() => void saveContact()}
+        />
+
+        {/* Consent sits with the number it is about, and is kept the moment it
+            is ticked — someone who agrees and then closes the tab has still
+            agreed. */}
+        <label className="flex items-start gap-2.5 rounded-xl border border-border bg-foreground/[0.02] p-3 sm:col-span-2">
+          <input
+            type="checkbox"
+            checked={f.smsConsent}
+            onChange={(e) => {
+              set("smsConsent", e.target.checked);
+              void saveContact({ smsConsent: e.target.checked });
+            }}
+            className="mt-0.5 size-4 shrink-0 accent-[var(--vq-blue)]"
+          />
+          <span className="text-[12.5px] leading-relaxed text-muted-foreground">
+            <span className="font-medium text-foreground">Text me job alerts.</span> I agree to
+            receive operational text messages from Fortitude Infrastructure LLC at the mobile
+            number above — work assignments, priorities and due dates, schedule changes, and
+            daily sheet status. Message frequency varies with job activity. Message and data
+            rates may apply. Reply STOP at any time to stop receiving them, or HELP for help.
+            This is not marketing and consent is not a condition of being awarded work.
+          </span>
+        </label>
+      </Section>
+
       <Section title="Business identity" hint="As it appears on your W-9">
         <Field label="Legal business name" required value={f.legalName} onChange={(v) => set("legalName", v)} />
         <Field label="DBA / trading name" value={f.dba} onChange={(v) => set("dba", v)} />
@@ -174,27 +254,6 @@ export function VendorPacketForm({
         <Field label="Emergency contact" value={f.emergencyContactName} onChange={(v) => set("emergencyContactName", v)} />
         <Field label="Emergency phone" value={f.emergencyContactPhone} onChange={(v) => set("emergencyContactPhone", v)} />
 
-        {/* The written consent carriers require before a business may text
-            anyone. It has to be a deliberate tick with the wording visible —
-            a pre-ticked box or consent buried in terms is not consent, and
-            the campaign registration says in as many words that this is how
-            it is collected. */}
-        <label className="flex items-start gap-2.5 rounded-xl border border-border bg-foreground/[0.02] p-3 sm:col-span-2">
-          <input
-            type="checkbox"
-            checked={f.smsConsent}
-            onChange={(e) => set("smsConsent", e.target.checked)}
-            className="mt-0.5 size-4 shrink-0 accent-[var(--vq-blue)]"
-          />
-          <span className="text-[12.5px] leading-relaxed text-muted-foreground">
-            <span className="font-medium text-foreground">Text me job alerts.</span> I agree to
-            receive operational text messages from Fortitude Infrastructure LLC at the office
-            phone number above — work assignments, priorities and due dates, schedule changes,
-            and daily sheet status. Message frequency varies with job activity. Message and data
-            rates may apply. Reply STOP at any time to stop receiving them, or HELP for help.
-            This is not marketing and consent is not a condition of being awarded work.
-          </span>
-        </label>
       </Section>
 
       <Section title="Who signs" hint="Authorised to bind the company to a contract">
@@ -278,6 +337,7 @@ function Field({
   placeholder,
   required,
   className,
+  onBlur,
 }: {
   label: string;
   value: string;
@@ -285,6 +345,8 @@ function Field({
   placeholder?: string;
   required?: boolean;
   className?: string;
+  /** Fired when they leave the field — used to write contact details early. */
+  onBlur?: () => void;
 }) {
   return (
     <label className={cn("block min-w-0", className)}>
@@ -292,6 +354,7 @@ function Field({
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onBlur={onBlur}
         placeholder={placeholder}
         className={inputClass}
       />
