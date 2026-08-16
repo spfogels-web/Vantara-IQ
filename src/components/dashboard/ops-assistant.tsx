@@ -123,6 +123,20 @@ export function OpsAssistant() {
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" });
   }, [turns, busy]);
 
+  /**
+   * Keep the speech engine awake while a question is in flight.
+   *
+   * Chrome and iOS both park speechSynthesis after roughly fifteen seconds of
+   * idle, and an answer routinely takes longer than that to come back — which
+   * is exactly why the "Voice on" test spoke and the real answers did not.
+   * A resume() on a timer costs nothing and keeps it listening for work.
+   */
+  React.useEffect(() => {
+    if (!busy || typeof window === "undefined" || !window.speechSynthesis) return;
+    const tick = window.setInterval(() => window.speechSynthesis.resume(), 5000);
+    return () => window.clearInterval(tick);
+  }, [busy]);
+
   /** Stop mid-sentence — barge-in, muting, and leaving the page. */
   const hush = React.useCallback(() => {
     if (typeof window !== "undefined") window.speechSynthesis?.cancel();
@@ -140,7 +154,14 @@ export function OpsAssistant() {
       }
 
       const synth = window.speechSynthesis;
-      synth.cancel();
+
+      // cancel() immediately followed by speak() is swallowed on both Chrome
+      // and iOS Safari — the queue is still tearing down when the new
+      // utterance arrives and it is dropped without an error. This is almost
+      // certainly why nothing came out on desktop *or* phone. Only cancel when
+      // there is something to cancel, and let the queue settle first.
+      const pending = synth.speaking || synth.pending;
+      if (pending) synth.cancel();
       synth.resume();
 
       const u = new SpeechSynthesisUtterance(line);
@@ -171,13 +192,27 @@ export function OpsAssistant() {
       // Chrome will accept speak(), report nothing, and stay silent when audio
       // was never unlocked. If it has not started shortly, say so rather than
       // leave the user tapping a mic that appears to do nothing.
+      // If it did not start, try once more. The engine goes to sleep while the
+      // question is being answered, and the first speak() after that wakes it
+      // without playing — the second one plays.
       window.setTimeout(() => {
-        if (utterance.current === u && !synth.speaking && !synth.pending) {
-          setError(
-            "The answer is above, but the browser didn't play it. Tap the speaker icon once to allow audio, then ask again.",
-          );
-        }
-      }, 1200);
+        if (utterance.current !== u || synth.speaking || synth.pending) return;
+        synth.resume();
+        const retry = new SpeechSynthesisUtterance(line);
+        retry.rate = u.rate;
+        retry.pitch = u.pitch;
+        if (u.voice) retry.voice = u.voice;
+        retry.onstart = () => setSpeaking(true);
+        retry.onend = () => setSpeaking(false);
+        utterance.current = retry;
+        synth.speak(retry);
+
+        window.setTimeout(() => {
+          if (utterance.current === retry && !synth.speaking && !synth.pending) {
+            setDiag("The answer is above but wouldn't play. Tap the speaker on a reply to hear it.");
+          }
+        }, 900);
+      }, 700);
     },
     [voice, voices],
   );
@@ -435,6 +470,22 @@ export function OpsAssistant() {
                   </p>
                 ) : null,
               )}
+
+              {/* Play it back. Speech started from a tap is the one path no
+                  browser ever blocks, so this always works even when the
+                  automatic read after an answer does not. */}
+              {t.role === "assistant" ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    unlocked.current = true;
+                    say(t.spoken || t.content);
+                  }}
+                  className="focus-ring mt-2 inline-flex items-center gap-1.5 rounded-lg border border-border px-2 py-1 text-[11px] font-medium text-muted-foreground transition hover:border-brand/50 hover:text-foreground"
+                >
+                  <Volume2 className="size-3.5" /> Play
+                </button>
+              ) : null}
             </div>
           ))}
 
