@@ -100,13 +100,28 @@ export function NeuralBrain({
       typeof window !== "undefined" &&
       window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
-    const { nodes, edges } = buildMesh(150);
+    const { nodes, edges } = buildMesh(320);
     // Sparks travel an edge and respawn; more of them when it is talking.
-    const sparks = Array.from({ length: 26 }, (_, i) => ({
+    const sparks = Array.from({ length: 70 }, (_, i) => ({
       e: (i * 37) % Math.max(edges.length, 1),
-      t: (i / 26) % 1,
+      t: (i / 70) % 1,
       v: 0.004 + (i % 5) * 0.0015,
     }));
+
+    // Loose motes drifting around the mesh, unattached to any edge. They give
+    // the thing air — a mesh alone reads as a diagram, and these make it read
+    // as something switched on.
+    const dust = Array.from({ length: 60 }, (_, i) => {
+      const r = seeded(9000 + i);
+      return {
+        x: r(),
+        y: r(),
+        vx: (r() - 0.5) * 0.0006,
+        vy: (r() - 0.5) * 0.0006,
+        r: 0.4 + r() * 1.3,
+        ph: r() * Math.PI * 2,
+      };
+    });
 
     let raf = 0;
     let w = 0;
@@ -198,6 +213,23 @@ export function NeuralBrain({
         ctx.fillStyle = `rgba(219,234,254,${(0.35 + tw * 0.5 * energy + 0.15).toFixed(3)})`;
         ctx.beginPath();
         ctx.arc(px(n), py(n), r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Loose motes, drifting and wrapping at the edges.
+      for (const d of dust) {
+        if (!reduced) {
+          d.x += d.vx * (1 + energy * 2.5);
+          d.y += d.vy * (1 + energy * 2.5);
+          if (d.x < 0) d.x = 1;
+          if (d.x > 1) d.x = 0;
+          if (d.y < 0) d.y = 1;
+          if (d.y > 1) d.y = 0;
+        }
+        const tw = 0.4 + 0.6 * Math.sin(t * 1.1 + d.ph);
+        ctx.fillStyle = `rgba(125,190,255,${(0.12 + tw * 0.4 * energy).toFixed(3)})`;
+        ctx.beginPath();
+        ctx.arc(px(d), py(d), d.r * (0.8 + energy * 0.6), 0, Math.PI * 2);
         ctx.fill();
       }
 

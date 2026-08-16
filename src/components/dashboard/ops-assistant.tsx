@@ -273,26 +273,40 @@ export function OpsAssistant() {
         }}
       />
 
-      <div className="relative z-10 flex flex-col">
-        {/* ── Header ─────────────────────────────────────────────── */}
-        <div className="flex items-center gap-3 border-b border-border/70 px-4 py-3">
-          {/* The face. It idles, quickens while reading, and lights up while
-              speaking, so the movement reports state rather than looping. */}
-          <span className="relative grid size-14 shrink-0 place-items-center">
-            <span
-              aria-hidden
-              className="absolute inset-0 rounded-full blur-xl"
-              style={{
-                background: "radial-gradient(circle, var(--vq-blue) 0%, transparent 68%)",
-                opacity: speaking ? 0.75 : listening ? 0.55 : 0.3,
-                transition: "opacity 400ms ease",
-              }}
-            />
+      {/* Brain on the left, conversation on the right. It stacks below lg,
+          where a 300px canvas beside a chat would leave neither room. */}
+      <div className="relative z-10 flex flex-col lg:flex-row">
+        <div className="relative flex shrink-0 items-center justify-center border-b border-border/70 px-6 py-6 lg:w-[340px] lg:border-b-0 lg:border-r">
+          {/* Glow behind the mesh, brightening as it wakes up. */}
+          <span
+            aria-hidden
+            className="pointer-events-none absolute inset-0 blur-3xl"
+            style={{
+              background:
+                "radial-gradient(circle at 50% 48%, var(--vq-blue) 0%, transparent 62%)",
+              opacity: speaking ? 0.65 : listening ? 0.5 : busy ? 0.42 : 0.26,
+              transition: "opacity 500ms ease",
+            }}
+          />
+          <div className="relative w-full max-w-[300px]">
             <NeuralBrain
               state={speaking ? "speaking" : busy || listening ? "thinking" : "idle"}
-              className="relative size-14"
+              className="aspect-[4/3] w-full"
             />
-          </span>
+            <p
+              className={cn(
+                "mt-1 text-center text-[10.5px] font-semibold uppercase tracking-[0.16em] transition-colors",
+                speaking || listening ? "text-brand-bright" : "text-muted-foreground",
+              )}
+            >
+              {listening ? "Listening" : speaking ? "Speaking" : busy ? "Thinking" : "Standing by"}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex min-w-0 flex-1 flex-col">
+        {/* ── Header ─────────────────────────────────────────────── */}
+        <div className="flex items-center gap-3 border-b border-border/70 px-4 py-3">
           <div className="min-w-0 flex-1">
             <p className="flex items-center gap-2 text-[14px] font-semibold tracking-[-0.01em] text-foreground">
               Ask the business
@@ -489,6 +503,7 @@ export function OpsAssistant() {
             </button>
           </div>
         </form>
+        </div>
       </div>
     </div>
   );
