@@ -2098,8 +2098,55 @@ export async function reopenDailyReview(dailyId: string) {
   return { ok: true as const, removedFrom: pulled.removedFrom };
 }
 
-export async function deleteDailySheet(id: string) {
+/**
+ * Throw away a sheet — a test, a duplicate, a file that read back as nonsense.
+ *
+ * Drafts only. A submitted sheet is the paper behind a filed daily, and
+ * deleting it would leave that daily with production nobody can trace back to
+ * a form. Deleting the daily is the way to undo a filed day, and that releases
+ * its sheet back to a draft, which can then be deleted here if it deserves it.
+ */
+export async function deleteDailySheet(id: string, confirm?: boolean) {
   await requireStaff();
+
+  const sheet = await prisma.dailySheet.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      projectName: true,
+      workDate: true,
+      status: true,
+      dailyId: true,
+      laborRows: true,
+    },
+  });
+  if (!sheet) return { ok: false as const, error: "Sheet not found." };
+
+  if (sheet.status === "SUBMITTED" || sheet.dailyId) {
+    return {
+      ok: false as const,
+      error:
+        "This sheet has been filed, so it is the record behind a daily. Delete the daily instead — that releases this sheet back to a draft, and it can be deleted from here afterwards.",
+    };
+  }
+
+  const rows = (Array.isArray(sheet.laborRows) ? sheet.laborRows : []) as {
+    cells?: string[];
+  }[];
+  const filled = rows.filter((r) => (r.cells ?? []).some((c) => c?.trim())).length;
+
+  if (!confirm) {
+    return {
+      ok: false as const,
+      needsConfirm: true as const,
+      error:
+        `Delete this draft${sheet.projectName ? ` for ${sheet.projectName}` : ""}` +
+        `${sheet.workDate ? ` dated ${sheet.workDate}` : ""}?` +
+        (filled > 0 ? ` It has ${filled} row${filled === 1 ? "" : "s"} of production on it.` : "") +
+        " Nothing has been billed from it and this cannot be undone.",
+    };
+  }
+
   await prisma.dailySheet.delete({ where: { id } });
   revalidatePath("/dailies");
   return { ok: true as const };

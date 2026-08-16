@@ -20,6 +20,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
+  deleteDailySheet,
   saveDailySheet,
   submitDailySheet,
   updateDailyPhotos,
@@ -428,6 +429,24 @@ export function DailyBillingSheet({
    */
   const locked = saved?.status === "SUBMITTED" && !canReview;
 
+  const [deleting, setDeleting] = React.useState(false);
+  const [confirmDelete, setConfirmDelete] = React.useState(false);
+
+  /** Ask the server what this would take out, then do it on the second press. */
+  async function removeSheet(force: boolean) {
+    if (!sheetId || deleting) return;
+    setDeleting(true);
+    setSaveError(null);
+    const res = await deleteDailySheet(sheetId, force);
+    setDeleting(false);
+    if (res.ok) {
+      router.push("/dailies");
+      return;
+    }
+    setSaveError(res.error);
+    setConfirmDelete("needsConfirm" in res && Boolean(res.needsConfirm));
+  }
+
   /**
    * Photos added after filing, not yet written.
    *
@@ -616,6 +635,34 @@ export function DailyBillingSheet({
           >
             <Printer className="size-3.5" /> Print
           </Button>
+          {/* Throwing away a draft — a test, a duplicate, a file that read back
+              as nonsense. Only offered on a saved draft the office is looking
+              at: a filed sheet is the paper behind a daily, and the server
+              refuses that regardless of what the button says.
+
+              Two presses, and the first is a question to the server rather
+              than a guess here, so the warning names what is actually on it. */}
+          {canReview && sheetId && saved?.status !== "SUBMITTED" ? (
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => void removeSheet(confirmDelete)}
+              disabled={saving || submitting || deleting}
+              className={cn(
+                "h-8 gap-1.5 rounded-lg border px-2.5 text-[12px] font-medium disabled:opacity-50",
+                confirmDelete
+                  ? "border-critical bg-critical/10 text-critical"
+                  : "border-border bg-transparent text-muted-foreground hover:text-critical",
+              )}
+            >
+              {deleting ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <Trash2 className="size-3.5" />
+              )}
+              {confirmDelete ? "Delete for good" : "Delete draft"}
+            </Button>
+          ) : null}
           {/* Built server-side at a fixed landscape size, so unlike Print it
               cannot be cropped by whatever the dialog was left on. This is the
               one to attach to an email or a text.
