@@ -148,6 +148,10 @@ const PROJECT_LIST_SELECT = {
   crew: true,
   updatedAt: true,
   photoUrl: true,
+  // Who is actually on it. The  string above is typed once when the
+  // project is created and says "Unassigned" on jobs a crew has been working
+  // for a fortnight; this relation is the assignment that means something.
+  crews: { select: { company: true } },
 } as const;
 
 /** A row from either query: the list select, or a full single-project row. */
@@ -1124,6 +1128,7 @@ export async function getProjects(): Promise<Project[]> {
     // every job read 0 ft at 0/0 pace on health 80 while Charles Hart had
     // 7,326 ft in the ground.
     const perDay = b.days > 0 ? Math.round(b.total / b.days) : 0;
+    const assigned = (r.crews ?? []).map((c) => c.company.trim()).filter(Boolean);
 
     // `remainingFt` holds the whole route, entered once on the project form.
     // What is left is that less what the dailies have put in the ground, so
@@ -1147,6 +1152,15 @@ export async function getProjects(): Promise<Project[]> {
       actualFtPerDay: perDay,
       requiredFtPerDay: required,
       health: healthFrom({ perDay, required, daysLeft, remainingFt: left }) ?? p.health,
+      crew: assigned.length
+        ? assigned.length === 1
+          ? assigned[0]
+          : `${assigned[0]} +${assigned.length - 1} more`
+        : "No crew assigned",
+      // Forecast has to agree with pace. It read "On track" beside "Behind
+      // schedule" on the same row, because it is a stored string nothing
+      // recomputes. A job with nobody on it is not on track either.
+      ...forecastFrom({ perDay, required, left, assigned: assigned.length }),
     };
   });
 }
@@ -1240,6 +1254,35 @@ async function plannedRoute(projectIds: string[]): Promise<Map<string, number>> 
   return out;
 }
 
+/**
+ * What the forecast column should say, given what is actually happening.
+ *
+ * It used to be a stored string, so a project could read "On track" in green
+ * beside "Behind schedule" in red on the same row — Charles Hart did exactly
+ * that. Worse, a job with nobody assigned to it also read "On track", which is
+ * the one case where the honest answer is that nothing is going to happen at
+ * all.
+ */
+function forecastFrom(x: {
+  perDay: number;
+  required: number;
+  left: number;
+  assigned: number;
+}): { forecast: string; forecastTone: Tone } {
+  if (x.left <= 0) return { forecast: "Route complete", forecastTone: "success" };
+  if (x.assigned === 0) return { forecast: "Needs a crew", forecastTone: "critical" };
+  if (x.required <= 0) return { forecast: "No deadline set", forecastTone: "neutral" };
+
+  if (x.perDay <= 0) return { forecast: "Assigned, not started", forecastTone: "warning" };
+
+  // Days at the pace they are actually working, against the pace required.
+  const days = Math.ceil(x.left / x.perDay);
+  if (x.perDay >= x.required) {
+    return { forecast: `On track · ~${days} days`, forecastTone: "success" };
+  }
+  return { forecast: `Short by ${(x.required - x.perDay).toLocaleString()} ft/day`, forecastTone: "critical" };
+}
+
 /** Whole days from today to a YYYY-MM-DD deadline; null when there isn't one. */
 function daysUntil(deadline: string): number | null {
   const t = Date.parse((deadline ?? "").trim());
@@ -1282,7 +1325,10 @@ export async function getProject(id: string): Promise<Project | undefined> {
   const allowed = await visibleProjectIds(user);
   if (allowed !== null && !allowed.includes(id)) return undefined;
 
-  const r = await prisma.project.findUnique({ where: { id } });
+  const r = await prisma.project.findUnique({
+    where: { id },
+    include: { crews: { select: { company: true } } },
+  });
   return r ? toProject(r) : undefined;
 }
 
