@@ -309,7 +309,14 @@ WHAT YOU KNOW ABOUT THE BUSINESS
 - Billing weeks run Saturday to Friday. Work after Friday 11:59pm falls into the following week unless the office overrides it.
 - A unit code must match the customer's rate card exactly or it prices at zero and bills nothing while still looking filed. This has happened and cost real money.
 - Fortitude bills Globe; Globe's rate is what Fortitude earns. Subcontractor rates are what Fortitude pays crews. The difference is the margin, and it varies by crew for the same work.
-- The "I" suffix on a fibre code means pulled through existing pipe, priced far lower than placing new cable.`;
+- The "I" suffix on a fibre code means pulled through existing pipe, priced far lower than placing new cable.
+
+SPEAKING
+Your answer is read aloud as well as shown, and the two need different writing. Finish every reply with a final line in exactly this form:
+
+SPOKEN: <one or two sentences>
+
+That line is what gets said out loud, so write it to be heard, not read. Lead with the answer. No markdown, no tables, no bullet characters, no code strings. Say "the seventeen by thirty handhole" rather than "BHF(17X30X24)T". Round for the ear - "about twenty three thousand dollars" rather than "2,920.76" - and keep the exact figures in the written answer above it. If the honest answer is that there is nothing to report, say that in one short sentence.`;
 
 /**
  * Ask a question. Runs the model's tool calls until it has what it needs.
@@ -317,7 +324,9 @@ WHAT YOU KNOW ABOUT THE BUSINESS
  * Capped at eight rounds — a question that cannot be answered in eight reads
  * is one the assistant should admit it cannot answer, rather than loop on.
  */
-export async function askOps(history: OpsMessage[]): Promise<string> {
+export type OpsAnswer = { text: string; spoken: string };
+
+export async function askOps(history: OpsMessage[]): Promise<OpsAnswer> {
   if (!opsChatReady()) {
     throw new Error("ANTHROPIC_API_KEY is not set, so the assistant is unavailable.");
   }
@@ -339,10 +348,9 @@ export async function askOps(history: OpsMessage[]): Promise<string> {
     });
 
     if (res.stop_reason !== "tool_use") {
-      const text = res.content.find((b) => b.type === "text");
-      return text && text.type === "text"
-        ? text.text.trim()
-        : "I could not put an answer together for that.";
+      const block = res.content.find((b) => b.type === "text");
+      const raw = block && block.type === "text" ? block.text.trim() : "";
+      return raw ? splitSpoken(raw) : { text: "I could not put an answer together for that.", spoken: "I could not put an answer together for that." };
     }
 
     messages.push({ role: "assistant", content: res.content });
@@ -361,5 +369,36 @@ export async function askOps(history: OpsMessage[]): Promise<string> {
     messages.push({ role: "user", content: results });
   }
 
-  return "That took more lookups than I can do in one go. Try narrowing the question.";
+  const giveUp = "That took more lookups than I can do in one go. Try narrowing the question.";
+  return { text: giveUp, spoken: giveUp };
+}
+
+/**
+ * Peel the spoken line off the end of an answer.
+ *
+ * If the model forgets it - and it will, occasionally - the written answer is
+ * flattened into something sayable rather than read out with its markdown
+ * intact. A voice that says "asterisk asterisk" is worse than one that
+ * paraphrases.
+ */
+function splitSpoken(raw: string): OpsAnswer {
+  const marker = raw.match(/\n?\s*SPOKEN:\s*([\s\S]+)$/i);
+  if (marker) {
+    return {
+      text: raw.slice(0, marker.index).trim(),
+      spoken: marker[1].trim().replace(/\s+/g, " "),
+    };
+  }
+
+  // No marker — flatten the written answer into something sayable. Table rows
+  // and headings go entirely; a read-aloud table is noise.
+  const flattened = raw
+    .split("\n")
+    .filter((l) => !/^\s*\|/.test(l) && !/^\s*#{1,6}\s/.test(l))
+    .join(" ")
+    .replace(/[*_`#>|]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return { text: raw, spoken: flattened.slice(0, 400) };
 }

@@ -1,27 +1,45 @@
 "use client";
 
 import * as React from "react";
-import { ArrowUp, Loader2, Mic, Sparkles } from "lucide-react";
+import { ArrowUp, Loader2, Mic, Square, Volume2, VolumeX } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { askOperations } from "@/app/actions";
 
 /**
- * The operations assistant — ask the business a question in plain English.
+ * The operations assistant — ask the business a question and hear the answer.
  *
  * It sits directly under the KPI row because it is the thing that explains
  * those numbers: the tiles say production is 7,326 ft and nothing is billable,
  * and this says why and what to do about it.
  *
- * Text for now. The speech path works and is deliberately parked behind a
- * disabled control rather than deleted — shipping the typing first means the
- * answers can be judged on their own before a microphone is involved.
+ * Listening and speaking both use the browser's own engines. Nothing is
+ * streamed to a third party, there is no per-minute cost, and it works offline
+ * once the page is open — the only call that leaves the machine is the
+ * question itself.
+ *
+ * What gets spoken is not what is on screen. The written answer carries
+ * tables, exact figures and code strings, all of which are unbearable read
+ * aloud, so the assistant writes a separate line for the ear and this speaks
+ * that instead.
  *
  * It can only read. Every tool behind it runs a query and none of them write,
- * so nothing typed here can change a rate, a daily or an invoice.
+ * so nothing said or typed here can change a rate, a daily or an invoice.
  */
 
-type Turn = { role: "user" | "assistant"; content: string };
+type Turn = { role: "user" | "assistant"; content: string; spoken?: string };
+
+/** The Web Speech API is not in the DOM lib types. Only what is used here. */
+type Recognition = {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  start: () => void;
+  stop: () => void;
+  onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
+  onend: (() => void) | null;
+  onerror: (() => void) | null;
+};
 
 const SUGGESTIONS = [
   "Which crew makes us the most per foot?",
@@ -31,7 +49,7 @@ const SUGGESTIONS = [
   "What needs my attention today?",
 ];
 
-/** Three bars that move while it is working. Purely decorative. */
+/** Bars that move while it is working or talking. Decorative. */
 function Thinking() {
   return (
     <span className="inline-flex items-end gap-[3px]" aria-hidden>
@@ -51,13 +69,47 @@ export function OpsAssistant() {
   const [draft, setDraft] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [voice, setVoice] = React.useState(true);
+  const [listening, setListening] = React.useState(false);
+  const [speaking, setSpeaking] = React.useState(false);
 
+  const recognition = React.useRef<Recognition | null>(null);
   const scroller = React.useRef<HTMLDivElement | null>(null);
   const input = React.useRef<HTMLTextAreaElement | null>(null);
 
   React.useEffect(() => {
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" });
   }, [turns, busy]);
+
+  /** Stop mid-sentence — barge-in, muting, and leaving the page. */
+  const hush = React.useCallback(() => {
+    if (typeof window !== "undefined") window.speechSynthesis?.cancel();
+    setSpeaking(false);
+  }, []);
+
+  React.useEffect(() => hush, [hush]);
+
+  const say = React.useCallback(
+    (line: string) => {
+      if (!voice || !line || typeof window === "undefined" || !window.speechSynthesis) return;
+      window.speechSynthesis.cancel();
+
+      const u = new SpeechSynthesisUtterance(line);
+      // Slightly quick and slightly low reads as composed rather than chirpy.
+      u.rate = 1.04;
+      u.pitch = 0.92;
+      const preferred = window.speechSynthesis
+        .getVoices()
+        .find((v) => /Daniel|Google UK English Male|Microsoft Guy|Alex/i.test(v.name));
+      if (preferred) u.voice = preferred;
+
+      u.onstart = () => setSpeaking(true);
+      u.onend = () => setSpeaking(false);
+      u.onerror = () => setSpeaking(false);
+      window.speechSynthesis.speak(u);
+    },
+    [voice],
+  );
 
   const send = React.useCallback(
     async (text: string) => {
@@ -73,13 +125,56 @@ export function OpsAssistant() {
       const res = await askOperations(next);
       setBusy(false);
 
-      if (res.ok) setTurns([...next, { role: "assistant", content: res.answer }]);
-      else setError(res.error);
+      if (res.ok) {
+        setTurns([...next, { role: "assistant", content: res.answer, spoken: res.spoken }]);
+        say(res.spoken || res.answer);
+      } else {
+        setError(res.error);
+      }
 
       input.current?.focus();
     },
-    [busy, turns],
+    [busy, turns, say],
   );
+
+  /** Tap to talk. Talking over it stops it talking. */
+  const toggleMic = React.useCallback(() => {
+    if (typeof window === "undefined") return;
+    hush();
+
+    if (listening) {
+      recognition.current?.stop();
+      setListening(false);
+      return;
+    }
+
+    const Ctor =
+      (window as unknown as { SpeechRecognition?: new () => Recognition }).SpeechRecognition ??
+      (window as unknown as { webkitSpeechRecognition?: new () => Recognition })
+        .webkitSpeechRecognition;
+    if (!Ctor) {
+      setError("This browser can't listen — Chrome, Edge and Safari can. Typing works everywhere.");
+      return;
+    }
+
+    const rec = new Ctor();
+    rec.lang = "en-US";
+    rec.continuous = false;
+    rec.interimResults = false;
+    rec.onresult = (e) => {
+      const heard = Array.from({ length: e.results.length }, (_, i) => e.results[i][0].transcript)
+        .join(" ")
+        .trim();
+      // Straight through. Speaking a question and then having to press send is
+      // one step too many when your hands are full.
+      if (heard) void send(heard);
+    };
+    rec.onend = () => setListening(false);
+    rec.onerror = () => setListening(false);
+    recognition.current = rec;
+    rec.start();
+    setListening(true);
+  }, [listening, hush, send]);
 
   const started = turns.length > 0 || busy;
 
@@ -106,10 +201,13 @@ export function OpsAssistant() {
         {/* ── Header ─────────────────────────────────────────────── */}
         <div className="flex items-center gap-3 border-b border-border/70 px-4 py-3">
           <span
-            className="vq-ai-core grid size-9 shrink-0 place-items-center rounded-xl text-white"
+            className={cn(
+              "grid size-9 shrink-0 place-items-center rounded-xl text-white",
+              (speaking || listening) && "vq-ai-core",
+            )}
             style={{ background: "var(--grad-brand)" }}
           >
-            <Sparkles className="size-[17px]" strokeWidth={2} />
+            {listening ? <Mic className="size-[17px]" /> : <Volume2 className="size-[17px]" />}
           </span>
           <div className="min-w-0 flex-1">
             <p className="flex items-center gap-2 text-[14px] font-semibold tracking-[-0.01em] text-foreground">
@@ -119,18 +217,38 @@ export function OpsAssistant() {
               </span>
             </p>
             <p className="truncate text-[11.5px] text-muted-foreground">
-              Reads every job, crew, rate and invoice — and can change none of them
+              {listening
+                ? "Listening…"
+                : speaking
+                  ? "Speaking — tap the square to stop"
+                  : "Reads every job, crew, rate and invoice — and can change none of them"}
             </p>
           </div>
-          {busy ? <Thinking /> : null}
+          {busy || speaking ? <Thinking /> : null}
+          <button
+            type="button"
+            onClick={() => {
+              if (voice) hush();
+              setVoice((v) => !v);
+            }}
+            title={voice ? "Answers are spoken" : "Answers are silent"}
+            className={cn(
+              "focus-ring grid size-8 shrink-0 place-items-center rounded-lg border transition",
+              voice
+                ? "border-brand/50 bg-brand/10 text-brand-bright"
+                : "border-border text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {voice ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
+          </button>
         </div>
 
         {/* ── Conversation ───────────────────────────────────────── */}
         <div
           ref={scroller}
           className={cn(
-            "space-y-3 overflow-y-auto px-4 transition-[height] duration-300",
-            started ? "h-[340px] py-4" : "h-auto py-4",
+            "space-y-3 overflow-y-auto px-4 py-4 transition-[height] duration-300",
+            started ? "h-[340px]" : "h-auto",
           )}
         >
           {!started ? (
@@ -195,14 +313,20 @@ export function OpsAssistant() {
           className="border-t border-border/70 p-3"
         >
           <div className="flex items-end gap-2 rounded-xl border border-border bg-foreground/[0.02] p-1.5 transition focus-within:border-brand/60">
-            {/* Step two. Disabled rather than hidden so it is visibly coming. */}
             <button
               type="button"
-              disabled
-              title="Voice is next — typing for now"
-              className="grid size-9 shrink-0 cursor-not-allowed place-items-center rounded-lg text-muted-foreground/50"
+              onClick={speaking ? hush : toggleMic}
+              title={speaking ? "Stop speaking" : listening ? "Listening — tap to stop" : "Tap to talk"}
+              className={cn(
+                "focus-ring grid size-9 shrink-0 place-items-center rounded-lg border transition",
+                listening
+                  ? "vq-ai-core border-critical bg-critical/10 text-critical"
+                  : speaking
+                    ? "border-brand/50 bg-brand/10 text-brand-bright"
+                    : "border-transparent text-muted-foreground hover:text-foreground",
+              )}
             >
-              <Mic className="size-4" />
+              {speaking ? <Square className="size-3.5 fill-current" /> : <Mic className="size-4" />}
             </button>
             <textarea
               ref={input}
@@ -216,7 +340,7 @@ export function OpsAssistant() {
                   void send(draft);
                 }
               }}
-              placeholder="Ask anything about the business…"
+              placeholder={listening ? "Listening…" : "Ask anything, or tap the mic…"}
               disabled={busy}
               className="max-h-28 min-h-[36px] flex-1 resize-none bg-transparent px-1 py-2 text-[13px] text-foreground outline-none placeholder:text-muted-foreground disabled:opacity-60"
             />

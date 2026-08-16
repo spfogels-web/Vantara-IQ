@@ -5757,8 +5757,8 @@ export async function askOperations(history: { role: "user" | "assistant"; conte
   if (!clean.length) return { ok: false as const, error: "Ask me something." };
 
   try {
-    const answer = await askOps(clean);
-    return { ok: true as const, answer };
+    const { text, spoken } = await askOps(clean);
+    return { ok: true as const, answer: text, spoken };
   } catch (e) {
     return {
       ok: false as const,
