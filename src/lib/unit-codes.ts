@@ -70,11 +70,27 @@ export const MAIN_BILLABLE_CODES = [
   "BM60(1)(1 1/4)P",
   "BM60(1)(1 1/4)PFF",
   "BM60(2)(1 1/4)PF",
-  // Cable placement.
+  // Cable placement — pulling new cable into the ground.
   "BFO12",
   "BFO24",
   "BFO48",
   "BFO144",
+  // The same fibre counts placed through vacant or existing pipe. The "I"
+  // suffix is the whole difference and it is worth $1.75 a foot: Globe pays
+  // $2.75 to place cable and a flat $1.00 to pull it through pipe already in
+  // the ground. Listed separately from the codes above for that reason —
+  // treating BFO48 and BFO48I as one code bills pulling as placing.
+  "BFO12I",
+  "BFO24I",
+  "BFO36I",
+  "BFO48I",
+  "BFO60I",
+  "BFO72I",
+  "BFO96I",
+  "BFO144I",
+  "BFO192I",
+  "BFO216I",
+  "BFO288I",
   // Splice and misc buried.
   "BM2F",
   "BM2AF",
