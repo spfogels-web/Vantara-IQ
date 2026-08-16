@@ -164,7 +164,12 @@ export function VendorPacketForm({
         <Field label="City" required value={f.city} onChange={(v) => set("city", v)} />
         <Field label="State" required value={f.stateRegion} onChange={(v) => set("stateRegion", v)} />
         <Field label="ZIP" required value={f.postalCode} onChange={(v) => set("postalCode", v)} />
-        <Field label="Office phone" required value={f.phone} onChange={(v) => set("phone", v)} />
+        <Field
+          label="Office phone"
+          required
+          value={f.phone}
+          onChange={(v) => set("phone", v)}
+        />
         <Field label="Mobile phone" value={f.mobilePhone} onChange={(v) => set("mobilePhone", v)} />
         <Field label="Emergency contact" value={f.emergencyContactName} onChange={(v) => set("emergencyContactName", v)} />
         <Field label="Emergency phone" value={f.emergencyContactPhone} onChange={(v) => set("emergencyContactPhone", v)} />

@@ -73,16 +73,40 @@ export function PacketSummary({ subcontractorId }: { subcontractorId: string }) 
               ) : (
                 <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-warning" />
               )}
+              {/* Say where it gets filled in. This list is read by the office,
+                  who then have to tell the crew where to go — and "Phone" on
+                  its own does not say whether that is the office line, the
+                  mobile, or a reference's number. */}
               <span>
-                {status.complete
-                  ? "Everything required is on file."
-                  : `Waiting on: ${status.blocking.join(", ")}.`}
+                {status.complete ? (
+                  "Everything required is on file."
+                ) : (
+                  <>
+                    Waiting on: {status.blocking.join(", ")}. The crew fills these
+                    in themselves under <strong>Company</strong> in their own portal —
+                    entity type is a dropdown there, and the phone asked for is the
+                    business office line.
+                  </>
+                )}
               </span>
             </div>
 
             <dl className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
               <Row label="Legal name" value={packet.legalName} />
-              <Row label="Entity" value={[packet.entityType, packet.stateOfIncorporation].filter(Boolean).join(" · ")} />
+              {/* Both halves, or it lies. Dropping the empty one and joining
+                  what is left put Gulf Drilling's state of incorporation on a
+                  row labelled "Entity", so the page read "Entity: FL" while
+                  the banner above it said the entity type was still missing. */}
+              <Row
+                label="Entity"
+                value={
+                  packet.entityType
+                    ? [packet.entityType, packet.stateOfIncorporation].filter(Boolean).join(" · ")
+                    : packet.stateOfIncorporation
+                      ? `Type not given · ${packet.stateOfIncorporation}`
+                      : ""
+                }
+              />
               <Row label="EIN" value={packet.ein} />
               <Row
                 label="Address"
