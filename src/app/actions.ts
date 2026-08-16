@@ -27,6 +27,7 @@ import {
   isMainBillableCode,
 } from "@/lib/unit-codes";
 import { checkFooting, dailyImportReady, extractDailySheet } from "@/lib/daily-import";
+import { askOps, opsChatReady } from "@/lib/ops-chat";
 import { packetStatus } from "@/lib/vendor-packet";
 import { readExif } from "@/lib/exif";
 import { notifyCrew, notifyStaff } from "@/lib/notify";
@@ -5707,4 +5708,61 @@ export async function clearComplianceWaiver(subcontractorId: string, label: stri
   revalidatePath("/subcontractors");
   revalidatePath("/");
   return { ok: true as const };
+}
+
+/**
+ * Who may use the operations assistant.
+ *
+ * One person, by identity, not by role. There is a second ADMIN account on
+ * this system (and there will be more), so checking isStaff or even ADMIN
+ * would hand the assistant to whoever gets made an administrator next. The
+ * owner's address is the check, overridable by env so it can move without a
+ * deploy.
+ */
+function opsAssistantOwner(): string {
+  return (process.env.OPS_ASSISTANT_OWNER ?? "sean.fogelson@fortitude-infra.com")
+    .trim()
+    .toLowerCase();
+}
+
+export async function canUseOpsAssistant(): Promise<boolean> {
+  const me = await viewer();
+  return Boolean(me && me.email.trim().toLowerCase() === opsAssistantOwner());
+}
+
+/**
+ * Ask the operations assistant a question.
+ *
+ * The assistant can only read — every tool behind it is a query and none of
+ * them write — so the worst a prompt can do is ask for information. This gate
+ * is about who gets to see the whole business at once, which is a different
+ * question from whether anything can be damaged.
+ */
+export async function askOperations(history: { role: "user" | "assistant"; content: string }[]) {
+  const me = await requireUser();
+  if (me.email.trim().toLowerCase() !== opsAssistantOwner()) {
+    return { ok: false as const, error: "The operations assistant isn't available on this account." };
+  }
+  if (!opsChatReady()) {
+    return { ok: false as const, error: "ANTHROPIC_API_KEY isn't set in this environment yet." };
+  }
+
+  const clean = history
+    .filter((m) => m.content.trim())
+    // Keep the conversation bounded; the assistant re-reads the data it needs
+    // each turn rather than relying on a long scrollback.
+    .slice(-20)
+    .map((m) => ({ role: m.role, content: m.content.slice(0, 8000) }));
+
+  if (!clean.length) return { ok: false as const, error: "Ask me something." };
+
+  try {
+    const answer = await askOps(clean);
+    return { ok: true as const, answer };
+  } catch (e) {
+    return {
+      ok: false as const,
+      error: e instanceof Error ? e.message : "I couldn't get to the data just then.",
+    };
+  }
 }

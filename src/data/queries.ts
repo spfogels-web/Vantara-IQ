@@ -1163,7 +1163,9 @@ export async function getSubcontractors(): Promise<Subcontractor[]> {
  * Rates are picked as of the work date, so a daily is always valued at the
  * rate that applied when the work was done.
  */
-async function priceDailies(
+/** Exported so the operations assistant prices dailies the same way the rest
+ *  of the app does, rather than growing a second opinion about money. */
+export async function priceDailies(
   rows: {
     customer: string;
     subcontractor: string;

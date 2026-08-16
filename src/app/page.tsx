@@ -20,6 +20,8 @@ import { getCurrentUser } from "@/lib/auth";
 import { KpiRow } from "@/components/dashboard/kpi-row";
 import { ProjectHealth } from "@/components/dashboard/project-health";
 import { AiBrief } from "@/components/dashboard/ai-brief";
+import { OpsAssistant } from "@/components/dashboard/ops-assistant";
+import { canUseOpsAssistant } from "@/app/actions";
 import { ProjectsTable } from "@/components/dashboard/projects-table";
 import { ProductionChart } from "@/components/dashboard/production-chart";
 import { ProductionSplitPanel } from "@/components/dashboard/production-split";
@@ -59,6 +61,10 @@ async function ProjectsSection() {
 async function BriefSection() {
   const brief = await getBrief();
   return <AiBrief items={brief} />;
+}
+
+async function AssistantSection() {
+  return (await canUseOpsAssistant()) ? <OpsAssistant /> : null;
 }
 
 async function ProductionSplitSection() {
@@ -125,7 +131,12 @@ export default async function OperationsCenterPage() {
             <ProjectsSection />
           </Suspense>
         </div>
-        <div className="xl:col-span-4">
+        <div className="space-y-4 xl:col-span-4">
+          {/* One account only — the assistant sees every rate, every crew’s pay
+              and the whole money position in one place. */}
+          <Suspense fallback={null}>
+            <AssistantSection />
+          </Suspense>
           <Suspense fallback={<AiBriefSkeleton />}>
             <BriefSection />
           </Suspense>
