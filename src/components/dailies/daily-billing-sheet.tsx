@@ -551,9 +551,6 @@ export function DailyBillingSheet({
    */
   const missingHeader = React.useMemo(() => {
     const need: [string, string][] = [
-      ["Exchange / work order number", header.exchange],
-      ["Customer name", header.customer],
-      ["Work order title / job name", header.jobName],
       ["Date work performed", header.dateWorked],
       ["Project number", header.projectNumber],
       ["Subcontractor employee name", header.employees[1] ?? ""],
@@ -901,7 +898,6 @@ export function DailyBillingSheet({
             <div className="grid grid-cols-[1.2fr_1fr_1.4fr_1.4fr] border-b-0">
               <Field
                 label="Exchange / Work Order Number"
-                required
                 value={header.exchange}
                 onChange={(v) => set("exchange", v)}
               />
@@ -912,13 +908,11 @@ export function DailyBillingSheet({
               />
               <Field
                 label="Customer Name"
-                required
                 value={header.customer}
                 onChange={(v) => set("customer", v)}
               />
               <Field
                 label="Work Order Title / Job Name"
-                required
                 value={header.jobName}
                 onChange={(v) => set("jobName", v)}
                 className="border-r-0"
