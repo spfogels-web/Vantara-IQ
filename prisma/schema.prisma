@@ -315,6 +315,11 @@ model Subcontractor {
   /// When this crew agreed, in writing, to receive operational texts. A date
   /// rather than a flag: carriers require proof of consent, and "true" with
   /// no date proves nothing about when or under what wording.
+  /// Whether this crew may see their own pay statements and rates in the
+  /// portal. Off by default: several owners have their own people fill in the
+  /// billing and do not want a rate card in front of them. The office can turn
+  /// it on per crew for the ones who ask.
+  showPayToCrew  Boolean   @default(false)
   smsConsentAt   DateTime?
   /// Set the moment they reply STOP. Kept forever rather than cleared, so a
   /// re-onboarding can never quietly resubscribe someone who opted out.

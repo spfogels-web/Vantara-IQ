@@ -115,6 +115,7 @@ export function SidebarContent({
   logoUrl,
   badges,
   role,
+  showPay,
 }: {
   collapsed: boolean;
   onNavigate?: () => void;
@@ -125,6 +126,7 @@ export function SidebarContent({
   badges?: Record<string, number>;
   /** Drives which rail is built — staff get the full one, crews get theirs. */
   role?: string | null;
+  showPay?: boolean;
 }) {
   const { toggle } = useSidebar();
   const [feedbackOpen, setFeedbackOpen] = React.useState(false);
@@ -164,7 +166,7 @@ export function SidebarContent({
 
       {/* Sections */}
       <nav className="no-scrollbar flex-1 space-y-5 overflow-y-auto px-4 py-4">
-        {navSectionsFor(role).map((section) => (
+        {navSectionsFor(role, showPay).map((section) => (
           <div key={section.title} className="space-y-1">
             {!collapsed ? (
               <p className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/70">
@@ -284,10 +286,12 @@ export function DesktopSidebar({
   logoUrl,
   badges,
   role,
+  showPay,
 }: {
   logoUrl?: string | null;
   badges?: Record<string, number>;
   role?: string | null;
+  showPay?: boolean;
 }) {
   const { collapsed, toggle } = useSidebar();
 

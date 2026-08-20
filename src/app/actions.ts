@@ -5819,3 +5819,36 @@ export async function saveCrewContact(
   revalidatePath("/subcontractors");
   return { ok: true as const };
 }
+
+/**
+ * Whether a crew may see their own pay statements and rates in the portal.
+ *
+ * Off by default. Several owners have their own people fill in the billing and
+ * would rather no rate card was in front of them, which is their call to make
+ * about their own staff — so this is per crew rather than a global setting.
+ *
+ * Turning it off hides the nav item and closes the page; it does not change
+ * what they are owed or delete anything. Turn it back on and the statements
+ * are exactly where they were.
+ */
+export async function setCrewPayVisibility(subcontractorId: string, show: boolean) {
+  const actor = await requireStaff();
+
+  const sub = await prisma.subcontractor.update({
+    where: { id: subcontractorId },
+    data: { showPayToCrew: show },
+    select: { company: true },
+  });
+
+  await notifyStaff({
+    title: `Pay visibility ${show ? "on" : "off"} for ${sub.company.trim()}`,
+    detail: show
+      ? `${actor.name || "An administrator"} turned on pay statements for this crew's own login.`
+      : `${actor.name || "An administrator"} hid pay statements and rates from this crew's own login.`,
+    category: "crew",
+    tone: "info",
+  });
+
+  revalidatePath("/subcontractors");
+  return { ok: true as const, show };
+}

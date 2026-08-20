@@ -40,7 +40,7 @@ import { SubRateCard } from "@/components/subcontractors/sub-rate-card";
 import { DocumentCenter, type SubDoc } from "@/components/subcontractors/document-center";
 import { BadgeSection } from "@/components/subcontractors/badge-section";
 import { SubPayPanel } from "@/components/subcontractors/sub-pay-panel";
-import { approveSubcontractor, deleteSubcontractor, listCrewBadges, listSubDocuments, listSubInvoices } from "@/app/actions";
+import { setCrewPayVisibility, approveSubcontractor, deleteSubcontractor, listCrewBadges, listSubDocuments, listSubInvoices } from "@/app/actions";
 
 const complianceTone: Record<ComplianceStatus, "success" | "warning" | "critical" | "neutral"> = {
   valid: "success",
@@ -725,6 +725,12 @@ function SubDetail({
       {/* What we owe them, and their answer to it. */}
       <SubPayPanel subcontractorId={s.id} invoices={payStatements} />
 
+      {/* Whether the crew's own login can see any of the above. Off by
+          default: several owners have their own people fill in the billing
+          and would rather no rate card was in front of them. It hides the
+          page, it does not change what they are owed. */}
+      <PayVisibilityToggle subcontractorId={s.id} show={s.showPayToCrew} company={s.company} />
+
       {badges === null ? null : (
         <BadgeSection subcontractorId={s.id} badges={badges} canReview />
       )}
@@ -913,5 +919,73 @@ function PacketChip({ sub }: { sub: Subcontractor }) {
     >
       {state.label}
     </span>
+  );
+}
+
+/**
+ * Show or hide a crew's own pay page.
+ *
+ * Optimistic, because the answer is a boolean the server always accepts —
+ * waiting on a round trip to move a switch reads as a broken switch.
+ */
+function PayVisibilityToggle({
+  subcontractorId,
+  show,
+  company,
+}: {
+  subcontractorId: string;
+  show: boolean;
+  company: string;
+}) {
+  const router = useRouter();
+  const [on, setOn] = React.useState(show);
+  const [busy, setBusy] = React.useState(false);
+
+  React.useEffect(() => setOn(show), [show]);
+
+  async function flip() {
+    if (busy) return;
+    const next = !on;
+    setOn(next);
+    setBusy(true);
+    const res = await setCrewPayVisibility(subcontractorId, next);
+    setBusy(false);
+    if (!res.ok) setOn(!next);
+    else router.refresh();
+  }
+
+  return (
+    <Panel>
+      <PanelBody className="flex flex-wrap items-center gap-4">
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-semibold text-foreground">
+            Pay statements in {company.trim()}&rsquo;s own portal
+          </p>
+          <p className="mt-0.5 text-[12px] text-muted-foreground">
+            {on
+              ? "Their login can see what they are owed and the rates behind it."
+              : "Hidden. Their login sees dailies and documents, no rates and no pay. Nothing is deleted — turn it back on and the statements are where they were."}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => void flip()}
+          disabled={busy}
+          role="switch"
+          aria-checked={on}
+          className={cn(
+            "focus-ring relative h-6 w-11 shrink-0 rounded-full transition disabled:opacity-50",
+            on ? "bg-brand" : "bg-foreground/15",
+          )}
+        >
+          <span
+            className={cn(
+              "absolute top-0.5 size-5 rounded-full bg-white transition-all",
+              on ? "left-[22px]" : "left-0.5",
+            )}
+          />
+        </button>
+      </PanelBody>
+    </Panel>
   );
 }

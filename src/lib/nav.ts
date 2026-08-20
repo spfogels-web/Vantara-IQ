@@ -67,7 +67,6 @@ export const subNavSections: NavSection[] = [
       { label: "My projects", href: "/projects", icon: "projects", shortcut: "P" },
       { label: "Company profile", href: "/company", icon: "users" },
       { label: "Yard badges", href: "/badges", icon: "idCard" },
-      { label: "Pay statements", href: "/pay", icon: "payapps" },
       { label: "Tasks", href: "/tasks", icon: "clipboard" },
     ],
   },
@@ -77,8 +76,24 @@ export const subNavSections: NavSection[] = [
 export const homeHrefFor = (role?: string | null) =>
   role === "SUBCONTRACTOR" ? "/dailies" : "/";
 
-export const navSectionsFor = (role?: string | null): NavSection[] =>
-  role === "SUBCONTRACTOR" ? subNavSections : navSections;
+/**
+ * The crew's own pay page, shown only where the office has turned it on.
+ *
+ * Several owners have their own people fill in the billing and would
+ * rather a rate card was not in front of them. Off by default, per crew.
+ */
+const PAY_ITEM = { label: "Pay statements", href: "/pay", icon: "payapps" } as const;
+
+export const navSectionsFor = (
+  role?: string | null,
+  showPay = false,
+): NavSection[] =>
+  role !== "SUBCONTRACTOR"
+    ? navSections
+    : subNavSections.map((section) => ({
+        ...section,
+        items: showPay ? [...section.items, PAY_ITEM] : section.items,
+      }));
 
 /** Flattened list used by the ⌘K palette. */
 export const allNavItems = [...navSections.flatMap((s) => s.items), ...footerNav.items];

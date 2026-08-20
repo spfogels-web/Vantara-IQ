@@ -318,6 +318,8 @@ export interface Subcontractor {
   packet: { complete: boolean; started: boolean; blocking: string[] };
   /** Real project records, not typed names — this is what gates their access. */
   assignedProjects: AssignedProject[];
+  /** Whether this crew may see their own pay statements in their portal. */
+  showPayToCrew: boolean;
   compliance: ComplianceDoc[];
   complianceTone: Tone;
   scorecard: SubScorecard;

@@ -27,12 +27,15 @@ function ShellFrame({
   logoUrl,
   badges,
   notifications,
+  showPay,
 }: {
   children: React.ReactNode;
   user: CurrentUser | null;
   logoUrl?: string | null;
   badges?: Record<string, number>;
   notifications?: AppNotification[];
+  /** Whether this crew may see their own pay. Off unless the office says so. */
+  showPay?: boolean;
 }) {
   const { collapsed } = useSidebar();
   const isDesktop = useIsDesktop();
@@ -41,7 +44,7 @@ function ShellFrame({
 
   return (
     <div className="aurora relative min-h-svh">
-      <DesktopSidebar logoUrl={logoUrl} badges={badges} role={user?.role} />
+      <DesktopSidebar logoUrl={logoUrl} badges={badges} role={user?.role} showPay={showPay} />
 
       <div
         className="relative z-10 flex min-h-svh flex-col"
@@ -63,12 +66,15 @@ export function AppShell({
   logoUrl,
   badges,
   notifications,
+  showPay,
 }: {
   children: React.ReactNode;
   user: CurrentUser | null;
   logoUrl?: string | null;
   badges?: Record<string, number>;
   notifications?: AppNotification[];
+  /** Whether this crew may see their own pay. Off unless the office says so. */
+  showPay?: boolean;
 }) {
   const pathname = usePathname();
 
@@ -86,7 +92,9 @@ export function AppShell({
     <TooltipProvider delayDuration={300} skipDelayDuration={200}>
       <SidebarProvider>
         <CommandMenuProvider role={user?.role}>
-          <ShellFrame user={user} logoUrl={logoUrl} badges={badges} notifications={notifications}>{children}</ShellFrame>
+          <ShellFrame user={user} logoUrl={logoUrl} badges={badges} notifications={notifications}
+        showPay={showPay}
+      >{children}</ShellFrame>
         </CommandMenuProvider>
       </SidebarProvider>
     </TooltipProvider>

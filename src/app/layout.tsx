@@ -3,6 +3,7 @@ import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 
 import "./globals.css";
+import { prisma } from "@/lib/prisma";
 import { AppShell } from "@/components/layout/app-shell";
 import { getCurrentUser } from "@/lib/auth";
 import { getNavBadges, getOrganizationLogo , getNotifications } from "@/data/queries";
@@ -36,6 +37,20 @@ export default async function RootLayout({
     getNotifications(),
   ]);
 
+  // Whether this crew may see their own pay. Off unless the office has
+  // turned it on — several owners have their own people fill in the
+  // billing and would rather no rate card was in front of them.
+  const showPay = user?.subcontractorId
+    ? Boolean(
+        (
+          await prisma.subcontractor.findUnique({
+            where: { id: user.subcontractorId },
+            select: { showPayToCrew: true },
+          })
+        )?.showPayToCrew,
+      )
+    : true;
+
   return (
     <html
       lang="en"
@@ -51,7 +66,13 @@ export default async function RootLayout({
         />
       </head>
       <body className="min-h-svh bg-background font-sans antialiased">
-        <AppShell user={user} logoUrl={logoUrl} badges={badges} notifications={notifications}>
+        <AppShell
+          user={user}
+          logoUrl={logoUrl}
+          badges={badges}
+          notifications={notifications}
+          showPay={showPay}
+        >
           {children}
         </AppShell>
       </body>

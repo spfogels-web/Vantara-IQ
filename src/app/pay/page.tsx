@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { getMySubInvoices } from "@/data/queries";
+import { prisma } from "@/lib/prisma";
 import { getCurrentUser, isStaff } from "@/lib/auth";
 import { PageShell } from "@/components/common/page-shell";
 import { PayStatements } from "@/components/subcontractors/pay-statements";
@@ -20,6 +21,16 @@ export default async function PayPage() {
   if (!me) redirect("/login");
   if (isStaff(me.role)) redirect("/invoicing");
   if (!me.subcontractorId) redirect("/dailies");
+
+  // Hiding the nav item is decoration — typing the URL is the real test.
+  // Several owners have their own people fill in the billing and do not
+  // want a rate card in front of them, so this is off unless the office
+  // has turned it on for that crew.
+  const crew = await prisma.subcontractor.findUnique({
+    where: { id: me.subcontractorId },
+    select: { showPayToCrew: true },
+  });
+  if (!crew?.showPayToCrew) redirect("/dailies");
 
   const invoices = await getMySubInvoices();
 
