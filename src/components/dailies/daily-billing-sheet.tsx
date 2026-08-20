@@ -270,6 +270,7 @@ function Field({
   type = "text",
   className,
   inputClassName,
+  required,
 }: {
   label: string;
   value: string;
@@ -277,11 +278,37 @@ function Field({
   type?: string;
   className?: string;
   inputClassName?: string;
+  /**
+   * Must be filled before the sheet can be submitted.
+   *
+   * A blank sheet prefills nothing, so a crew is looking at a grid of empty
+   * boxes with no clue which ones Globe will reject it for. Highlighted while
+   * empty, plain the moment it is filled — and never highlighted on paper,
+   * because a printed form with amber boxes on it looks like a mistake rather
+   * than a form.
+   */
+  required?: boolean;
 }) {
+  const missing = required && !value.trim();
+
   return (
-    <label className={cn("flex min-w-0 flex-col border-r border-b border-border last:border-r-0", className)}>
-      <span className="truncate px-1.5 pt-1 text-[8px] font-semibold uppercase leading-tight tracking-[0.06em] text-muted-foreground print:text-[6.5px]">
+    <label
+      className={cn(
+        "flex min-w-0 flex-col border-r border-b border-border last:border-r-0",
+        // print: strips it back to the paper form. Same on the PDF, which is
+        // drawn server-side and never sees these classes at all.
+        missing && "bg-warning/[0.13] ring-1 ring-inset ring-warning/55 print:bg-transparent print:ring-0",
+        className,
+      )}
+    >
+      <span
+        className={cn(
+          "truncate px-1.5 pt-1 text-[8px] font-semibold uppercase leading-tight tracking-[0.06em] print:text-[6.5px]",
+          missing ? "text-warning print:text-muted-foreground" : "text-muted-foreground",
+        )}
+      >
         {label}
+        {missing ? <span className="ml-1 print:hidden">— required</span> : null}
       </span>
       <input
         type={type}
@@ -515,8 +542,36 @@ export function DailyBillingSheet({
     setSaving(false);
   }
 
+  /**
+   * The header fields Globe rejects a sheet for.
+   *
+   * Named here as well as highlighted on the form, because a crew scrolled to
+   * the bottom cannot see an amber box at the top — the highlight says which,
+   * this says whether.
+   */
+  const missingHeader = React.useMemo(() => {
+    const need: [string, string][] = [
+      ["Exchange / work order number", header.exchange],
+      ["Customer name", header.customer],
+      ["Work order title / job name", header.jobName],
+      ["Date work performed", header.dateWorked],
+      ["Project number", header.projectNumber],
+      ["Subcontractor employee name", header.employees[1] ?? ""],
+    ];
+    return need.filter(([, v]) => !v.trim()).map(([label]) => label);
+  }, [header]);
+
   async function submit() {
     if (saving || submitting) return;
+
+    if (missingHeader.length > 0) {
+      setSaveError(
+        `Fill these in before submitting: ${missingHeader.join(", ")}. They're highlighted at the top of the sheet.`,
+      );
+      // Take them to it rather than leaving them to hunt.
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
     setSubmitting(true);
     setSaveError(null);
     const res = await submitDailySheet(payload());
@@ -846,6 +901,7 @@ export function DailyBillingSheet({
             <div className="grid grid-cols-[1.2fr_1fr_1.4fr_1.4fr] border-b-0">
               <Field
                 label="Exchange / Work Order Number"
+                required
                 value={header.exchange}
                 onChange={(v) => set("exchange", v)}
               />
@@ -854,9 +910,15 @@ export function DailyBillingSheet({
                 value={header.crewNumber}
                 onChange={(v) => set("crewNumber", v)}
               />
-              <Field label="Customer Name" value={header.customer} onChange={(v) => set("customer", v)} />
+              <Field
+                label="Customer Name"
+                required
+                value={header.customer}
+                onChange={(v) => set("customer", v)}
+              />
               <Field
                 label="Work Order Title / Job Name"
+                required
                 value={header.jobName}
                 onChange={(v) => set("jobName", v)}
                 className="border-r-0"
@@ -866,12 +928,14 @@ export function DailyBillingSheet({
             <div className="grid grid-cols-[1.2fr_1fr_1.4fr_1.4fr]">
               <Field
                 label="Date Work Performed"
+                required
                 type="date"
                 value={header.dateWorked}
                 onChange={(v) => set("dateWorked", v)}
               />
               <Field
                 label="Project Number"
+                required
                 value={header.projectNumber}
                 onChange={(v) => set("projectNumber", v)}
               />
@@ -930,6 +994,7 @@ export function DailyBillingSheet({
               />
               <Field
                 label="Subcontractor Employee Name"
+                required
                 value={header.employees[1]}
                 onChange={(v) =>
                   set("employees", header.employees.map((e, i) => (i === 1 ? v : e)))
