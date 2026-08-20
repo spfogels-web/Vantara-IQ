@@ -1782,6 +1782,8 @@ export type SheetPayload = {
   redlines: unknown;
   notes?: string;
   photos?: unknown;
+  /** The crew’s own marked-up print, photographed or scanned. */
+  redlineFiles?: unknown;
   /** Staff only: the crew this sheet is being typed up for. */
   filedForId?: string | null;
 };
@@ -1831,6 +1833,7 @@ export async function saveDailySheet(input: SheetPayload) {
     redlines: asJson(input.redlines),
     notes: input.notes ?? "",
     photos: asJson(input.photos ?? []),
+    redlineFiles: asJson(input.redlineFiles ?? []),
     // Only staff may say who a sheet is for. A subcontractor filing their own
     // is identified by their login, and letting the form carry a crew id would
     // let one company file production against another.

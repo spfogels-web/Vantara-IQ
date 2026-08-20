@@ -198,6 +198,12 @@ model DailySheet {
   /// Material-only section.
   matCodes   Json           @default("[]")
   matRows    Json           @default("[]")
+  /// The crew's own marked-up print, photographed or scanned. Distinct from
+  /// `redlines` below: that is what somebody drew on the map in this app,
+  /// this is the paper that came off the truck with the footages between peds
+  /// written on it. It is the as-built record Globe asks for, and the thing
+  /// that proves a quantity six months after the ground closed over it.
+  redlineFiles Json     @default("[]")
   /// As-built redline drawn over the project map for this day's work.
   redlines   Json           @default("[]")
   /// Free-text notes from the crew — conditions, delays, anything the grid

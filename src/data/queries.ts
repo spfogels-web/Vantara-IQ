@@ -1798,6 +1798,7 @@ export interface SavedDailySheet {
   matCodes: unknown;
   matRows: unknown;
   redlines: unknown;
+  redlineFiles: unknown;
   updatedAt: string;
 }
 
@@ -1816,6 +1817,7 @@ function toSavedSheet(r: {
   matCodes: unknown;
   matRows: unknown;
   redlines: unknown;
+  redlineFiles: unknown;
   updatedAt: Date;
 }): SavedDailySheet {
   return { ...r, updatedAt: r.updatedAt.toISOString() };
