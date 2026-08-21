@@ -6,6 +6,8 @@ import {
   ImagePlus,
   Square,
   Type,
+  MousePointer2,
+  Copy,
   Eraser,
   Loader2,
   Redo2,
@@ -145,7 +147,16 @@ export type Shape =
   | TextShape
   | ImageShape;
 
-type Tool = "line" | "arrow" | "free" | "rect" | "dot" | "text" | "image" | "erase";
+type Tool =
+  | "select"
+  | "line"
+  | "arrow"
+  | "free"
+  | "rect"
+  | "dot"
+  | "text"
+  | "image"
+  | "erase";
 type Page = { width: number; height: number; src: string };
 
 const COLORS = ["#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#111827", "#ffffff"];
@@ -157,6 +168,26 @@ function uid() {
     return crypto.randomUUID();
   } catch {
     return `s_${performance.now()}_${Math.round(performance.now() * 1000) % 100000}`;
+  }
+}
+
+/**
+ * Shift a mark by a delta, whatever shape it is.
+ *
+ * Every type stores its position differently — endpoints, a corner, a box, a
+ * path — so moving one is the only place that has to know about all of them.
+ * Keeping it here means selection and duplication both stay ignorant of it.
+ */
+function translate<T extends Shape>(shape: T, dx: number, dy: number): T {
+  switch (shape.type) {
+    case "line":
+    case "arrow":
+    case "rect":
+      return { ...shape, x1: shape.x1 + dx, y1: shape.y1 + dy, x2: shape.x2 + dx, y2: shape.y2 + dy };
+    case "free":
+      return { ...shape, pts: shape.pts.map((p) => ({ x: p.x + dx, y: p.y + dy })) };
+    default:
+      return { ...shape, x: shape.x + dx, y: shape.y + dy };
   }
 }
 
@@ -423,6 +454,9 @@ export function MapMarkupEditor({
   const { pages, loading, loadError } = useMapPages(mapUrl, isPdf);
 
   const [tool, setTool] = React.useState<Tool>("line");
+  const [picked, setPicked] = React.useState<string | null>(null);
+  /** Where the pointer went down, so a drag moves by the delta since. */
+  const dragFrom = React.useRef<{ x: number; y: number } | null>(null);
   const [color, setColor] = React.useState(COLORS[0]);
   const [size, setSize] = React.useState(SIZES[1]);
   const [scale, setScale] = React.useState(1);
@@ -499,6 +533,12 @@ export function MapMarkupEditor({
       commit([...shapes, { id: uid(), type: "dot", page, x, y, color, size }]);
       return;
     }
+    if (tool === "select") {
+      const i = hitTest(page, x, y);
+      setPicked(i >= 0 ? shapes[i].id : null);
+      dragFrom.current = i >= 0 ? { x, y } : null;
+      return;
+    }
     if (tool === "erase") {
       eraseAt(page, x, y);
       return;
@@ -542,6 +582,21 @@ export function MapMarkupEditor({
   }
 
   function onMove(e: React.PointerEvent<SVGSVGElement>) {
+    // Moving a selected mark. Live, so it follows the finger rather than
+    // jumping when you let go.
+    if (tool === "select" && picked && dragFrom.current) {
+      const { x, y } = pointOnPage(e);
+      const dx = x - dragFrom.current.x;
+      const dy = y - dragFrom.current.y;
+      if (dx || dy) {
+        dragFrom.current = { x, y };
+        setShapes((prev) =>
+          prev.map((sh) => (sh.id === picked ? translate(sh, dx, dy) : sh)),
+        );
+      }
+      return;
+    }
+
     const d = draft;
     if (!d) return;
     const { x, y } = pointOnPage(e);
@@ -563,6 +618,14 @@ export function MapMarkupEditor({
   }
 
   function onUp() {
+    if (tool === "select" && dragFrom.current) {
+      // One history entry for the whole drag, so undo steps back to where
+      // the mark started rather than unwinding it a pixel at a time.
+      dragFrom.current = null;
+      commit(shapes);
+      return;
+    }
+
     const d = draft;
     if (!d) return;
 
@@ -630,7 +693,14 @@ export function MapMarkupEditor({
    * Newest first, because the thing somebody wants gone is almost always the
    * thing they just drew — and on a busy print several shapes overlap.
    */
-  function eraseAt(page: number, x: number, y: number) {
+  /**
+   * The index of the topmost mark under a point, or -1.
+   *
+   * Shared by the eraser and by selection so the two can never disagree
+   * about what you just clicked — an eraser that hits a shape the selector
+   * misses is a mark you can delete but not move.
+   */
+  function hitTest(page: number, x: number, y: number): number {
     const tol = 0.012 + size / 2000;
     for (let i = shapes.length - 1; i >= 0; i--) {
       const s = shapes[i];
@@ -662,11 +732,31 @@ export function MapMarkupEditor({
         hit = x >= s.x - tol && x <= s.x + w + tol && y >= s.y - h - tol && y <= s.y + tol;
       }
 
-      if (hit) {
-        commit(shapes.filter((_, idx) => idx !== i));
-        return;
-      }
+      if (hit) return i;
     }
+    return -1;
+  }
+
+  /** Copy the selected mark, offset a little so it is visibly a second one. */
+  function duplicatePicked() {
+    const sh = shapes.find((x) => x.id === picked);
+    if (!sh) return;
+    const copy = { ...translate(sh, 0.015, 0.015), id: uid() };
+    commit([...shapes, copy]);
+    // Select the copy, so a second press makes a third rather than
+    // re-copying the original on top of itself.
+    setPicked(copy.id);
+  }
+
+  function deletePicked() {
+    if (!picked) return;
+    commit(shapes.filter((x) => x.id !== picked));
+    setPicked(null);
+  }
+
+  function eraseAt(page: number, x: number, y: number) {
+    const i = hitTest(page, x, y);
+    if (i >= 0) commit(shapes.filter((_, idx) => idx !== i));
   }
 
   async function save() {
@@ -694,6 +784,14 @@ export function MapMarkupEditor({
 
         <div className="mx-1 h-5 w-px bg-white/10" />
 
+        {/* First, because it is what you reach for to fix something rather
+            than to make something. */}
+        <ToolBtn
+          active={tool === "select"}
+          onClick={() => setTool("select")}
+          icon={<MousePointer2 className="size-4" />}
+          label="Select"
+        />
         <ToolBtn active={tool === "line"} onClick={() => setTool("line")} icon={<Slash className="size-4" />} label="Line" />
         {/* The most-used mark on a redlined print: a note and an arrow to
             the thing it is about. */}
@@ -723,6 +821,26 @@ export function MapMarkupEditor({
           label={uploading ? "Uploading" : "Photo"}
         />
         <ToolBtn active={tool === "erase"} onClick={() => setTool("erase")} icon={<Eraser className="size-4" />} label="Erase" />
+
+        {/* Only while a mark is picked — buttons that do nothing most of the
+            time teach people to ignore that part of the bar. */}
+        {picked ? (
+          <>
+            <div className="mx-1 h-5 w-px bg-white/10" />
+            <ToolBtn
+              active={false}
+              onClick={duplicatePicked}
+              icon={<Copy className="size-4" />}
+              label="Duplicate"
+            />
+            <ToolBtn
+              active={false}
+              onClick={deletePicked}
+              icon={<Trash2 className="size-4" />}
+              label="Delete"
+            />
+          </>
+        ) : null}
 
         <input
           ref={imageInputRef}
@@ -849,13 +967,17 @@ export function MapMarkupEditor({
                           // The cursor is the only thing telling somebody which
                           // tool is live once their eyes are on the print.
                           cursor:
-                            tool === "erase"
-                              ? "cell"
-                              : tool === "text"
-                                ? "text"
-                                : tool === "image" && !pendingImage
-                                  ? "not-allowed"
-                                  : "crosshair",
+                            tool === "select"
+                              ? picked
+                                ? "move"
+                                : "default"
+                              : tool === "erase"
+                                ? "cell"
+                                : tool === "text"
+                                  ? "text"
+                                  : tool === "image" && !pendingImage
+                                    ? "not-allowed"
+                                    : "crosshair",
                           touchAction: "none",
                         }}
                         onPointerDown={(e) => onDown(pi, e)}
@@ -863,7 +985,26 @@ export function MapMarkupEditor({
                         onPointerUp={onUp}
                         onPointerLeave={onUp}
                       >
-                        {shapes.filter((s) => s.page === pi).map((s) => renderShape(s, vbH))}
+                        {shapes
+                          .filter((s) => s.page === pi)
+                          .map((s) => (
+                            <g
+                              key={s.id}
+                              // A halo under the picked mark. Without it you
+                              // are dragging something with no way to tell
+                              // what you grabbed.
+                              style={
+                                s.id === picked
+                                  ? {
+                                      filter:
+                                        "drop-shadow(0 0 6px #38bdf8) drop-shadow(0 0 2px #38bdf8)",
+                                    }
+                                  : undefined
+                              }
+                            >
+                              {renderShape(s, vbH)}
+                            </g>
+                          ))}
                         {/* The shape being dragged, at reduced opacity so it
                             reads as not yet committed. */}
                         {draw ? <g opacity={0.8}>{renderShape(draw, vbH, "draft")}</g> : null}
