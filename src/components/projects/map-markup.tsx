@@ -280,6 +280,17 @@ export function useMapPages(mapUrl: string, isPdf: boolean) {
             canvas.width = Math.floor(viewport.width * outputScale);
             canvas.height = Math.floor(viewport.height * outputScale);
             ctx.scale(outputScale, outputScale);
+
+            // Paint the sheet white before the PDF goes on it.
+            //
+            // A new canvas is transparent, and JPEG has no alpha channel — so
+            // every pixel the drawing does not cover encodes as black. An
+            // engineering print paints lines and text and no background, and
+            // its page is usually a little taller than the drawing, which is
+            // why maps came out with a black band along the bottom.
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, viewport.width, viewport.height);
+
             await page.render({ canvasContext: ctx, viewport }).promise;
             out.push({ width: viewport.width, height: viewport.height, src: canvas.toDataURL("image/jpeg", 0.85) });
             if (cancelled) return;

@@ -1368,42 +1368,15 @@ export function DailyBillingSheet({
               Outside the lock, like the photos: the numbers freeze when a
               sheet is filed, but the marked-up print often gets photographed
               back at the truck afterwards. */}
-          <div className="rounded-xl border border-warning/45 bg-warning/[0.06] p-3.5 print:hidden">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-[13px] font-semibold text-foreground">
-                Redlines — required with every daily
-              </p>
-              {redlineFiles.length > 0 ? (
-                <span className="inline-flex items-center gap-1 rounded-full border border-success/40 bg-success/10 px-2 py-0.5 text-[11px] font-semibold text-success">
-                  <Check className="size-3" />
-                  {redlineFiles.length} on file
-                </span>
-              ) : (
-                <span className="rounded-full border border-warning/50 bg-warning/10 px-2 py-0.5 text-[11px] font-semibold text-warning">
-                  Nothing uploaded yet
-                </span>
-              )}
-            </div>
-            <p className="mt-1.5 text-[12px] leading-relaxed text-muted-foreground">
-              Photograph or scan your marked-up print and upload it here.{" "}
-              <span className="text-foreground">
-                Mark the footage between each ped and the next
-              </span>{" "}
-              — HH8 to 2033/@6, and how many feet — along with anything set on the
-              way: handholes, pedestals, bores and where the depth changed. This is
-              the as-built record Globe asks for, and it is what proves a quantity
-              six months after the ground has closed over it. A daily without it
-              can&apos;t be approved, and what can&apos;t be approved can&apos;t be
-              billed on Friday.
-            </p>
-            <div className="mt-3">
-              <SheetPhotos
-                projectId={project?.id ?? ""}
-                photos={redlineFiles}
-                onChange={setRedlineFiles}
-              />
-            </div>
-          </div>
+          <SheetPhotos
+            projectId={project?.id ?? ""}
+            photos={redlineFiles}
+            onChange={setRedlineFiles}
+            title="Redline print"
+            hint="Mark the footage between each ped and the next — HH8 to 2033/@6, and how many feet — plus what was set on the way."
+            emptyTitle="No redline uploaded yet"
+            emptyHint="Photograph or scan your marked-up print. This is the as-built record Globe asks for, and what proves a quantity six months after the ground has closed over it."
+          />
 
           <fieldset disabled={locked} className="contents">
 

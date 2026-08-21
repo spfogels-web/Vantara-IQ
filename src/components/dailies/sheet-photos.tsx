@@ -65,10 +65,21 @@ export function SheetPhotos({
   projectId,
   photos,
   onChange,
+  title = "Field photos",
+  hint = "Peds, handholes and as-built evidence — stamped with the time and place they were taken.",
+  emptyTitle = "No photos on this daily yet",
+  emptyHint = "Photograph what you built — peds, handholes, bores, restoration. This is the evidence behind the footage you are billing, and a daily without it is the one that gets queried.",
 }: {
   projectId: string;
   photos: SheetPhoto[];
   onChange: (next: SheetPhoto[]) => void;
+  /** Reused for the redline print, which is a different document with the
+   *  same uploader — so the wording is a prop rather than baked in. Wrapping
+   *  this component in another headed box printed two headers. */
+  title?: string;
+  hint?: string;
+  emptyTitle?: string;
+  emptyHint?: string;
 }) {
   const pickRef = React.useRef<HTMLInputElement>(null);
   const shootRef = React.useRef<HTMLInputElement>(null);
@@ -126,7 +137,7 @@ export function SheetPhotos({
       >
         <div className="min-w-0">
           <p className="flex items-center gap-1.5 text-[13px] font-bold uppercase tracking-[0.08em] text-foreground print:text-[8px]">
-            Field photos
+            {title}
             <span
               aria-hidden="true"
               className="text-[16px] font-black leading-none text-warning print:text-black"
@@ -144,7 +155,7 @@ export function SheetPhotos({
             )}
           </p>
           <p className="mt-0.5 text-[12px] text-muted-foreground print:hidden">
-            Peds, handholes and as-built evidence — stamped with the time and place they were taken.
+            {hint}
           </p>
         </div>
 
@@ -201,11 +212,10 @@ export function SheetPhotos({
         >
           <Camera className="size-7 text-warning" />
           <span className="text-[14px] font-semibold text-foreground">
-            No photos on this daily yet
+            {emptyTitle}
           </span>
           <span className="max-w-sm text-[12px] text-muted-foreground">
-            Photograph what you built — peds, handholes, bores, restoration. This is the evidence
-            behind the footage you are billing, and a daily without it is the one that gets queried.
+            {emptyHint}
           </span>
           <span className="mt-1 inline-flex h-9 items-center gap-1.5 rounded-lg bg-warning px-3.5 text-[12.5px] font-semibold text-black">
             <Camera className="size-3.5" /> Take a photo now
