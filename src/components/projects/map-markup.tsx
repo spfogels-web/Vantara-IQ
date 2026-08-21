@@ -11,6 +11,7 @@ import {
   Redo2,
   Save,
   MoveUpRight,
+  PenLine,
   Slash,
   Trash2,
   Undo2,
@@ -53,6 +54,22 @@ export type ArrowShape = {
   y1: number;
   x2: number;
   y2: number;
+  color: string;
+  size: number;
+};
+/**
+ * A line drawn by hand.
+ *
+ * A bore that curves round a driveway is not two points, and forcing it into
+ * straight segments makes a crew draw four lines where they meant one stroke.
+ * Points are recorded as fractions of the page like every other shape, so it
+ * survives a zoom and a different screen.
+ */
+export type FreehandShape = {
+  id: string;
+  type: "free";
+  page: number;
+  pts: { x: number; y: number }[];
   color: string;
   size: number;
 };
@@ -122,12 +139,13 @@ export type ImageShape = {
 export type Shape =
   | LineShape
   | ArrowShape
+  | FreehandShape
   | DotShape
   | RectShape
   | TextShape
   | ImageShape;
 
-type Tool = "line" | "arrow" | "rect" | "dot" | "text" | "image" | "erase";
+type Tool = "line" | "arrow" | "free" | "rect" | "dot" | "text" | "image" | "erase";
 type Page = { width: number; height: number; src: string };
 
 const COLORS = ["#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#111827", "#ffffff"];
@@ -142,7 +160,7 @@ function uid() {
   }
 }
 
-const SHAPE_TYPES = ["line", "arrow", "dot", "rect", "text", "image"] as const;
+const SHAPE_TYPES = ["line", "arrow", "free", "dot", "rect", "text", "image"] as const;
 
 export function parseShapes(markups: unknown): Shape[] {
   if (!Array.isArray(markups)) return [];
@@ -223,6 +241,21 @@ function renderShape(s: Shape, vbH: number, key?: string) {
           />
           <polygon points={p} fill={s.color} />
         </g>
+      );
+    }
+    case "free": {
+      if (s.pts.length < 2) return null;
+      const d = s.pts.map((p) => `${p.x * 1000},${p.y * vbH}`).join(" ");
+      return (
+        <polyline
+          key={k}
+          points={d}
+          fill="none"
+          stroke={s.color}
+          strokeWidth={s.size}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       );
     }
     case "dot":
@@ -397,7 +430,9 @@ export function MapMarkupEditor({
   const [shapes, setShapes] = React.useState<Shape[]>(() => parseShapes(initialMarkups));
   const [redo, setRedo] = React.useState<Shape[]>([]);
   /** Lines, boxes and images are all dragged out, so they share one draft. */
-  const [draft, setDraft] = React.useState<LineShape | ArrowShape | RectShape | ImageShape | null>(null);
+  const [draft, setDraft] = React.useState<
+    LineShape | ArrowShape | FreehandShape | RectShape | ImageShape | null
+  >(null);
   const [saving, setSaving] = React.useState(false);
 
   /**
@@ -488,6 +523,10 @@ export function MapMarkupEditor({
       setDraft({ id: uid(), type: "rect", page, x1: x, y1: y, x2: x, y2: y, color, size });
       return;
     }
+    if (tool === "free") {
+      setDraft({ id: uid(), type: "free", page, pts: [{ x, y }], color, size });
+      return;
+    }
     // Line and arrow drag identically — only what gets drawn differs.
     setDraft({
       id: uid(),
@@ -512,6 +551,14 @@ export function MapMarkupEditor({
       setDraft({ ...d, w: Math.abs(x - d.x), h: Math.abs(y - d.y) });
       return;
     }
+    if (d.type === "free") {
+      const last = d.pts[d.pts.length - 1];
+      // Thinned: a slow hand otherwise records hundreds of points a
+      // millimetre apart, which bloats the saved shape for no visible gain.
+      if (Math.hypot(x - last.x, y - last.y) < 0.0015) return;
+      setDraft({ ...d, pts: [...d.pts, { x, y }] });
+      return;
+    }
     setDraft({ ...d, x2: x, y2: y });
   }
 
@@ -525,6 +572,12 @@ export function MapMarkupEditor({
         commit([...shapes, d]);
         setPendingImage(null);
       }
+      setDraft(null);
+      return;
+    }
+
+    if (d.type === "free") {
+      if (d.pts.length > 1) commit([...shapes, d]);
       setDraft(null);
       return;
     }
@@ -586,8 +639,17 @@ export function MapMarkupEditor({
       let hit = false;
       if (s.type === "dot") {
         hit = Math.hypot(x - s.x, y - s.y) < tol + s.size / 2000;
-      } else if (s.type === "line") {
+      } else if (s.type === "line" || s.type === "arrow") {
         hit = segDist(x, y, s.x1, s.y1, s.x2, s.y2) < tol;
+      } else if (s.type === "free") {
+        // Nearest point on any segment of the stroke. Without this an arrow
+        // or a drawn line could be made and never removed — the eraser knew
+        // about lines, boxes, dots and text, and nothing else.
+        for (let p = 1; p < s.pts.length && !hit; p++) {
+          const a = s.pts[p - 1];
+          const b = s.pts[p];
+          hit = segDist(x, y, a.x, a.y, b.x, b.y) < tol;
+        }
       } else if (s.type === "rect" || s.type === "image") {
         // Boxes catch anywhere inside them, so a photo can be removed by
         // tapping it rather than by finding its edge.
@@ -640,6 +702,14 @@ export function MapMarkupEditor({
           onClick={() => setTool("arrow")}
           icon={<MoveUpRight className="size-4" />}
           label="Arrow"
+        />
+        {/* For a run that curves — a bore round a driveway is one stroke,
+            not four straight segments. */}
+        <ToolBtn
+          active={tool === "free"}
+          onClick={() => setTool("free")}
+          icon={<PenLine className="size-4" />}
+          label="Draw"
         />
         {/* Boxes are how a handhole gets marked — the footprint, not a symbol. */}
         <ToolBtn active={tool === "rect"} onClick={() => setTool("rect")} icon={<Square className="size-4" />} label="Box" />
