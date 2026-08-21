@@ -1487,10 +1487,26 @@ export async function getDailies(): Promise<DailyReport[]> {
   // use every day. So the customer-rate total is replaced by their own, and the
   // spread is dropped rather than nulled at the component.
   if (allowed !== null) {
+    // And most crews see no figure at all. One login serves a whole company,
+    // and it is the foreman filing dailies who uses it — owners asked for
+    // their pay off a screen their field staff carry. Where the office has
+    // opened pay for a crew, they see what they earned; otherwise the money
+    // is not sent, and the row that renders it does not appear.
+    const showPay = user.subcontractorId
+      ? Boolean(
+          (
+            await prisma.subcontractor.findUnique({
+              where: { id: user.subcontractorId },
+              select: { showPayToCrew: true },
+            })
+          )?.showPayToCrew,
+        )
+      : false;
+
     return rows.map((r, i) =>
       toDaily(r, {
-        billableAmount: priced[i].subCost ?? 0,
-        subCost: priced[i].subCost,
+        billableAmount: showPay ? (priced[i].subCost ?? 0) : 0,
+        subCost: showPay ? priced[i].subCost : null,
         grossMargin: null,
         unpricedCodes: 0,
       }),
