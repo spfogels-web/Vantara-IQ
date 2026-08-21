@@ -59,8 +59,30 @@ export function DailiesView({
     initialId && dailies.some((d) => d.id === initialId) ? initialId : dailies[0]?.id ?? null,
   );
 
-  const filtered = filter === "All" ? items : items.filter((d) => d.status === filter);
-  const selected = items.find((d) => d.id === selectedId) ?? filtered[0] ?? null;
+  const [crew, setCrew] = React.useState("All crews");
+
+  // Built from the dailies rather than the roster, so the list only ever
+  // offers crews who have actually filed something — picking a name and
+  // getting an empty list is worse than not offering it.
+  const crews = React.useMemo(() => {
+    const seen = new Set<string>();
+    for (const d of items) {
+      const who = (d.subcontractor || d.crew || "").trim();
+      if (who) seen.add(who);
+    }
+    return [...seen].sort((a, b) => a.localeCompare(b));
+  }, [items]);
+
+  const filtered = items.filter(
+    (d) =>
+      (filter === "All" || d.status === filter) &&
+      (crew === "All crews" || (d.subcontractor || d.crew || "").trim() === crew),
+  );
+  // Look in the filtered list first. Selecting J&P's sheet and then
+  // filtering to Gulf used to leave J&P's day open on the right, which
+  // reads as the filter having done nothing.
+  const selected =
+    filtered.find((d) => d.id === selectedId) ?? filtered[0] ?? null;
 
   function setStatus(id: string, status: DailyStatus, tone: DailyReport["tone"]) {
     setItems((prev) => prev.map((d) => (d.id === id ? { ...d, status, tone } : d)));
@@ -93,6 +115,30 @@ export function DailiesView({
                 {f}
               </button>
             ))}
+
+            {/* Whose day it is. A crew name is the thing you scan this list
+                for when a foreman rings about a sheet, and twenty-one rows
+                is already past what anyone reads down. */}
+            {crews.length > 1 ? (
+              <select
+                value={crew}
+                onChange={(e) => setCrew(e.target.value)}
+                aria-label="Filter by crew"
+                className={cn(
+                  "focus-ring ml-auto h-[26px] max-w-[190px] cursor-pointer rounded-full px-2.5 text-[11.5px] font-medium outline-none transition-colors",
+                  crew === "All crews"
+                    ? "bg-foreground/[0.04] text-muted-foreground hover:text-foreground"
+                    : "bg-brand text-white",
+                )}
+              >
+                <option>All crews</option>
+                {crews.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            ) : null}
           </div>
 
           <ul className="max-h-[68vh] flex-1 overflow-y-auto p-1.5">
