@@ -5852,3 +5852,35 @@ export async function setCrewPayVisibility(subcontractorId: string, show: boolea
   revalidatePath("/subcontractors");
   return { ok: true as const, show };
 }
+
+/**
+ * Whether a crew's login may see the owner's own paperwork.
+ *
+ * A foreman entering dailies signs in with the company account, so the EIN,
+ * the bank details, the signatory and the home address are all sitting behind
+ * the same password as the daily sheet. Off by default; the office opens it
+ * when an owner needs to change something.
+ *
+ * Documents and badges are never hidden by this — a crew still has to be able
+ * to put a certificate up.
+ */
+export async function setCrewOwnerDetailsVisibility(subcontractorId: string, show: boolean) {
+  const actor = await requireStaff();
+
+  const sub = await prisma.subcontractor.update({
+    where: { id: subcontractorId },
+    data: { showOwnerDetailsToCrew: show },
+    select: { company: true },
+  });
+
+  await notifyStaff({
+    title: `Company details ${show ? "opened" : "hidden"} for ${sub.company.trim()}`,
+    detail: `${actor.name || "An administrator"} ${show ? "opened" : "hid"} the vendor packet and banking on this crew's own login.`,
+    category: "crew",
+    tone: "info",
+  });
+
+  revalidatePath("/subcontractors");
+  revalidatePath("/company");
+  return { ok: true as const, show };
+}

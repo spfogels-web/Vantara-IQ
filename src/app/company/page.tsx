@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getCrewBadges, getDocuments, getVendorPacket } from "@/data/queries";
 import { getAchAuthorization, listSubDocuments } from "@/app/actions";
 import { getCurrentUser } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import { FileUp } from "lucide-react";
 
 import { PageShell } from "@/components/common/page-shell";
@@ -37,6 +38,17 @@ export default async function CompanyProfilePage() {
     listSubDocuments(me.subcontractorId),
   ]);
   if (!packet) redirect("/dailies");
+
+  // Whether the owner's own paperwork is shown at all. Off by default: a
+  // foreman entering dailies signs in with the company account, and the
+  // EIN, the bank details, the signatory and the home address are none of
+  // his business. Documents and badges stay, so he can still put a
+  // certificate up without ringing anyone.
+  const crew = await prisma.subcontractor.findUnique({
+    where: { id: me.subcontractorId },
+    select: { showOwnerDetailsToCrew: true },
+  });
+  const showOwnerDetails = Boolean(crew?.showOwnerDetailsToCrew);
 
   return (
     <PageShell
@@ -83,11 +95,33 @@ export default async function CompanyProfilePage() {
           canReview={false}
         />
 
-        {/* How they get paid. Above the general packet because it is the
-            thing a crew chases, and it is the thing that holds up a payment. */}
-        <AchForm subcontractorId={me.subcontractorId} existing={ach} existingProof={ach?.proofFileName} />
-
-        <VendorPacketForm packet={packet} />
+        {/* How they get paid, and the owner's own paperwork. Both hidden
+            unless the office has opened them for this crew. */}
+        {showOwnerDetails ? (
+          <>
+            <AchForm
+              subcontractorId={me.subcontractorId}
+              existing={ach}
+              existingProof={ach?.proofFileName}
+            />
+            <VendorPacketForm packet={packet} />
+          </>
+        ) : (
+          <Panel>
+            <PanelBody>
+              <p className="text-[13px] font-semibold text-foreground">
+                Company details and banking are hidden
+              </p>
+              <p className="mt-1 text-[12.5px] leading-relaxed text-muted-foreground">
+                Your EIN, bank details, signatory and addresses are on file with
+                Fortitude and are not shown here — this login is used in the field,
+                and none of that needs to be on a phone in a truck. Documents and
+                badges above still work. If the owner needs to change any of it,
+                call the office on (864) 365-1521 and we&rsquo;ll open it up.
+              </p>
+            </PanelBody>
+          </Panel>
+        )}
       </div>
     </PageShell>
   );

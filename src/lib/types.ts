@@ -320,6 +320,8 @@ export interface Subcontractor {
   assignedProjects: AssignedProject[];
   /** Whether this crew may see their own pay statements in their portal. */
   showPayToCrew: boolean;
+  /** Whether their login may see the owner’s EIN, banking and signatory. */
+  showOwnerDetailsToCrew: boolean;
   compliance: ComplianceDoc[];
   complianceTone: Tone;
   scorecard: SubScorecard;
