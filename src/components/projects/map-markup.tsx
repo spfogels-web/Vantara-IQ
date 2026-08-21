@@ -10,6 +10,7 @@ import {
   Loader2,
   Redo2,
   Save,
+  MoveUpRight,
   Slash,
   Trash2,
   Undo2,
@@ -27,6 +28,26 @@ import { saveProjectMarkups } from "@/app/actions";
 export type LineShape = {
   id: string;
   type: "line";
+  page: number;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  color: string;
+  size: number;
+};
+/**
+ * A line with a head on it.
+ *
+ * The most-used mark on a redlined print by a distance: every callout on a
+ * marked-up sheet is an arrow from a note to the thing it is about. Same
+ * fields as a line, drawn the same way — the head is put on at render, and
+ * scaled with the stroke so a thick arrow gets a proportionate point rather
+ * than a pin on a rope.
+ */
+export type ArrowShape = {
+  id: string;
+  type: "arrow";
   page: number;
   x1: number;
   y1: number;
@@ -98,9 +119,15 @@ export type ImageShape = {
   url: string;
 };
 
-export type Shape = LineShape | DotShape | RectShape | TextShape | ImageShape;
+export type Shape =
+  | LineShape
+  | ArrowShape
+  | DotShape
+  | RectShape
+  | TextShape
+  | ImageShape;
 
-type Tool = "line" | "rect" | "dot" | "text" | "image" | "erase";
+type Tool = "line" | "arrow" | "rect" | "dot" | "text" | "image" | "erase";
 type Page = { width: number; height: number; src: string };
 
 const COLORS = ["#ef4444", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#111827", "#ffffff"];
@@ -115,7 +142,7 @@ function uid() {
   }
 }
 
-const SHAPE_TYPES = ["line", "dot", "rect", "text", "image"] as const;
+const SHAPE_TYPES = ["line", "arrow", "dot", "rect", "text", "image"] as const;
 
 export function parseShapes(markups: unknown): Shape[] {
   if (!Array.isArray(markups)) return [];
@@ -167,6 +194,37 @@ function renderShape(s: Shape, vbH: number, key?: string) {
           strokeLinecap="round"
         />
       );
+    case "arrow": {
+      const x1 = s.x1 * 1000;
+      const y1 = s.y1 * vbH;
+      const x2 = s.x2 * 1000;
+      const y2 = s.y2 * vbH;
+      const angle = Math.atan2(y2 - y1, x2 - x1);
+      // Head scales with the stroke, so a thick arrow gets a proportionate
+      // point instead of a pin on the end of a rope.
+      // Shaft stops short of the tip so it cannot poke through the head.
+      const head = Math.max(10, s.size * 4);
+      const spread = 0.42;
+      const p = [
+        `${x2},${y2}`,
+        `${x2 - head * Math.cos(angle - spread)},${y2 - head * Math.sin(angle - spread)}`,
+        `${x2 - head * Math.cos(angle + spread)},${y2 - head * Math.sin(angle + spread)}`,
+      ].join(" ");
+      return (
+        <g key={k}>
+          <line
+            x1={x1}
+            y1={y1}
+            x2={x2 - head * 0.7 * Math.cos(angle)}
+            y2={y2 - head * 0.7 * Math.sin(angle)}
+            stroke={s.color}
+            strokeWidth={s.size}
+            strokeLinecap="round"
+          />
+          <polygon points={p} fill={s.color} />
+        </g>
+      );
+    }
     case "dot":
       return <circle key={k} cx={s.x * 1000} cy={s.y * vbH} r={s.size} fill={s.color} />;
     case "rect": {
@@ -339,7 +397,7 @@ export function MapMarkupEditor({
   const [shapes, setShapes] = React.useState<Shape[]>(() => parseShapes(initialMarkups));
   const [redo, setRedo] = React.useState<Shape[]>([]);
   /** Lines, boxes and images are all dragged out, so they share one draft. */
-  const [draft, setDraft] = React.useState<LineShape | RectShape | ImageShape | null>(null);
+  const [draft, setDraft] = React.useState<LineShape | ArrowShape | RectShape | ImageShape | null>(null);
   const [saving, setSaving] = React.useState(false);
 
   /**
@@ -430,7 +488,18 @@ export function MapMarkupEditor({
       setDraft({ id: uid(), type: "rect", page, x1: x, y1: y, x2: x, y2: y, color, size });
       return;
     }
-    setDraft({ id: uid(), type: "line", page, x1: x, y1: y, x2: x, y2: y, color, size });
+    // Line and arrow drag identically — only what gets drawn differs.
+    setDraft({
+      id: uid(),
+      type: tool === "arrow" ? "arrow" : "line",
+      page,
+      x1: x,
+      y1: y,
+      x2: x,
+      y2: y,
+      color,
+      size,
+    });
   }
 
   function onMove(e: React.PointerEvent<SVGSVGElement>) {
@@ -564,6 +633,14 @@ export function MapMarkupEditor({
         <div className="mx-1 h-5 w-px bg-white/10" />
 
         <ToolBtn active={tool === "line"} onClick={() => setTool("line")} icon={<Slash className="size-4" />} label="Line" />
+        {/* The most-used mark on a redlined print: a note and an arrow to
+            the thing it is about. */}
+        <ToolBtn
+          active={tool === "arrow"}
+          onClick={() => setTool("arrow")}
+          icon={<MoveUpRight className="size-4" />}
+          label="Arrow"
+        />
         {/* Boxes are how a handhole gets marked — the footprint, not a symbol. */}
         <ToolBtn active={tool === "rect"} onClick={() => setTool("rect")} icon={<Square className="size-4" />} label="Box" />
         <ToolBtn active={tool === "dot"} onClick={() => setTool("dot")} icon={<Circle className="size-4" />} label="Dot" />
