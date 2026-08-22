@@ -1922,31 +1922,46 @@ export async function submitDailySheet(input: SheetPayload) {
     filedBy = filedFor?.company ?? "Fortitude Self-Perform";
   }
 
-  const daily = await prisma.daily.create({
-    data: {
-      sheetNumber: str("exchange") || str("projectNumber"),
-      projectId: sheet.projectId,
-      projectName: sheet.projectName,
-      subcontractor: filedBy,
-      customer: str("customer"),
-      crew: sheet.crewNumber,
-      workDate: sheet.workDate,
-      submittedAt: new Date().toISOString(),
-      status: "Submitted",
-      tone: "info",
-      // Feet are feet. A pedestal, a ground rod and an ant-control unit are
-      // each counted in ones, and adding them to a footage total inflates the
-      // day by however many of them the crew set — which then flows into pace,
-      // percent complete and every production figure downstream. Only plow and
-      // bore advance the route, and only those are counted here.
-      totalFt: Math.round(
-        lineItems
-          .filter((l) => isLinearFootageCode(l.code))
-          .reduce((s, l) => s + l.quantity, 0),
-      ),
-      lineItems: lineItems as unknown as Prisma.InputJsonValue,
-    },
-  });
+  // Everything this day is worth, in one object, so filing it and refiling
+  // it cannot drift apart.
+  const figures = {
+    sheetNumber: str("exchange") || str("projectNumber"),
+    projectId: sheet.projectId,
+    projectName: sheet.projectName,
+    subcontractor: filedBy,
+    customer: str("customer"),
+    crew: sheet.crewNumber,
+    workDate: sheet.workDate,
+    submittedAt: new Date().toISOString(),
+    status: "Submitted",
+    tone: "info",
+    // Feet are feet. A pedestal, a ground rod and an ant-control unit are
+    // each counted in ones, and adding them to a footage total inflates the
+    // day by however many of them the crew set — which then flows into pace,
+    // percent complete and every production figure downstream. Only plow and
+    // bore advance the route, and only those are counted here.
+    totalFt: Math.round(
+      lineItems
+        .filter((l) => isLinearFootageCode(l.code))
+        .reduce((s, l) => s + l.quantity, 0),
+    ),
+    lineItems: lineItems as unknown as Prisma.InputJsonValue,
+  };
+
+  // A sheet that has been filed before updates the day it made rather than
+  // filing a second one.
+  //
+  // It used to create unconditionally, so correcting a daily and submitting
+  // it again left the original sitting there and added a duplicate beside
+  // it. One Charles Hart day ended up on the board five times, all 1,372 ft,
+  // and the only way to tell which was current was the timestamp.
+  const existing = sheet.dailyId
+    ? await prisma.daily.findUnique({ where: { id: sheet.dailyId }, select: { id: true } })
+    : null;
+
+  const daily = existing
+    ? await prisma.daily.update({ where: { id: existing.id }, data: figures })
+    : await prisma.daily.create({ data: figures });
 
   await prisma.dailySheet.update({
     where: { id: sheet.id },
