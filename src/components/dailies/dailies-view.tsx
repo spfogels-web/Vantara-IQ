@@ -435,22 +435,30 @@ function DailyDetail({
           reviewing — the line items below are a summary of it, not the thing
           the crew filled in. */}
       {sheet ? (
-        <Panel>
-          <PanelBody className="flex flex-wrap items-center justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-[13px] font-medium text-foreground">Globe billing sheet</p>
-              <p className="mt-0.5 text-[12px] text-muted-foreground">
-                The filled-in form and the day&apos;s redlined map, as submitted.
-              </p>
-            </div>
-            <Link
-              href={`/dailies/sheet/${sheet.projectId}?sheet=${sheet.sheetId}`}
-              className="focus-ring inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-brand px-3.5 text-[12.5px] font-semibold text-white hover:bg-brand-bright"
-            >
-              <FileText className="size-4" /> Open billing sheet
-            </Link>
-          </PanelBody>
-        </Panel>
+        /* The whole panel is the link, not just the button on the end of it.
+           On a narrow window the button sat off the right edge and the sheet
+           was unreachable — a target you cannot hit is the same as no target,
+           and this is the thing you open to check a day before approving it. */
+        <Link
+          href={`/dailies/sheet/${sheet.projectId}?sheet=${sheet.sheetId}`}
+          className="focus-ring block rounded-2xl transition hover:brightness-110"
+        >
+          <Panel>
+            <PanelBody className="flex flex-wrap items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[13px] font-medium text-foreground">Globe billing sheet</p>
+                <p className="mt-0.5 text-[12px] text-muted-foreground">
+                  The filled-in form and the day&apos;s redlined map, as submitted.
+                </p>
+              </div>
+              <span
+                className="inline-flex h-9 w-full shrink-0 items-center justify-center gap-1.5 rounded-lg bg-brand px-3.5 text-[12.5px] font-semibold text-white sm:w-auto"
+              >
+                <FileText className="size-4" /> Open billing sheet
+              </span>
+            </PanelBody>
+          </Panel>
+        </Link>
       ) : null}
 
       {/* Line items — the digital daily */}
