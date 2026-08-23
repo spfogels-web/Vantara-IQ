@@ -60,6 +60,7 @@ export function DailiesView({
   );
 
   const [crew, setCrew] = React.useState("All crews");
+  const [job, setJob] = React.useState("All projects");
 
   // Built from the dailies rather than the roster, so the list only ever
   // offers crews who have actually filed something — picking a name and
@@ -73,10 +74,22 @@ export function DailiesView({
     return [...seen].sort((a, b) => a.localeCompare(b));
   }, [items]);
 
+  // Same rule as the crew list: only jobs that have a daily on them, so
+  // picking one never lands on an empty column.
+  const jobs = React.useMemo(() => {
+    const seen = new Set<string>();
+    for (const d of items) {
+      const p = (d.project || "").trim();
+      if (p) seen.add(p);
+    }
+    return [...seen].sort((a, b) => a.localeCompare(b));
+  }, [items]);
+
   const filtered = items.filter(
     (d) =>
       (filter === "All" || d.status === filter) &&
-      (crew === "All crews" || (d.subcontractor || d.crew || "").trim() === crew),
+      (crew === "All crews" || (d.subcontractor || d.crew || "").trim() === crew) &&
+      (job === "All projects" || (d.project || "").trim() === job),
   );
   // Look in the filtered list first. Selecting J&P's sheet and then
   // filtering to Gulf used to leave J&P's day open on the right, which
@@ -119,13 +132,35 @@ export function DailiesView({
             {/* Whose day it is. A crew name is the thing you scan this list
                 for when a foreman rings about a sheet, and twenty-one rows
                 is already past what anyone reads down. */}
+            {jobs.length > 1 ? (
+              <select
+                value={job}
+                onChange={(e) => setJob(e.target.value)}
+                aria-label="Filter by project"
+                className={cn(
+                  "focus-ring ml-auto h-[26px] max-w-[190px] cursor-pointer rounded-full px-2.5 text-[11.5px] font-medium outline-none transition-colors",
+                  job === "All projects"
+                    ? "bg-foreground/[0.04] text-muted-foreground hover:text-foreground"
+                    : "bg-brand text-white",
+                )}
+              >
+                <option>All projects</option>
+                {jobs.map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+
             {crews.length > 1 ? (
               <select
                 value={crew}
                 onChange={(e) => setCrew(e.target.value)}
                 aria-label="Filter by crew"
                 className={cn(
-                  "focus-ring ml-auto h-[26px] max-w-[190px] cursor-pointer rounded-full px-2.5 text-[11.5px] font-medium outline-none transition-colors",
+                  "focus-ring h-[26px] max-w-[190px] cursor-pointer rounded-full px-2.5 text-[11.5px] font-medium outline-none transition-colors",
+                  jobs.length > 1 ? "" : "ml-auto",
                   crew === "All crews"
                     ? "bg-foreground/[0.04] text-muted-foreground hover:text-foreground"
                     : "bg-brand text-white",
