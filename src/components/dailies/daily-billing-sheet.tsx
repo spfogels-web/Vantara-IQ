@@ -339,6 +339,29 @@ export type SavedSheet = {
   photos?: unknown;
 };
 
+/**
+ * A saved header, coerced back into the shape the form expects.
+ *
+ * Spreading the stored JSON over a blank header let it replace `employees`
+ * with whatever was in the column — null on an old row, a short array on a
+ * sheet saved before the slot count changed. Every read of employees[n] then
+ * threw, and a throw during render is a blank page with a client-side
+ * exception rather than a missing name.
+ */
+function asHeader(stored: unknown, project?: SheetProject): SheetHeader {
+  const base = blankHeader(project);
+  const raw = (stored ?? {}) as Partial<SheetHeader>;
+  const names = Array.isArray(raw.employees) ? raw.employees : [];
+  return {
+    ...base,
+    ...raw,
+    // Always CREW_SLOTS long, always strings.
+    employees: Array.from({ length: CREW_SLOTS }, (_, i) =>
+      typeof names[i] === "string" ? names[i] : (base.employees[i] ?? ""),
+    ),
+  };
+}
+
 /** Saved JSON is untyped by the time it comes back — coerce, never trust. */
 function asStrings(v: unknown, length: number): string[] {
   const arr = Array.isArray(v) ? v : [];
@@ -411,9 +434,7 @@ export function DailyBillingSheet({
 }) {
   const [filedForId, setFiledForId] = React.useState(initialFiledForId ?? "");
   const [header, setHeader] = React.useState<SheetHeader>(() =>
-    saved?.header
-      ? { ...blankHeader(project), ...(saved.header as Partial<SheetHeader>) }
-      : blankHeader(project),
+    asHeader(saved?.header, project),
   );
   const [labor, setLabor] = React.useState<LaborRow[]>(() =>
     saved ? asLaborRows(saved.laborRows, UNIT_COLS) : Array.from({ length: LABOR_ROWS }, blankLaborRow),
