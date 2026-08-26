@@ -479,7 +479,15 @@ export function DailyBillingSheet({
    * of submitting. Staff reviewing it are not editing their own work, so the
    * lock does not apply to them; they approve or deny it instead.
    */
-  const locked = saved?.status === "SUBMITTED" && !canReview;
+  /**
+   * A filed sheet is still editable.
+   *
+   * It used to freeze on submit, so a crew who spotted their own mistake
+   * could do nothing but ring the office. The server is the one that refuses
+   * — once a day is approved or on an invoice that has gone out — so this
+   * does not have to guess, and a correction before then just saves.
+   */
+  const locked = false;
 
   const [deleting, setDeleting] = React.useState(false);
   const [confirmDelete, setConfirmDelete] = React.useState(false);
@@ -601,6 +609,32 @@ export function DailyBillingSheet({
       setSaveError(res.error);
     }
   }
+
+  /**
+   * Save as they type.
+   *
+   * A crew fills this in on a phone at the end of a day and then walks away
+   * from it. A button somebody has to find, at the top of a sheet they are
+   * typing at the bottom of, is how a day's work gets lost — and it already
+   * has. Typing is the intent to record something; it should not need
+   * confirming.
+   *
+   * Held until they stop typing, and skipped until there is a work date, so a
+   * half-filled blank sheet does not litter the list with empty drafts.
+   */
+  const autosave = React.useRef(save);
+  autosave.current = save;
+  const started = React.useRef(false);
+
+  React.useEffect(() => {
+    if (!started.current) {
+      started.current = true;
+      return;
+    }
+    if (submitting || !header.dateWorked.trim()) return;
+    const t = window.setTimeout(() => void autosave.current(), 1200);
+    return () => window.clearTimeout(t);
+  }, [header, labor, mat, laborCodes, matCodes, redlines, notes, filedForId, submitting]);
 
   const set = <K extends keyof SheetHeader>(key: K, value: SheetHeader[K]) =>
     setHeader((h) => ({ ...h, [key]: value }));
@@ -799,7 +833,7 @@ export function DailyBillingSheet({
                 className="h-8 gap-1.5 rounded-lg border border-border bg-transparent px-2.5 text-[12px] font-medium text-foreground hover:bg-foreground/[0.05] disabled:opacity-50"
               >
                 {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Save className="size-3.5" />}
-                {sheetId ? "Save draft" : "Save"}
+                {sheetId ? "Save now" : "Save"}
               </Button>
               <Button
                 type="button"
@@ -824,7 +858,8 @@ export function DailyBillingSheet({
             saveError ? "text-critical" : "text-muted-foreground",
           )}
         >
-          {saveError ?? `Draft saved ${savedAt}. Submitting turns the grid into billable line items.`}
+          {saveError ??
+            `Saved ${savedAt}. Submitting turns the grid into billable line items.`}
         </p>
       ) : null}
 

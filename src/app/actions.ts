@@ -1808,12 +1808,39 @@ export async function saveDailySheet(input: SheetPayload) {
   if (input.id) {
     const existing = await prisma.dailySheet.findUnique({
       where: { id: input.id },
-      select: { status: true },
+      select: { status: true, dailyId: true },
     });
-    if (existing?.status === "SUBMITTED") {
+
+    // A filed sheet used to be frozen outright, which meant a crew who spotted
+    // their own mistake could do nothing about it but ring the office. What
+    // actually must not move is a day that has been approved or is sitting on
+    // an invoice — before that it is a correction, not a rewrite of something
+    // somebody has already acted on.
+    const daily = existing?.dailyId
+      ? await prisma.daily.findUnique({
+          where: { id: existing.dailyId },
+          select: { status: true },
+        })
+      : null;
+
+    const invoiced = existing?.dailyId
+      ? await prisma.invoiceLine.findFirst({
+          where: { dailyId: existing.dailyId, invoice: { status: { not: "DRAFT" } } },
+          select: { invoice: { select: { number: true } } },
+        })
+      : null;
+
+    if (invoiced) {
       return {
         ok: false as const,
-        error: "This daily has been submitted. Photos can still be added, but nothing else can change.",
+        error: `This day is on ${invoiced.invoice.number}, which has gone out. Ask the office to credit it before changing anything.`,
+      };
+    }
+
+    if (daily?.status === "Approved") {
+      return {
+        ok: false as const,
+        error: "This daily has been approved. Ask the office to reopen it if something needs correcting.",
       };
     }
   }
