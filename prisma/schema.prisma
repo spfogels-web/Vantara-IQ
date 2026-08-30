@@ -1693,3 +1693,90 @@ model CrewContact {
 
   @@index([subcontractorId])
 }
+/// A physical place material is stored for a project.
+///
+/// A project can have several — a main yard and satellites — and a yard can
+/// serve more than one project, so the link between them lives on the
+/// transaction rather than being a column here.
+model Yard {
+  id            String  @id @default(cuid())
+  name          String
+  /// Scalar ids rather than Prisma relations, deliberately. Adding relation
+  /// fields means editing Project and Subcontractor, and every model touched
+  /// is a chance to break a schema that thirty other things depend on. These
+  /// carry the same information and are indexed the same way.
+  projectId     String  @default("")
+  customerId    String  @default("")
+  primeContractor String @default("")
+  state         String  @default("")
+  market        String  @default("")
+  county        String  @default("")
+  city          String  @default("")
+  address       String  @default("")
+  lat           Float?
+  lng           Float?
+  managerName   String  @default("")
+  managerPhone  String  @default("")
+  hours         String  @default("")
+  status        String  @default("ACTIVE")
+  notes         String  @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([projectId])
+  @@index([customerId])
+}
+
+/// Every movement of material, ever.
+///
+/// This is the foundation the rest of yard control stands on. ProjectMaterial
+/// holds `issued` and `installed` as plain numbers with no history: somebody
+/// changes 6,000 to 8,000 and there is no record that it happened, who did it
+/// or why. Custody, returns, remnants, transfers, variance and audit all need
+/// the inverse — a ledger these numbers are derived from rather than stored
+/// beside.
+///
+/// Nothing is ever edited here. A mistake is corrected by writing an ADJUST
+/// row with a reason, so the trail of what was believed and when survives.
+model MaterialTransaction {
+  id        String @id @default(cuid())
+
+  /// RECEIVE, ISSUE, RETURN, INSTALL, TRANSFER, ADJUST, DAMAGE, COUNT.
+  kind      String
+  /// The material this moved, by code — the same code the rate card and the
+  /// daily sheet use, so the three can be reconciled without a mapping table.
+  code      String
+  /// Positive adds to the yard, negative takes away. An ISSUE is negative, a
+  /// RETURN positive — so on-hand is the sum, and no reader has to know which
+  /// kinds count which way.
+  quantity  Float
+  unit      String @default("")
+
+  projectId String @default("")
+  yardId    String @default("")
+  /// Who holds it after this movement. Empty means the yard does.
+  custodianSubId String @default("")
+  crew           String @default("")
+  /// Reel this came off, where the material is reel-tracked.
+  reelNumber     String @default("")
+
+  /// Paperwork behind the movement.
+  reference String @default("")
+  /// Required on ADJUST. Why the number moved without material moving.
+  reason    String @default("")
+  photos    Json   @default("[]")
+
+  /// Who did it, and who signed for it.
+  actorUserId  String @default("")
+  receivedBy   String @default("")
+  signatureUrl String @default("")
+
+  at        DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  @@index([projectId, code])
+  @@index([yardId])
+  @@index([reelNumber])
+  @@index([custodianSubId])
+  @@index([at])
+}
