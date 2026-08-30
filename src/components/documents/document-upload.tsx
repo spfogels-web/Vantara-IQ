@@ -120,7 +120,7 @@ export function DocumentUpload({
   }
 
   return (
-    <Panel>
+    <Panel id="upload" className="scroll-mt-20">
       <PanelHeader
         title="Upload documents"
         description="Contracts, agreements, insurance, W-9s — anything you already hold on paper"

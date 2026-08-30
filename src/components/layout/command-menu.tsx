@@ -4,10 +4,6 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight,
-  FilePlus2,
-  FolderPlus,
-  ReceiptText,
-  Upload,
 } from "lucide-react";
 
 import {
@@ -22,6 +18,7 @@ import {
 } from "@/components/ui/command";
 import { getIcon } from "@/lib/icons";
 import { navItemsFor } from "@/lib/nav";
+import { quickActionsFor } from "@/lib/quick-actions";
 import { projects } from "@/data/mock";
 import { healthTone } from "@/lib/tone";
 import { toneStyles } from "@/lib/tone";
@@ -41,13 +38,6 @@ export function useCommandMenu() {
   }
   return context;
 }
-
-const quickActions = [
-  { label: "Daily billing sheet", icon: FilePlus2, href: "/dailies/sheet", shortcut: "⌘N" },
-  { label: "New project", icon: FolderPlus, href: "/projects/new" },
-  { label: "Upload document", icon: Upload, href: "/documents/upload" },
-  { label: "Create invoice", icon: ReceiptText, href: "/invoicing/new" },
-];
 
 export function CommandMenuProvider({
   children,
@@ -100,7 +90,7 @@ export function CommandMenuProvider({
           </CommandEmpty>
 
           <CommandGroup heading="Quick actions">
-            {quickActions.map((action) => (
+            {quickActionsFor(role).map((action) => (
               <CommandItem
                 key={action.label}
                 value={`action ${action.label}`}
@@ -111,7 +101,6 @@ export function CommandMenuProvider({
                   <action.icon className="size-3.5" />
                 </span>
                 {action.label}
-                {action.shortcut ? <CommandShortcut>{action.shortcut}</CommandShortcut> : null}
               </CommandItem>
             ))}
           </CommandGroup>

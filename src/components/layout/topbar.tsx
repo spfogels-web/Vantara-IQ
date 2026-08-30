@@ -7,16 +7,12 @@ import {
   Bell,
   ChevronDown,
   CreditCard,
-  FilePlus2,
-  FolderPlus,
   LogOut,
   Menu,
   MessageSquarePlus,
   Plus,
-  ReceiptText,
   Search,
   Settings,
-  Upload,
   UserRound,
 } from "lucide-react";
 
@@ -36,7 +32,6 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -45,6 +40,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { SidebarContent } from "@/components/layout/sidebar";
 import { useSidebar } from "@/components/layout/sidebar-context";
 import { useCommandMenu } from "@/components/layout/command-menu";
+import { quickActionsFor } from "@/lib/quick-actions";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { VibeToggle } from "@/components/layout/vibe-toggle";
 import { FeedbackDialog } from "@/components/layout/feedback-dialog";
@@ -186,14 +182,20 @@ function NotificationsPopover({ notifications }: { notifications: AppNotificatio
   );
 }
 
-function QuickActions() {
-  const meta = useMetaKeyLabel();
-  const actions = [
-    { label: "Daily billing sheet", icon: FilePlus2, shortcut: "D" },
-    { label: "New project", icon: FolderPlus, shortcut: "P" },
-    { label: "Upload document", icon: Upload, shortcut: "U" },
-    { label: "Create invoice", icon: ReceiptText, shortcut: "I" },
-  ];
+/**
+ * The Create button.
+ *
+ * Every item is a Link rather than a bare row — the menu did render, but
+ * nothing on it went anywhere, which is indistinguishable from a dead button.
+ *
+ * The ⌘D / ⌘P / ⌘U shortcuts it used to advertise are gone. They were never
+ * bound to anything, and binding them was the wrong fix: ⌘P is print, which
+ * this app needs for the Globe billing sheet, and ⌘D is bookmark. ⌘K opens the
+ * palette, which offers the same three.
+ */
+function QuickActions({ role }: { role?: string | null }) {
+  const actions = quickActionsFor(role);
+  if (actions.length === 0) return null;
 
   return (
     <DropdownMenu>
@@ -207,18 +209,23 @@ function QuickActions() {
           <ChevronDown className="hidden size-3 opacity-70 sm:inline" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" sideOffset={10} className="w-60 rounded-xl border-foreground/[0.08] shadow-elev-3">
+      <DropdownMenuContent align="end" sideOffset={10} className="w-72 rounded-xl border-foreground/[0.08] shadow-elev-3">
         <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-[0.09em] text-muted-foreground">
           Quick actions
         </DropdownMenuLabel>
         {actions.map((action) => (
-          <DropdownMenuItem key={action.label} className="gap-2.5 py-2">
-            <action.icon className="size-4 text-muted-foreground" />
-            <span className="text-[12.5px]">{action.label}</span>
-            <DropdownMenuShortcut className="font-mono text-[10px]">
-              {meta}
-              {action.shortcut}
-            </DropdownMenuShortcut>
+          <DropdownMenuItem asChild key={action.label} className="gap-2.5 py-2">
+            <Link href={action.href}>
+              <action.icon className="size-4 shrink-0 text-muted-foreground" />
+              <span className="min-w-0">
+                <span className="block text-[12.5px] leading-tight text-foreground">
+                  {action.label}
+                </span>
+                <span className="mt-0.5 block text-[11px] leading-tight text-muted-foreground">
+                  {action.hint}
+                </span>
+              </span>
+            </Link>
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>
@@ -407,7 +414,7 @@ export function Topbar({
         >
           <Search className="size-[18px]" />
         </button>
-        <QuickActions />
+        <QuickActions role={user?.role} />
         <VibeToggle />
         <ThemeToggle />
         <NotificationsPopover notifications={notifications} />
