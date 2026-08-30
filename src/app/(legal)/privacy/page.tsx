@@ -30,30 +30,46 @@ export default function PrivacyPage() {
         agreement with us. We do not collect information from the general public.
       </p>
 
-      <h2>Your mobile number and text messages</h2>
+      <h2>SMS Messaging Privacy</h2>
       <p>
         <strong>
-          No mobile information will be shared with third parties or affiliates for marketing or
-          promotional purposes. Information sharing to subcontractors or vendors for support
-          services, such as customer service, is permitted. All other use case categories exclude
-          text messaging originator opt-in data and consent; this information will not be shared
-          with any third parties.
+          Mobile information, including phone numbers and SMS opt-in consent data, will not be
+          shared, sold, rented, or provided to third parties or affiliates for marketing or
+          promotional purposes.
         </strong>
       </p>
+
+      <h3>What we collect</h3>
       <p>
-        We collect a mobile number only when you provide it to us, and we send operational text
-        messages to it only if you have separately ticked the consent box during onboarding.
-        Consent is not a condition of being awarded work, and you may withdraw it at any time by
-        replying <strong>STOP</strong> to any message. Replying <strong>HELP</strong> returns our
-        contact details. Message frequency varies with job activity. Message and data rates may
-        apply.
-      </p>
-      <p>
-        We record the date consent was given, and the date it was withdrawn if you reply STOP. We
-        keep that record so we can show, if asked, that messages were sent only to people who
-        agreed to receive them.
+        The mobile number you give us, the date you consented to receive text messages, and the
+        date you withdrew that consent if you reply STOP. We keep the consent record so we can
+        show, if asked, that messages went only to people who agreed to receive them.
       </p>
 
+      <h3>How we use it</h3>
+      <p>
+        Only to send you operational job messages — work assignments, task priorities and due
+        dates, schedule changes, and daily production sheet status. We do not use your mobile
+        number for marketing, and we do not use it to build any profile of you.
+      </p>
+
+      <h3>Who we share it with</h3>
+      <p>
+        Only our messaging provider, Twilio, which delivers the message on our instructions and
+        for no purpose of its own. Nobody else. We do not sell, rent, trade or otherwise pass
+        your number or your consent record to any third party or affiliate for marketing or
+        promotional purposes.
+      </p>
+
+      <h3>Frequency, cost and opting out</h3>
+      <p>
+        <strong>Message frequency varies</strong> and is driven entirely by job activity —
+        typically a few messages per recipient per week, and none at all in a week you are not
+        scheduled. <strong>Message and data rates may apply.</strong> You may withdraw consent at
+        any time by replying <strong>STOP</strong> to any message; reply <strong>HELP</strong>
+        {" "}
+        for help. Consent is not a condition of being awarded work.
+      </p>
       <h2>What else we collect</h2>
       <ul>
         <li>

@@ -19,63 +19,79 @@ export default function TermsPage() {
       <h1>Terms &amp; SMS Program Conditions</h1>
       <p className="lede">Last updated 16 August 2026</p>
 
-      <h2>Job alert text message program</h2>
+      <h2>Vantara IQ SMS Notifications</h2>
+
+      <h3>Program description</h3>
       <p>
-        Fortitude Infrastructure LLC sends operational text messages to its own field employees
-        and to authorized contacts at subcontracting firms working under an active agreement with
-        us. This is a closed program. We do not text the general public, and there is no way to
-        sign up other than by being engaged to work with us.
+        Fortitude Infrastructure LLC operates Vantara IQ SMS Notifications, a text message
+        program that sends operational job alerts to its own field employees and to authorized
+        contacts at subcontracting firms working under an active agreement with us. This is a
+        closed program: we do not text the general public, and there is no way to join other
+        than by being engaged to work with us. Messages include work assignments with the job
+        and scheduled date, task priorities and due dates, schedule and crew changes, and daily
+        production sheet status. We do not send marketing, promotional or advertising messages
+        through this program.
       </p>
 
-      <h3>How you join</h3>
+      <h3>How to join</h3>
       <p>
-        By ticking the consent box on the onboarding form in our system, beside the mobile number
-        the messages will go to. The box is not ticked for you. Consent is not a condition of
-        being awarded work, and declining it changes nothing about your contract — you will
-        simply be contacted another way.
+        By ticking the consent box on the onboarding form in our system, beside the mobile
+        number the messages will go to. The box is not ticked for you, and consent is not a
+        condition of being awarded work.
       </p>
 
-      <h3>What we send</h3>
-      <ul>
-        <li>Work assignments — the job, the site and the scheduled date</li>
-        <li>Task priority and due dates</li>
-        <li>Schedule and crew reassignment changes</li>
-        <li>Daily production sheet status — submitted, approved, or returned for correction</li>
-        <li>Reminders when a required document or task is close to its due date</li>
-      </ul>
+      <h3>Message frequency</h3>
       <p>
-        Messages are operational only. We do not send marketing, promotional, advertising or
-        sales messages through this program.
+        <strong>Message frequency varies.</strong> It is driven entirely by job activity —
+        typically a few messages per recipient per week, and none at all in a week you are not
+        scheduled.
       </p>
 
-      <h3>How often</h3>
+      <h3>Message and data rates</h3>
       <p>
-        Message frequency varies and is driven entirely by job activity — typically a few
-        messages per recipient per week, and none at all in a week you are not scheduled.
+        <strong>Message and data rates may apply.</strong> Fortitude does not charge for these
+        messages; whatever your mobile plan charges for receiving a text is between you and your
+        carrier.
       </p>
 
-      <h3>How to stop</h3>
+      <h3>HELP</h3>
       <p>
-        Reply <strong>STOP</strong> to any message and we will stop immediately. STOP, STOPALL,
-        UNSUBSCRIBE, CANCEL, END and QUIT are all honored. Reply <strong>START</strong> to begin
-        receiving them again. Reply <strong>HELP</strong> for our contact details, or call{" "}
-        <strong>(864) 365-1521</strong>.
+        Reply <strong>HELP</strong> to any message for help and our contact details, or contact
+        us using the support information below.
       </p>
 
-      <h3>Costs and carriers</h3>
+      <h3>STOP — opting out</h3>
       <p>
-        Message and data rates may apply. Fortitude does not charge for these messages; whatever
-        your mobile plan charges for receiving a text is between you and your carrier. Delivery
-        is not guaranteed — carriers may delay or fail to deliver a message, and you should not
-        treat a text as the only notice of anything safety-critical. Carriers are not liable for
-        delayed or undelivered messages.
-      </p>
-      <p>
-        For how we handle your mobile number, see our{" "}
-        <Link href="/privacy">Privacy Policy</Link>. In short: it is never shared or sold to third
-        parties for marketing.
+        Reply <strong>STOP</strong> to any message to stop receiving them. STOP, STOPALL,
+        UNSUBSCRIBE, CANCEL, END and QUIT are all honored, and you will receive one final
+        message confirming you have been unsubscribed. Reply <strong>START</strong> to begin
+        receiving messages again.
       </p>
 
+      <h3>Support</h3>
+      <p>
+        Fortitude Infrastructure LLC, Anderson, South Carolina. Call{" "}
+        <strong>(864) 365-1521</strong> or email{" "}
+        <strong>sean.fogelson@fortitude-infra.com</strong>.
+      </p>
+
+      <h3>Carrier liability</h3>
+      <p>
+        Delivery is not guaranteed. Carriers may delay or fail to deliver a message, and you
+        should not treat a text as the only notice of anything safety-critical.
+        <strong>
+          {" "}
+          Carriers are not liable for delayed or undelivered messages.
+        </strong>
+      </p>
+
+      <h3>Privacy</h3>
+      <p>
+        See our <Link href="/privacy">Privacy Policy</Link> for how we handle your mobile
+        number. In short: mobile information, including phone numbers and SMS opt-in consent
+        data, will not be shared, sold, rented, or provided to third parties or affiliates for
+        marketing or promotional purposes.
+      </p>
       <h2>Use of Vantara IQ</h2>
       <p>
         Vantara IQ is Fortitude&rsquo;s internal operations system. Access is granted to
