@@ -18,6 +18,7 @@ import {
   ShieldCheck,
   Star,
   Trash2,
+  Users,
   UserPlus,
   Wrench,
   X,
@@ -40,7 +41,7 @@ import { SubRateCard } from "@/components/subcontractors/sub-rate-card";
 import { DocumentCenter, type SubDoc } from "@/components/subcontractors/document-center";
 import { BadgeSection } from "@/components/subcontractors/badge-section";
 import { SubPayPanel } from "@/components/subcontractors/sub-pay-panel";
-import { setCrewOwnerDetailsVisibility, setCrewPayVisibility, approveSubcontractor, deleteSubcontractor, listCrewBadges, listSubDocuments, listSubInvoices } from "@/app/actions";
+import { listCrewContacts, setCrewOwnerDetailsVisibility, setCrewPayVisibility, approveSubcontractor, deleteSubcontractor, listCrewBadges, listSubDocuments, listSubInvoices } from "@/app/actions";
 
 const complianceTone: Record<ComplianceStatus, "success" | "warning" | "critical" | "neutral"> = {
   valid: "success",
@@ -325,6 +326,7 @@ function SubDetail({
   const [docs, setDocs] = React.useState<SubDoc[] | null>(null);
   const [badges, setBadges] = React.useState<Awaited<ReturnType<typeof listCrewBadges>> | null>(null);
   const [payStatements, setPayStatements] = React.useState<Awaited<ReturnType<typeof listSubInvoices>>>([]);
+  const [people, setPeople] = React.useState<Awaited<ReturnType<typeof listCrewContacts>>>([]);
   const [confirmDelete, setConfirmDelete] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
   const [deleteError, setDeleteError] = React.useState<string | null>(null);
@@ -370,6 +372,12 @@ function SubDetail({
     setBadges(null);
     listSubDocuments(s.id).then((d) => {
       if (active) setDocs(d);
+    });
+    // Who actually works there. The office had no way to see this at all —
+    // the roster was collected on the crew's own page and went nowhere.
+    setPeople([]);
+    listCrewContacts(s.id).then((p) => {
+      if (active) setPeople(p);
     });
     listCrewBadges(s.id).then((b) => {
       if (active) setBadges(b);
@@ -722,6 +730,63 @@ function SubDetail({
 
       {/* Who this crew can send to the yard. Fortitude clears them; the crew
           only supplies the documents. */}
+      {/* Who works there. Read-only here: the crew maintains their own
+          roster, and the office needs to know who to ring rather than to
+          edit somebody else's staff list. */}
+      <Panel>
+        <PanelHeader
+          title="Their people"
+          count={people.length}
+          description="Foreman, owner, office — who to contact and what alerts reach them"
+          icon={<Users className="size-3.5" />}
+        />
+        <PanelBody>
+          {people.length === 0 ? (
+            <p className="text-[12.5px] text-muted-foreground">
+              Nobody listed yet. The crew adds their people at the top of their
+              company profile — until they do, this company is one phone number.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {people.map((p) => (
+                <li
+                  key={p.id}
+                  className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-lg border border-border/70 px-3 py-2"
+                >
+                  <span className="text-[13px] font-medium text-foreground">
+                    {p.name || "Unnamed"}
+                  </span>
+                  {p.role ? (
+                    <span className="text-[11.5px] text-muted-foreground">{p.role}</span>
+                  ) : null}
+                  {p.primary ? (
+                    <span className="rounded-full border border-brand/40 bg-brand/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-brand-bright">
+                      Primary
+                    </span>
+                  ) : null}
+                  <span className="num ml-auto text-[12px] text-muted-foreground">
+                    {p.phone || "no phone"}
+                  </span>
+                  <span className="text-[12px] text-muted-foreground">
+                    {p.email || "no email"}
+                  </span>
+                  <span
+                    className={cn(
+                      "rounded-full px-1.5 py-0.5 text-[10px] font-semibold",
+                      p.smsConsentAt
+                        ? "bg-success/15 text-success"
+                        : "bg-foreground/[0.05] text-muted-foreground",
+                    )}
+                  >
+                    {p.smsConsentAt ? "Texts ok" : "No SMS consent"}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </PanelBody>
+      </Panel>
+
       {/* What we owe them, and their answer to it. */}
       <SubPayPanel subcontractorId={s.id} invoices={payStatements} />
 
