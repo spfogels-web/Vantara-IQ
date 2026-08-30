@@ -928,3 +928,29 @@
   color: var(--vq-blue-bright);
   text-decoration: underline;
 }
+
+/* ── Sheet gold ───────────────────────────────────────────────────
+   The billing sheet reads as a form, and a form's labels want to be legible
+   without competing with what is written in them. Gold does that where a grey
+   disappears and a blue looks like a link — and it is the one accent Globe's
+   own printed form already uses. Never applied to a value, only to the label
+   above it, so nothing a crew typed changes colour. */
+:root {
+  --vq-gold: #d9a441;
+}
+.light {
+  /* Darker on white, or it washes out to beige. */
+  --vq-gold: #9a6b12;
+}
+
+.sheet-label {
+  color: var(--vq-gold);
+}
+
+/* Printed, the labels go back to grey. Gold on a mono office printer is a
+   muddy grey band, and Globe's form has black labels. */
+@media print {
+  .sheet-label {
+    color: #444 !important;
+  }
+}

@@ -304,7 +304,7 @@ function Field({
       <span
         className={cn(
           "truncate px-1.5 pt-1 text-[8px] font-semibold uppercase leading-tight tracking-[0.06em] print:text-[6.5px]",
-          missing ? "text-warning print:text-muted-foreground" : "text-muted-foreground",
+          missing ? "text-warning print:text-muted-foreground" : "sheet-label",
         )}
       >
         {label}
@@ -944,7 +944,7 @@ export function DailyBillingSheet({
                 Subcontractor Daily Billing Sheet
               </p>
             </div>
-            <p className="num text-[12px] font-semibold tracking-wide text-critical print:text-[10px]">
+            <p className="num sheet-label text-[12px] font-semibold tracking-wide print:text-[10px]">
               GLS&nbsp;-&nbsp;203155
             </p>
           </div>
@@ -992,7 +992,7 @@ export function DailyBillingSheet({
 
               {/* Work order complete — YES / NO, circled on paper */}
               <div className="flex flex-col border-b border-r border-border">
-                <span className="px-1.5 pt-1 text-[8px] font-semibold uppercase leading-tight tracking-[0.06em] text-muted-foreground print:text-[6.5px]">
+                <span className="px-1.5 pt-1 text-[8px] font-semibold uppercase leading-tight tracking-[0.06em] sheet-label print:text-[6.5px]">
                   Work Order Complete
                 </span>
                 <div className="flex h-7 items-center gap-2 px-1.5 pb-1 print:h-6">
@@ -1115,12 +1115,12 @@ export function DailyBillingSheet({
             </colgroup>
             <thead>
               <tr>
-                <th className="border border-border px-1 py-1 align-bottom text-[7.5px] font-semibold uppercase leading-tight tracking-[0.04em] text-muted-foreground print:text-[6px]">
+                <th className="border border-border px-1 py-1 align-bottom text-[7.5px] font-semibold uppercase leading-tight tracking-[0.04em] sheet-label print:text-[6px]">
                   Print
                   <br />
                   Number
                 </th>
-                <th className="border border-border px-1 py-1 align-bottom text-[7.5px] font-semibold uppercase leading-tight tracking-[0.04em] text-muted-foreground print:text-[6px]">
+                <th className="border border-border px-1 py-1 align-bottom text-[7.5px] font-semibold uppercase leading-tight tracking-[0.04em] sheet-label print:text-[6px]">
                   Ped / Pole
                   <br />
                   Location Number
@@ -1128,7 +1128,7 @@ export function DailyBillingSheet({
                 {Array.from({ length: UNIT_COLS }, (_, i) => (
                   <th
                     key={i}
-                    className="border border-border px-0.5 py-1 align-bottom text-[7px] font-semibold uppercase leading-tight tracking-[0.03em] text-muted-foreground print:text-[5.5px]"
+                    className="border border-border px-0.5 py-1 align-bottom text-[7px] font-semibold uppercase leading-tight tracking-[0.03em] sheet-label print:text-[5.5px]"
                   >
                     Hourly / Unit Code
                     <CodeSelect
@@ -1141,7 +1141,7 @@ export function DailyBillingSheet({
                     />
                   </th>
                 ))}
-                <th className="border border-border px-1 py-1 align-bottom text-[7.5px] font-semibold uppercase leading-tight tracking-[0.04em] text-muted-foreground print:text-[6px]">
+                <th className="border border-border px-1 py-1 align-bottom text-[7.5px] font-semibold uppercase leading-tight tracking-[0.04em] sheet-label print:text-[6px]">
                   Remarks / Explanation for Hours
                 </th>
               </tr>
@@ -1244,28 +1244,28 @@ export function DailyBillingSheet({
             </colgroup>
             <thead>
               <tr>
-                <th className="border border-border px-1 py-1 align-bottom text-[7.5px] font-semibold uppercase leading-tight tracking-[0.04em] text-muted-foreground print:text-[6px]">
+                <th className="border border-border px-1 py-1 align-bottom text-[7.5px] font-semibold uppercase leading-tight tracking-[0.04em] sheet-label print:text-[6px]">
                   Print
                   <br />
                   Number
                 </th>
-                <th className="border border-border px-1 py-1 align-bottom text-[7.5px] font-semibold uppercase leading-tight tracking-[0.04em] text-muted-foreground print:text-[6px]">
+                <th className="border border-border px-1 py-1 align-bottom text-[7.5px] font-semibold uppercase leading-tight tracking-[0.04em] sheet-label print:text-[6px]">
                   Ped / Pole
                   <br />
                   Start #
                 </th>
-                <th className="border border-border px-1 py-1 align-bottom text-[7.5px] font-semibold uppercase leading-tight tracking-[0.04em] text-muted-foreground print:text-[6px]">
+                <th className="border border-border px-1 py-1 align-bottom text-[7.5px] font-semibold uppercase leading-tight tracking-[0.04em] sheet-label print:text-[6px]">
                   Ped / Pole Stop Number
                   <br />
                   (or) Incomplete
                 </th>
-                <th className="border border-border px-1 py-1 align-bottom text-[7.5px] font-semibold uppercase leading-tight tracking-[0.04em] text-muted-foreground print:text-[6px]">
+                <th className="border border-border px-1 py-1 align-bottom text-[7.5px] font-semibold uppercase leading-tight tracking-[0.04em] sheet-label print:text-[6px]">
                   Mat
                 </th>
                 {Array.from({ length: MAT_COLS }, (_, i) => (
                   <th
                     key={i}
-                    className="border border-border px-0.5 py-1 align-bottom text-[7px] font-semibold uppercase leading-tight tracking-[0.03em] text-muted-foreground print:text-[5.5px]"
+                    className="border border-border px-0.5 py-1 align-bottom text-[7px] font-semibold uppercase leading-tight tracking-[0.03em] sheet-label print:text-[5.5px]"
                   >
                     Mat / Unit Code
                     <CodeSelect
@@ -1278,17 +1278,17 @@ export function DailyBillingSheet({
                     />
                   </th>
                 ))}
-                <th className="border border-border px-1 py-1 align-bottom text-[7.5px] font-semibold uppercase leading-tight tracking-[0.04em] text-muted-foreground print:text-[6px]">
+                <th className="border border-border px-1 py-1 align-bottom text-[7.5px] font-semibold uppercase leading-tight tracking-[0.04em] sheet-label print:text-[6px]">
                   Cable / Pipe
                   <br />
                   Reel Number
                 </th>
-                <th className="border border-border px-1 py-1 align-bottom text-[7.5px] font-semibold uppercase leading-tight tracking-[0.04em] text-muted-foreground print:text-[6px]">
+                <th className="border border-border px-1 py-1 align-bottom text-[7.5px] font-semibold uppercase leading-tight tracking-[0.04em] sheet-label print:text-[6px]">
                   Cable Start
                   <br />
                   Number
                 </th>
-                <th className="border border-border px-1 py-1 align-bottom text-[7.5px] font-semibold uppercase leading-tight tracking-[0.04em] text-muted-foreground print:text-[6px]">
+                <th className="border border-border px-1 py-1 align-bottom text-[7.5px] font-semibold uppercase leading-tight tracking-[0.04em] sheet-label print:text-[6px]">
                   Cable Stop
                   <br />
                   Number
@@ -1402,6 +1402,31 @@ export function DailyBillingSheet({
           </div>
 
           </fieldset>
+
+          {/* What the colours mean, at the foot of the form.
+              A crew sees a coloured pill on their daily and has no way to
+              learn what "Under review" is as distinct from "Submitted", or
+              that Paid is a thing that happens after Approved. Screen only —
+              Globe's form has no legend and does not want one. */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-border px-3 py-2.5 print:hidden">
+            {[
+              ["Draft", "var(--neutral)"],
+              ["Submitted", "var(--info)"],
+              ["Under review", "var(--vq-gold)"],
+              ["Approved", "var(--success)"],
+              ["Rejected / issue", "var(--critical)"],
+              ["Paid", "var(--vq-green)"],
+              ["Overdue", "var(--warning)"],
+            ].map(([label, dot]) => (
+              <span key={label} className="inline-flex items-center gap-1.5">
+                <span
+                  className="size-2 shrink-0 rounded-full"
+                  style={{ backgroundColor: dot }}
+                />
+                <span className="text-[11px] text-muted-foreground">{label}</span>
+              </span>
+            ))}
+          </div>
 
           {/* ── Field photos ────────────────────────────────────── */}
           {/* Outside the lock on purpose. The numbers freeze the moment a sheet

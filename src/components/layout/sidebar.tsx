@@ -169,7 +169,7 @@ export function SidebarContent({
         {navSectionsFor(role, showPay).map((section) => (
           <div key={section.title} className="space-y-1">
             {!collapsed ? (
-              <p className="px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground/70">
+              <p className="sheet-label px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-[0.12em] opacity-90">
                 {section.title}
               </p>
             ) : (
