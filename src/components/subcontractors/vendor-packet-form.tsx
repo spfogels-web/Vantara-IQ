@@ -10,6 +10,7 @@ import type { VendorPacketView } from "@/data/queries";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { Button } from "@/components/ui/button";
 import { saveCrewContact, saveVendorPacket } from "@/app/actions";
+import { CrewPeople, type CrewPerson } from "@/components/subcontractors/crew-people";
 
 /**
  * The vendor packet — what a crew supplies before they can be given work.
@@ -27,9 +28,12 @@ import { saveCrewContact, saveVendorPacket } from "@/app/actions";
  */
 export function VendorPacketForm({
   packet,
+  people = [],
   canEdit = true,
 }: {
   packet: VendorPacketView;
+  /** Everyone at this crew, so a job alert can reach the right person. */
+  people?: CrewPerson[];
   canEdit?: boolean;
 }) {
   const router = useRouter();
@@ -227,6 +231,12 @@ export function VendorPacketForm({
             This is not marketing and consent is not a condition of being awarded work.
           </span>
         </label>
+
+        <CrewPeople
+          subcontractorId={packet.id}
+          initial={people}
+          canEdit={canEdit}
+        />
       </Section>
 
       <Section title="Business identity" hint="As it appears on your W-9">

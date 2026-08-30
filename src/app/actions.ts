@@ -5926,3 +5926,85 @@ export async function setCrewOwnerDetailsVisibility(subcontractorId: string, sho
   revalidatePath("/company");
   return { ok: true as const, show };
 }
+
+/* ------------------------------------------------------------------ *
+ * Who works at a crew — foreman, owner, office.
+ * ------------------------------------------------------------------ */
+
+export type CrewContactInput = {
+  id?: string;
+  name: string;
+  role: string;
+  phone: string;
+  email: string;
+  primary?: boolean;
+};
+
+/**
+ * Add or update one person at a subcontractor.
+ *
+ * Saved on its own, the moment it is typed, for the same reason the company's
+ * own name and number are: somebody who starts onboarding and stops halfway
+ * has still told you who they are, and when several companies are onboarding
+ * at once that is the thing nobody can hold in their head.
+ */
+export async function saveCrewContact2(subcontractorId: string, input: CrewContactInput) {
+  await assertOwnSubcontractor(subcontractorId);
+
+  const data = {
+    name: clean(input.name),
+    role: clean(input.role),
+    phone: clean(input.phone),
+    email: clean(input.email),
+    primary: Boolean(input.primary),
+  };
+
+  // Nothing worth keeping yet — a blank row is a row somebody opened and did
+  // not fill, not a person.
+  if (!data.name && !data.phone && !data.email) {
+    return { ok: true as const, id: input.id ?? null };
+  }
+
+  const row = input.id
+    ? await prisma.crewContact.update({ where: { id: input.id }, data })
+    : await prisma.crewContact.create({ data: { ...data, subcontractorId } });
+
+  // One primary per crew, so "who do I ring" always has one answer.
+  if (data.primary) {
+    await prisma.crewContact.updateMany({
+      where: { subcontractorId, id: { not: row.id } },
+      data: { primary: false },
+    });
+  }
+
+  revalidatePath("/company");
+  revalidatePath("/subcontractors");
+  return { ok: true as const, id: row.id };
+}
+
+export async function deleteCrewContact(id: string) {
+  const row = await prisma.crewContact.findUnique({
+    where: { id },
+    select: { subcontractorId: true },
+  });
+  if (!row) return { ok: false as const, error: "Not found." };
+  await assertOwnSubcontractor(row.subcontractorId);
+
+  await prisma.crewContact.delete({ where: { id } });
+  revalidatePath("/company");
+  revalidatePath("/subcontractors");
+  return { ok: true as const };
+}
+
+/** The people at a crew, primary first. */
+export async function listCrewContacts(subcontractorId: string) {
+  await assertOwnSubcontractor(subcontractorId);
+  return prisma.crewContact.findMany({
+    where: { subcontractorId },
+    orderBy: [{ primary: "desc" }, { createdAt: "asc" }],
+    select: {
+      id: true, name: true, role: true, phone: true, email: true,
+      primary: true, smsConsentAt: true,
+    },
+  });
+}

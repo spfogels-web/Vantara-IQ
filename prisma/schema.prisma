@@ -402,6 +402,7 @@ model Subcontractor {
   references Json @default("[]")
 
   users     User[]
+  contacts  CrewContact[]
   documents SubDocument[]
   rates     SubcontractorRate[]
   contracts Document[]
@@ -1659,4 +1660,36 @@ model LocateResponse {
 
   @@unique([ticketId, member])
   @@index([ticketId])
+}
+
+
+/// A person at a subcontractor — the foreman who files dailies, the office
+/// manager who chases an invoice, the owner who signs.
+///
+/// One company had one phone number and one email, which is fine until the
+/// foreman entering the billing is not the owner whose number is on the packet.
+/// A task assigned to a person could not be texted at all, because a person had
+/// nowhere to hold a number.
+///
+/// Captured at the top of onboarding on purpose: a crew who abandons the form
+/// half way still leaves behind who they are and how to ring them, which is the
+/// thing that gets forgotten when several companies are onboarding at once.
+model CrewContact {
+  id              String        @id @default(cuid())
+  subcontractor   Subcontractor @relation(fields: [subcontractorId], references: [id], onDelete: Cascade)
+  subcontractorId String
+  name            String        @default("")
+  /// Foreman, owner, office — free text, because job titles in this trade are
+  /// not a list anybody agrees on.
+  role            String        @default("")
+  phone           String        @default("")
+  email           String        @default("")
+  /// The one to ring when it is not about a specific job.
+  primary         Boolean       @default(false)
+  /// Their own consent, because consent belongs to a handset and not a company.
+  smsConsentAt    DateTime?
+  smsOptOutAt     DateTime?
+  createdAt       DateTime      @default(now())
+
+  @@index([subcontractorId])
 }
