@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { FilePlus2, FolderPlus, Upload } from "lucide-react";
+import { ClipboardList, FolderPlus } from "lucide-react";
 
 /**
  * What the Create button offers.
@@ -9,20 +9,22 @@ import { FilePlus2, FolderPlus, Upload } from "lucide-react";
  * at /documents/upload and /invoicing/new, neither of which is a route, so both
  * landed on the "this module is scaffolded" placeholder.
  *
- * Every href here is a page that exists. An entry with nowhere real to go does
- * not belong on this list.
+ * Both land on the index page rather than on a create form. That is the ask,
+ * and it is also the safer target: an index always renders, where a form can
+ * want a project or a customer that the person pressing Create has not chosen
+ * yet. The button that starts the work is on the page when they get there.
  */
 
 export type QuickAction = {
   label: string;
   href: string;
   icon: LucideIcon;
-  /** What pressing it actually does, for the palette's second line. */
+  /** What pressing it actually does, for the second line of the menu. */
   hint: string;
   /**
-   * Whether a crew login can reach it. Middleware bounces a subcontractor off
-   * /projects and /documents to /dailies, so offering them here would look like
-   * the button is broken rather than like a page they cannot open.
+   * Whether a crew login is offered it. Both destinations are reachable by a
+   * subcontractor, but /projects/new is not — so a crew shown "New project"
+   * would land on a page whose one button bounces them back to /dailies.
    */
   staffOnly?: boolean;
 };
@@ -30,24 +32,15 @@ export type QuickAction = {
 export const QUICK_ACTIONS: QuickAction[] = [
   {
     label: "Daily billing sheet",
-    href: "/dailies/sheet",
-    icon: FilePlus2,
-    hint: "Start a blank sheet for a crew's day",
+    href: "/dailies",
+    icon: ClipboardList,
+    hint: "Open dailies to start or upload a sheet",
   },
   {
     label: "New project",
-    href: "/projects/new",
+    href: "/projects",
     icon: FolderPlus,
-    hint: "Set up a job, its customer and its rate card",
-    staffOnly: true,
-  },
-  {
-    // Upload lives on the documents page rather than a route of its own, so
-    // this lands on the page and scrolls to the drop zone.
-    label: "Upload document",
-    href: "/documents#upload",
-    icon: Upload,
-    hint: "Contracts, insurance, W-9s — anything held on paper",
+    hint: "Open projects to set up a new job",
     staffOnly: true,
   },
 ];
