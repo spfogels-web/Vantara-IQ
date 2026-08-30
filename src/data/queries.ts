@@ -1115,9 +1115,15 @@ export async function getProjects(): Promise<Project[]> {
     orderBy: { health: "asc" },
     select: PROJECT_LIST_SELECT,
   });
-  const maps = await mapSummaries(rows.map((r) => r.id));
-  const built = await placedFootage(rows.map((r) => r.id));
-  const routes = await plannedRoute(rows.map((r) => r.id));
+  // Three lookups that do not depend on each other, so they go together.
+  // Awaited one after another they were three round trips to Neon before a
+  // single project could render, and the page sat blank for all of them.
+  const ids = rows.map((r) => r.id);
+  const [maps, built, routes] = await Promise.all([
+    mapSummaries(ids),
+    placedFootage(ids),
+    plannedRoute(ids),
+  ]);
 
   return rows.map((r) => {
     const p = toProject({ ...r, ...maps.get(r.id) });
