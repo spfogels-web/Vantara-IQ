@@ -9,6 +9,7 @@ import { ImagePlus, Loader2, Map as MapIcon, Maximize2, Pencil, PenLine, Trash2,
 import { deleteProject, saveProjectMapUrl, saveProjectPhotoUrl, uploadProjectMap } from "@/app/actions";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { MapMarkupEditor, MapRedlinePreview, parseShapes } from "@/components/projects/map-markup";
+import { MapTakeoff } from "@/components/projects/map-takeoff";
 
 /** A map is a PDF whether it's a Blob https URL ending in .pdf or a data: URL. */
 export function isPdfUrl(u: string) {
@@ -242,6 +243,11 @@ export function ProjectMapPanel({
             </div>
           )}
         </PanelBody>
+
+        {/* Counting a print by eye is an afternoon, and the number somebody
+            lands on is what the job gets scheduled and priced against. Only
+            offered when there is a drawing to read. */}
+        {mapUrl && canEdit ? <MapTakeoff projectId={projectId} /> : null}
       </Panel>
 
       {redlining && mapUrl && canEdit ? (
