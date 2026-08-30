@@ -111,7 +111,7 @@ export function DailiesView({
             title="Daily billing sheets"
             description={`${pending} awaiting review`}
             count={filtered.length}
-            icon={<ClipboardList className="size-3.5" />}
+            icon={<ClipboardList className="size-3.5 text-gold" />}
           />
           <div className="flex flex-wrap gap-1.5 border-b border-border/70 p-2.5">
             {FILTERS.map((f) => (
@@ -185,7 +185,7 @@ export function DailiesView({
                     onClick={() => setSelectedId(d.id)}
                     className={cn(
                       "focus-ring w-full rounded-lg px-2.5 py-2.5 text-left transition-colors",
-                      active ? "bg-foreground/[0.055]" : "hover:bg-foreground/[0.03]",
+                      active ? "gold-rail" : "hover:bg-foreground/[0.03]",
                     )}
                   >
                     <div className="flex items-center gap-2">
@@ -210,7 +210,7 @@ export function DailiesView({
                         missing rate reads as missing rather than as zero. */}
                     {d.billableAmount > 0 || d.unpricedCodes > 0 ? (
                       <div className="mt-1.5 flex items-center gap-2 border-t border-border/50 pt-1.5 text-[11px]">
-                        <span className="num font-semibold text-foreground">
+                        <span className="num gold-figure font-semibold">
                           {formatCurrency(d.billableAmount)}
                         </span>
                         {d.grossMargin !== null ? (
@@ -351,7 +351,7 @@ function DailyDetail({
 
   return (
     <div className="flex flex-col gap-3">
-      <Panel>
+      <Panel className="gold-rule">
         <PanelBody className="flex flex-col gap-4">
           <div className="flex flex-wrap items-start gap-3">
             <div className="min-w-0 flex-1">
@@ -381,8 +381,8 @@ function DailyDetail({
               ) : null}
             </div>
             <div className="text-right">
-              <p className="eyebrow">Billable</p>
-              <p className="num text-[20px] font-semibold tracking-[-0.02em] text-foreground">
+              <p className="eyebrow text-gold">Billable</p>
+              <p className="num gold-figure text-[20px] font-semibold tracking-[-0.02em]">
                 {formatCurrency(d.billableAmount)}
               </p>
             </div>
@@ -463,7 +463,7 @@ function DailyDetail({
 
       {/* Line items — the digital daily */}
       <Panel>
-        <PanelHeader title="Line items" count={d.lineItems.length} icon={<MapPin className="size-3.5" />} />
+        <PanelHeader title="Line items" count={d.lineItems.length} icon={<MapPin className="size-3.5 text-gold" />} />
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>

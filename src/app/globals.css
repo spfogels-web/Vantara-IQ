@@ -21,6 +21,15 @@
   --vq-violet: #a78bfa;
   --vq-cyan: #22d3ee;
   --vq-indigo: #6d5cf5;
+  /* Vantara gold, from the mark. Brass rather than yellow, so it sits beside
+     the blue without shouting. Deliberately duller than --vq-orange: orange
+     means warning here, and money must not read as a problem. */
+  --vq-gold: #d9a441;
+  /* The high-emphasis gold, for figures. "Strong" rather than "bright"
+     deliberately: on the dark theme emphasis means lifting off the surface, on
+     the light theme it means sinking into it, so this goes the other way when
+     the theme flips. */
+  --vq-gold-strong: #ecbf6b;
 
   /* Signature gradient — electric blue → indigo → violet. Used on brand,
      active nav, primary CTA and hero accents (sparingly, for premium feel). */
@@ -118,6 +127,12 @@
 
   /* Accent links/icons need to darken so they read on white surfaces. */
   --vq-blue-bright: #1c64d8;
+  /* Gold washes out to beige on white — down to an antique brass that still
+     passes as gold and still reads at 11px. The bright end of the dark theme
+     measured 3.97:1 on a white card, under the 4.5 small text needs, so the
+     emphasis gold darkens here instead of lightening. */
+  --vq-gold: #8a5d0a;
+  --vq-gold-strong: #6b4405;
 
   --background: #f5f7fa;
   --foreground: #0d151f;
@@ -334,6 +349,8 @@
 
   --color-brand: var(--vq-blue);
   --color-brand-bright: var(--vq-blue-bright);
+  --color-gold: var(--vq-gold);
+  --color-gold-strong: var(--vq-gold-strong);
   --color-violet: var(--vq-violet);
   --color-cyan: var(--vq-cyan);
 
@@ -561,6 +578,60 @@
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
+  }
+
+  /* ── Vantara gold ───────────────────────────────────────────────
+     Gold marks money and the section's own furniture — figures, eyebrow
+     labels, panel icons. It is never a status: green, orange and red carry
+     state everywhere in this app, and a fourth colour competing with them
+     would make the row harder to read, not easier. */
+
+  /* The billable figure. Tabular already; this is colour and nothing else. */
+  .gold-figure {
+    color: var(--vq-gold-strong);
+  }
+
+  /* A hairline that fades out, along the top of a panel that leads with
+     money. Drawn as an overlay rather than with border-image: border-image
+     paints all four edges, and the panel already has a border, so it came out
+     as a gold box around the whole card. */
+  .gold-rule {
+    position: relative;
+  }
+  .gold-rule::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 1px;
+    background: linear-gradient(
+      to right,
+      color-mix(in oklab, var(--vq-gold) 80%, transparent),
+      color-mix(in oklab, var(--vq-gold) 18%, transparent) 45%,
+      transparent 80%
+    );
+    pointer-events: none;
+  }
+
+  /* The open row in the list. A rail rather than a fill — a gold wash behind
+     small text costs contrast, and this list is read at a glance. */
+  .gold-rail {
+    box-shadow: inset 2px 0 0 0 var(--vq-gold);
+    background: color-mix(in oklab, var(--vq-gold) 7%, transparent);
+  }
+
+  /* Printed, gold goes to black. On a mono office printer it lands as a muddy
+     grey band, and Globe's form has black figures. */
+  @media print {
+    .gold-figure {
+      color: #000 !important;
+    }
+    .gold-rail {
+      background: none !important;
+      box-shadow: none !important;
+    }
+    .gold-rule::before {
+      display: none !important;
+    }
   }
 
   /* Soft ambient glow for accented elements. */
@@ -935,14 +1006,6 @@
    disappears and a blue looks like a link — and it is the one accent Globe's
    own printed form already uses. Never applied to a value, only to the label
    above it, so nothing a crew typed changes colour. */
-:root {
-  --vq-gold: #d9a441;
-}
-.light {
-  /* Darker on white, or it washes out to beige. */
-  --vq-gold: #9a6b12;
-}
-
 .sheet-label {
   color: var(--vq-gold);
 }
