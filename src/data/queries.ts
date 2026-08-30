@@ -48,7 +48,6 @@ import {
   invoices,
   materials,
   organization,
-  payApplications,
   reportDefinitions,
 } from "@/data/mock";
 import type {
@@ -1526,8 +1525,90 @@ export async function getInvoices(): Promise<Invoice[]> {
   return invoices;
 }
 
+/**
+ * What Fortitude owes its crews, from the real pay statements.
+ *
+ * This returned five fixtures — ABC Utilities, Carolina Bore, Summit
+ * Underground, jobs called Duke Energy Upgrade and Piedmont Water Main —
+ * none of which exist. It read as a working register showing $84.2K pending
+ * against companies nobody has ever worked with, which is worse than an
+ * empty page: an empty page tells you to go and make a pay statement.
+ */
 export async function getPayApplications(): Promise<PayApplication[]> {
-  return payApplications;
+  await requireStaff();
+
+  const rows = await prisma.subInvoice.findMany({
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      number: true,
+      projectName: true,
+      periodStart: true,
+      periodEnd: true,
+      status: true,
+      fastPay: true,
+      createdAt: true,
+      subcontractor: { select: { company: true } },
+      lines: { select: { amount: true } },
+      project: { select: { customer: { select: { retainagePct: true } } } },
+    },
+  });
+
+  return rows.map((r) => {
+    const amount = Number(r.lines.reduce((sum, l) => sum + l.amount, 0).toFixed(2));
+    // Retainage follows the customer's card on that job. Crews are held back
+    // at the rate Fortitude is held back, not at a number typed per row.
+    const pct = r.project?.customer?.retainagePct ?? 0;
+    const retainage = Number((amount * pct).toFixed(2));
+
+    const { label, tone } = payAppStatus(r.status);
+    return {
+      id: r.id,
+      number: r.number,
+      subcontractor: r.subcontractor.company.trim(),
+      project: r.projectName || "—",
+      period:
+        r.periodStart && r.periodEnd
+          ? `${shortDay(r.periodStart)}–${shortDay(r.periodEnd)}`
+          : "—",
+      amount,
+      retainage,
+      status: label,
+      tone,
+      submitted: r.createdAt.toISOString(),
+      fastPayEligible: r.fastPay,
+    };
+  });
+}
+
+/**
+ * A pay statement's state, in the register's vocabulary.
+ *
+ * The two do not line up one to one, so the mapping is written down rather
+ * than guessed at each call site: a statement the crew has disputed is money
+ * we are holding, and one they have accepted is approved to pay.
+ */
+function payAppStatus(status: string): { label: PayApplication["status"]; tone: Tone } {
+  switch (status) {
+    case "DRAFT":
+    case "ISSUED":
+      return { label: "Pending review", tone: "warning" };
+    case "ACCEPTED":
+      return { label: "Approved", tone: "success" };
+    case "DISPUTED":
+      return { label: "Held", tone: "critical" };
+    case "PAID":
+      return { label: "Paid", tone: "neutral" };
+    default:
+      return { label: "Held", tone: "neutral" };
+  }
+}
+
+/** "2026-08-14" -> "Aug 14". Empty stays empty. */
+function shortDay(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 }
 
 export async function getReportDefinitions(): Promise<ReportDefinition[]> {
