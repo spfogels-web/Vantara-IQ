@@ -69,7 +69,7 @@ const MAP_TOOL: Anthropic.Tool = {
       callouts: {
         type: "array",
         description:
-          "One entry per distinct callout type. Group identical callouts together and count them.",
+          "One entry per callout type PER SHEET. Only sheets with new green underground work. Never count blue existing plant.",
         items: {
           type: "object",
           properties: {
@@ -84,14 +84,14 @@ const MAP_TOOL: Anthropic.Tool = {
               type: "number",
               description: "Total footage where callouts carry lengths. Omit if they do not.",
             },
-            sheet: { type: "string", description: "Sheet number(s) these appear on." },
+            sheet: { type: "string", description: "The sheet this count is for, e.g. A-21. Required." },
             samples: {
               type: "array",
               items: { type: "string" },
               description: "Up to five exact strings read, so a person can spot-check the count.",
             },
           },
-          required: ["label", "count"],
+          required: ["label", "count", "sheet"],
         },
       },
       problems: {
@@ -105,6 +105,21 @@ const MAP_TOOL: Anthropic.Tool = {
 };
 
 const SYSTEM = `You are reading an engineering construction print for an underground utility and fibre contractor. Count what is on it.
+
+COLOUR DECIDES WHAT COUNTS — READ THIS FIRST
+
+  GREEN  new underground work. This is what gets built and billed.
+  BLUE   plant that is already in the ground. Do NOT count it.
+
+A drawing shows the new route tying into existing facilities, so both
+appear side by side. A blue BFO24RI beside a green one is the cable that is
+already there, not a second run to place. Counting blue as work would
+inflate every quantity on the job.
+
+Green is usually a dashed line for the underground route, with its callouts
+in green text alongside. If you genuinely cannot tell the colour of a
+callout, leave it out and say so in problems rather than guessing — a
+quantity that is confidently wrong gets priced and built against.
 
 WHAT MATTERS MOST
 Road bores are marked RB and are the single most valuable thing to count correctly — they are expensive, they drive the schedule, and they are what somebody is checking this drawing for. Count every one.
@@ -144,7 +159,20 @@ Route is drawn as coloured lines, and the style carries meaning. A dashed
 green line is underground route. Report the footage written along a route
 against the code beside it — that is the length of that run.
 HOW TO COUNT
-Group identical callouts and give a count. "RB" appearing eleven times is one entry with count 11, not eleven entries. Put a few of the exact strings you read into samples so a person can check you without recounting.
+Report per sheet, not per document. Group identical callouts within a sheet
+and give a count — BD4MPF appearing three times on A-21 is one entry with
+count 3, sheet A-21. The same code on A-14 is a separate entry.
+
+Put the sheet number in the sheet field every time. A foreman works one
+sheet at a time, and a total across twenty-six of them tells him nothing
+about the page in front of him.
+
+Skip sheets entirely if they carry no new green underground work. A page of
+existing plant, a title page or a detail sheet should produce no entries at
+all — do not list zeros for it.
+
+Put a few of the exact strings you read into samples so a person can check
+you without recounting.
 
 WHAT NOT TO DO
 Do not guess. If a callout is cut off, smudged, or you cannot tell whether two marks are the same thing, say so in problems and leave it out of the counts. A count that is confidently wrong is worse than a gap, because a gap gets checked and a wrong number gets built and billed against.

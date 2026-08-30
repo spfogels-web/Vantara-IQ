@@ -43,8 +43,9 @@ export function MapTakeoff({ projectId }: { projectId: string }) {
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-semibold text-foreground">Read the print</p>
           <p className="mt-0.5 text-[12px] text-muted-foreground">
-            Counts road bores, flower pots, pedestals and handholes off the drawing.
-            An estimate to check against the material list, not a replacement for it.
+            Counts the new green underground work — pedestals, flower pots, bores and
+            plow — page by page. Blue existing plant is not counted. An estimate to
+            check against the material list, not a replacement for it.
           </p>
         </div>
         <button
@@ -77,6 +78,20 @@ export function MapTakeoff({ projectId }: { projectId: string }) {
 
 function Reading({ result }: { result: Extract<Result, { ok: true }> }) {
   const { reading, headline } = result;
+
+  // Grouped by sheet, sheets in printed order. Only pages with something on
+  // them arrive here — the reader is told not to report empty ones.
+  const bySheet = React.useMemo(() => {
+    const map = new Map<string, typeof reading.callouts>();
+    for (const c of reading.callouts) {
+      const key = c.sheet.trim();
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(c);
+    }
+    return [...map.entries()].sort((a, b) =>
+      a[0].localeCompare(b[0], undefined, { numeric: true }),
+    );
+  }, [reading]);
 
   const tiles: [string, number][] = [
     ["Road bores", headline.roadBores],
@@ -113,46 +128,43 @@ function Reading({ result }: { result: Extract<Result, { ok: true }> }) {
         </p>
       ) : null}
 
-      {/* The full takeoff, with the text each count came from — so it can be
-          spot-checked in seconds rather than recounted from scratch. */}
-      {reading.callouts.length > 0 ? (
-        <div className="overflow-x-auto rounded-xl border border-border">
-          <table className="w-full text-left text-[12px]">
-            <thead>
-              <tr className="border-b border-border bg-foreground/[0.03]">
-                <th className="px-3 py-2 font-semibold text-muted-foreground">Callout</th>
-                <th className="px-3 py-2 font-semibold text-muted-foreground">Meaning</th>
-                <th className="px-3 py-2 text-right font-semibold text-muted-foreground">Count</th>
-                <th className="px-3 py-2 text-right font-semibold text-muted-foreground">Feet</th>
-                <th className="px-3 py-2 font-semibold text-muted-foreground">Read as</th>
-              </tr>
-            </thead>
-            <tbody>
-              {reading.callouts.map((c) => (
-                <tr key={c.label} className="border-b border-border/60 last:border-b-0">
-                  <td className="px-3 py-2 font-medium text-foreground">{c.label}</td>
-                  <td className="px-3 py-2 text-muted-foreground">{c.meaning || "—"}</td>
-                  <td className="num px-3 py-2 text-right font-semibold text-foreground">
-                    {c.count}
-                  </td>
-                  <td className="num px-3 py-2 text-right text-muted-foreground">
-                    {c.feet ? c.feet.toLocaleString() : "—"}
-                  </td>
-                  <td className="px-3 py-2 text-[11px] text-muted-foreground">
-                    {c.samples.slice(0, 3).join(" · ") || "—"}
-                    {c.sheet ? ` (sheet ${c.sheet})` : ""}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {/* By sheet, because a foreman builds one page at a time and a total
+          across twenty-six of them says nothing about the page in front of
+          him. Sheets with no new underground work are not reported at all,
+          so this list is the pages that have something to build. */}
+      {bySheet.length > 0 ? (
+        <div className="space-y-2">
+          {bySheet.map(([sheet, items]) => (
+            <div key={sheet} className="overflow-hidden rounded-xl border border-border">
+              <div className="flex items-baseline gap-2 border-b border-border bg-foreground/[0.03] px-3 py-2">
+                <span className="text-[12.5px] font-semibold text-foreground">
+                  {sheet || "Sheet not stated"}
+                </span>
+                <span className="text-[11px] text-muted-foreground">
+                  {items.length} {items.length === 1 ? "item" : "items"} to build
+                </span>
+              </div>
+              <table className="w-full text-left text-[12px]">
+                <tbody>
+                  {items.map((c) => (
+                    <tr key={c.label} className="border-b border-border/50 last:border-b-0">
+                      <td className="px-3 py-1.5 font-medium text-foreground">{c.label}</td>
+                      <td className="px-3 py-1.5 text-muted-foreground">{c.meaning || ""}</td>
+                      <td className="num px-3 py-1.5 text-right font-semibold text-foreground">
+                        {c.feet ? `${c.feet.toLocaleString()} ft` : `${c.count}`}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))}
         </div>
       ) : (
         <p className="text-[12px] text-muted-foreground">
-          Nothing countable was found on this print.
+          No new underground work found on this print.
         </p>
       )}
-
       {/* What it could not read. Named rather than quietly dropped, because a
           gap gets checked and a wrong count gets built against. */}
       {reading.problems.length > 0 ? (
