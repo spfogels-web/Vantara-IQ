@@ -1,5 +1,7 @@
 import "server-only";
 
+import { cache } from "react";
+
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
@@ -400,32 +402,11 @@ export async function getOrganization(): Promise<Organization> {
  * plausible number that is fiction tells you nothing and hides the gap.
  */
 export async function getKpis(): Promise<Kpi[]> {
-  const [projects, rows] = await Promise.all([
+  // One priced read for the whole request; the other panels share it.
+  const [projects, dailies] = await Promise.all([
     prisma.project.findMany({ select: { tone: true, status: true } }),
-    prisma.daily.findMany({
-      select: {
-        status: true,
-        workDate: true,
-        submittedAt: true,
-        totalFt: true,
-        billingWeekEnd: true,
-        // Priced below rather than read off the row. `billableAmount` is a
-        // stored column that nothing writes — every daily in the database has
-        // 0 in it — so reading it made "Revenue ready to bill" a permanent
-        // $0 with a caption blaming missing rates. The rates were loaded; the
-        // number was never being calculated.
-        customer: true,
-        subcontractor: true,
-        projectId: true,
-        lineItems: true,
-      },
-    }),
+    pricedDailies(),
   ]);
-
-  // priceDailies returns the money for each row in the order it was given, so
-  // zip it back onto the row it belongs to.
-  const priced = await priceDailies(rows);
-  const dailies = rows.map((r, i) => ({ ...r, ...priced[i] }));
 
   /** Local calendar day for a daily — work date if usable, else submission. */
   const dayOf = (d: { workDate: string; submittedAt: string }) => {
@@ -1375,6 +1356,43 @@ export async function getSubcontractors(): Promise<Subcontractor[]> {
  */
 /** Exported so the operations assistant prices dailies the same way the rest
  *  of the app does, rather than growing a second opinion about money. */
+/**
+ * Every daily, priced once per request.
+ *
+ * Four panels on the Operations Center each need the same thing — what a
+ * day billed, what it cost and the spread — and each used to fetch the
+ * dailies and price them itself. Four fetches, and priceDailies fires
+ * several queries of its own for the rate cards, so a dashboard load was
+ * pricing the same twenty-six days four times over. That is most of why the
+ * page went slow when the tiles became real.
+ *
+ * React's cache() dedupes within a single request: the first caller does the
+ * work, the rest get the same promise. Across requests nothing is retained,
+ * so a figure is never stale — it is one read per page, not one per panel.
+ */
+export const pricedDailies = cache(async () => {
+  const rows = await prisma.daily.findMany({
+    select: {
+      id: true,
+      status: true,
+      workDate: true,
+      submittedAt: true,
+      crew: true,
+      projectName: true,
+      customer: true,
+      subcontractor: true,
+      projectId: true,
+      lineItems: true,
+      billingWeekEnd: true,
+      totalFt: true,
+    },
+    orderBy: { workDate: "desc" },
+  });
+
+  const priced = await priceDailies(rows);
+  return rows.map((r, i) => ({ ...r, ...priced[i] }));
+});
+
 export async function priceDailies(
   rows: {
     customer: string;
