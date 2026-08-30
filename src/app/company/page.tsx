@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { getCrewBadges, getDocuments, getVendorPacket } from "@/data/queries";
-import { getAchAuthorization, listCrewContacts, listSubDocuments } from "@/app/actions";
+import { getAchAuthorization, listCrewContacts, listCrewLogins, listSubDocuments } from "@/app/actions";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { FileUp } from "lucide-react";
@@ -30,13 +30,14 @@ export default async function CompanyProfilePage() {
   if (!me) redirect("/login");
   if (!me.subcontractorId) redirect("/subcontractors");
 
-  const [packet, docs, badges, ach, myDocs, people] = await Promise.all([
+  const [packet, docs, badges, ach, myDocs, people, logins] = await Promise.all([
     getVendorPacket(me.subcontractorId),
     getDocuments(),
     getCrewBadges(me.subcontractorId),
     getAchAuthorization(me.subcontractorId),
     listSubDocuments(me.subcontractorId),
     listCrewContacts(me.subcontractorId),
+    listCrewLogins(me.subcontractorId),
   ]);
   if (!packet) redirect("/dailies");
 
@@ -105,7 +106,7 @@ export default async function CompanyProfilePage() {
               existing={ach}
               existingProof={ach?.proofFileName}
             />
-            <VendorPacketForm packet={packet} people={people} />
+            <VendorPacketForm packet={packet} people={people} logins={logins} />
           </>
         ) : (
           <Panel>

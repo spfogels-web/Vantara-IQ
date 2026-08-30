@@ -6008,3 +6008,117 @@ export async function listCrewContacts(subcontractorId: string) {
     },
   });
 }
+
+/* ------------------------------------------------------------------ *
+ * A crew's own lead — one extra login, invited by the owner.
+ * ------------------------------------------------------------------ */
+
+/**
+ * Give one person at a crew their own login.
+ *
+ * One company has meant one shared password, so the foreman filing dailies
+ * signs in as the owner. That is why pay and banking had to be hidden from a
+ * whole company rather than from one person, and why a daily says which
+ * company filed it and never who.
+ *
+ * One lead per crew for now. Owners say they want a single second person, and
+ * a limit is easy to lift once that turns out to be true or not — where an
+ * unbounded roster of logins issued by somebody else is hard to take back.
+ *
+ * The lead is a SUBCONTRACTOR user on the same company, so they inherit that
+ * crew's access and nothing more. An owner can never grant more than they
+ * have.
+ */
+export async function inviteCrewLead(subcontractorId: string, input: {
+  name: string;
+  email: string;
+  password: string;
+}) {
+  await assertOwnSubcontractor(subcontractorId);
+
+  const name = clean(input.name);
+  const email = clean(input.email).toLowerCase();
+  if (!name) return { ok: false as const, error: "Give your lead's name." };
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    return { ok: false as const, error: "That email doesn't look right." };
+  }
+  if (!input.password || input.password.length < 8) {
+    return { ok: false as const, error: "Pick a password of at least 8 characters to give them." };
+  }
+
+  const crew = await prisma.subcontractor.findUnique({
+    where: { id: subcontractorId },
+    select: { company: true, users: { select: { id: true, email: true } } },
+  });
+  if (!crew) return { ok: false as const, error: "Crew not found." };
+
+  // The owner's own login counts as the first, so a second is the lead.
+  if (crew.users.length >= 2) {
+    return {
+      ok: false as const,
+      error: "This crew already has a lead. Remove them before adding another.",
+    };
+  }
+
+  const taken = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+  if (taken) {
+    return { ok: false as const, error: "That email already has a login on this system." };
+  }
+
+  await prisma.user.create({
+    data: {
+      email,
+      name,
+      passwordHash: await hashPassword(input.password),
+      role: "SUBCONTRACTOR",
+      subcontractorId,
+    },
+  });
+
+  await notifyStaff({
+    title: `${crew.company.trim()} added a lead`,
+    detail: `${name} (${email}) now has their own login on this crew.`,
+    category: "crew",
+    tone: "info",
+  });
+
+  revalidatePath("/company");
+  revalidatePath("/subcontractors");
+  return { ok: true as const, email };
+}
+
+/** Take a lead's login away. Never the last one — that locks the crew out. */
+export async function removeCrewLead(subcontractorId: string, userId: string) {
+  await assertOwnSubcontractor(subcontractorId);
+
+  const users = await prisma.user.findMany({
+    where: { subcontractorId },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, email: true, name: true },
+  });
+  if (users.length <= 1) {
+    return { ok: false as const, error: "That's the only login on this crew — removing it would lock everyone out." };
+  }
+  // The first login is the owner's. It is not the one to remove here.
+  if (users[0]?.id === userId) {
+    return { ok: false as const, error: "That's the crew's original login, not the lead." };
+  }
+  if (!users.some((u) => u.id === userId)) {
+    return { ok: false as const, error: "That login isn't on this crew." };
+  }
+
+  await prisma.user.delete({ where: { id: userId } });
+  revalidatePath("/company");
+  revalidatePath("/subcontractors");
+  return { ok: true as const };
+}
+
+/** The logins on a crew, oldest first — the owner, then the lead. */
+export async function listCrewLogins(subcontractorId: string) {
+  await assertOwnSubcontractor(subcontractorId);
+  return prisma.user.findMany({
+    where: { subcontractorId },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, name: true, email: true, createdAt: true },
+  });
+}

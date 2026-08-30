@@ -11,6 +11,7 @@ import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { Button } from "@/components/ui/button";
 import { saveCrewContact, saveVendorPacket } from "@/app/actions";
 import { CrewPeople, type CrewPerson } from "@/components/subcontractors/crew-people";
+import { CrewLead, type CrewLogin } from "@/components/subcontractors/crew-lead";
 
 /**
  * The vendor packet — what a crew supplies before they can be given work.
@@ -29,11 +30,14 @@ import { CrewPeople, type CrewPerson } from "@/components/subcontractors/crew-pe
 export function VendorPacketForm({
   packet,
   people = [],
+  logins = [],
   canEdit = true,
 }: {
   packet: VendorPacketView;
   /** Everyone at this crew, so a job alert can reach the right person. */
   people?: CrewPerson[];
+  /** The logins on this crew — the owner, and their lead if they added one. */
+  logins?: CrewLogin[];
   canEdit?: boolean;
 }) {
   const router = useRouter();
@@ -237,6 +241,8 @@ export function VendorPacketForm({
           initial={people}
           canEdit={canEdit}
         />
+
+        <CrewLead subcontractorId={packet.id} logins={logins} />
       </Section>
 
       <Section title="Business identity" hint="As it appears on your W-9">
