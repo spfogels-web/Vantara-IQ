@@ -23,8 +23,9 @@ export default function TermsPage() {
 
       <h3>Program description</h3>
       <p>
-        Fortitude Infrastructure LLC operates Vantara IQ SMS Notifications, a text message
-        program that sends operational job alerts to its own field employees and to authorized
+        <strong>Vantara IQ is operated by Fortitude Infrastructure LLC.</strong> Vantara IQ SMS
+        Notifications is a text message program run under that brand, sending operational job
+        alerts to Fortitude&rsquo;s own field employees and to authorized
         contacts at subcontracting firms working under an active agreement with us. This is a
         closed program: we do not text the general public, and there is no way to join other
         than by being engaged to work with us. Messages include work assignments with the job
@@ -94,7 +95,8 @@ export default function TermsPage() {
       </p>
       <h2>Use of Vantara IQ</h2>
       <p>
-        Vantara IQ is Fortitude&rsquo;s internal operations system. Access is granted to
+        Vantara IQ is the internal operations system of Fortitude Infrastructure LLC, which
+        operates it. Access is granted to
         employees and to subcontractors engaged by us, for the purpose of doing that work.
       </p>
       <ul>

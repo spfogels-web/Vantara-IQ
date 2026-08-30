@@ -19,10 +19,13 @@ export default function PrivacyPage() {
       <p className="lede">Last updated 16 August 2026</p>
 
       <p>
-        Fortitude Infrastructure LLC (&ldquo;Fortitude&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;)
-        operates Vantara IQ, an internal operations system used to run underground utility and
-        fiber construction work. This policy explains what information we collect about the
-        people who work with us, why we hold it, and what we do not do with it.
+        <strong>Vantara IQ is operated by Fortitude Infrastructure LLC</strong>
+        (&ldquo;Fortitude&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;), a veteran-owned underground
+        utility and fiber construction contractor in Anderson, South Carolina. Vantara IQ is the
+        operations system we run the work on, and the name our text messages are sent under;
+        Fortitude Infrastructure LLC is the legal entity behind it. This policy explains what
+        information we collect about the people who work with us, why we hold it, and what we
+        do not do with it.
       </p>
       <p>
         This is not a consumer service. The people whose information we hold are our own
@@ -48,7 +51,8 @@ export default function PrivacyPage() {
 
       <h3>How we use it</h3>
       <p>
-        Only to send you operational job messages — work assignments, task priorities and due
+        Only to send you operational job messages from Vantara IQ, operated by Fortitude
+        Infrastructure LLC — work assignments, task priorities and due
         dates, schedule changes, and daily production sheet status. We do not use your mobile
         number for marketing, and we do not use it to build any profile of you.
       </p>

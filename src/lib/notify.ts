@@ -89,7 +89,10 @@ export async function notifyCrew(
   // consent simply does not get a text — it cannot fail the thing being
   // reported.
   if (input.sms) {
+    // Signed with the brand the consent box named. A reviewer compares the
+    // opt-in wording against a sample message, and "Fortitude" on one and
+    // "Vantara IQ" on the other reads as two different senders.
     const line = input.detail ? `${input.title} — ${input.detail}` : input.title;
-    await textCrew(subcontractorId, `Fortitude: ${line}`.slice(0, 320)).catch(() => undefined);
+    await textCrew(subcontractorId, `Vantara IQ: ${line}`.slice(0, 320)).catch(() => undefined);
   }
 }

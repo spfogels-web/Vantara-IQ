@@ -224,8 +224,9 @@ export function VendorPacketForm({
           />
           <span className="text-[12.5px] leading-relaxed text-muted-foreground">
             <span className="font-medium text-foreground">Text me job alerts.</span> I agree to
-            receive operational text messages from Fortitude Infrastructure LLC at the mobile
-            number above — work assignments, priorities and due dates, schedule changes, and
+            receive operational text messages from Vantara IQ, operated by Fortitude
+            Infrastructure LLC, at the mobile number above — work assignments, priorities and
+            due dates, schedule changes, and
             daily sheet status. Message frequency varies with job activity. Message and data
             rates may apply. Reply STOP at any time to stop receiving them, or HELP for help.
             This is not marketing and consent is not a condition of being awarded work.
