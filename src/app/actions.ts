@@ -28,6 +28,7 @@ import {
 } from "@/lib/unit-codes";
 import { checkFooting, dailyImportReady, extractDailySheet } from "@/lib/daily-import";
 import { askOps, opsChatReady } from "@/lib/ops-chat";
+import { headlineCounts, mapReadReady, readProjectMap } from "@/lib/map-read";
 import { packetStatus } from "@/lib/vendor-packet";
 import { readExif } from "@/lib/exif";
 import { notifyCrew, notifyStaff } from "@/lib/notify";
@@ -6121,4 +6122,72 @@ export async function listCrewLogins(subcontractorId: string) {
     orderBy: { createdAt: "asc" },
     select: { id: true, name: true, email: true, createdAt: true },
   });
+}
+
+/**
+ * Count what is on a project's print.
+ *
+ * A takeoff by eye across twenty sheets is an afternoon, and the number
+ * somebody lands on is what the job gets planned and priced against. This
+ * reads the drawing already attached to the project and reports what it found,
+ * with the callout text behind every count so it can be spot-checked rather
+ * than recounted.
+ *
+ * It writes nothing to the project. The material list stays what the job is
+ * priced against — this is a second opinion to check it against, and the two
+ * disagreeing is the useful signal.
+ */
+export async function readMapTakeoff(projectId: string) {
+  await assertProjectAccess(projectId);
+
+  if (!mapReadReady()) {
+    return { ok: false as const, error: "ANTHROPIC_API_KEY isn't set in this environment." };
+  }
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { name: true, mapUrl: true, mapOriginalUrl: true },
+  });
+  if (!project) return { ok: false as const, error: "Project not found." };
+
+  // The original upload where we kept it — a print flattened for display has
+  // lost the text layer, and a smaller callout with it.
+  const url = project.mapOriginalUrl || project.mapUrl;
+  if (!url) {
+    return { ok: false as const, error: "No print on this project yet. Upload one first." };
+  }
+
+  let file: ArrayBuffer;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return { ok: false as const, error: `Couldn't fetch the print (${res.status}).` };
+    file = await res.arrayBuffer();
+  } catch {
+    return { ok: false as const, error: "Couldn't fetch the print." };
+  }
+
+  const MB = file.byteLength / 1_048_576;
+  if (MB > 28) {
+    return {
+      ok: false as const,
+      error: `That print is ${MB.toFixed(1)} MB, past what can be read in one pass. Split it and read the sheets separately.`,
+    };
+  }
+
+  const type = url.toLowerCase().endsWith(".pdf") ? "application/pdf" : "image/png";
+
+  try {
+    const reading = await readProjectMap(Buffer.from(file).toString("base64"), type);
+    return {
+      ok: true as const,
+      reading,
+      headline: headlineCounts(reading),
+      project: project.name,
+    };
+  } catch (e) {
+    return {
+      ok: false as const,
+      error: e instanceof Error ? e.message : "Couldn't read that print.",
+    };
+  }
 }
