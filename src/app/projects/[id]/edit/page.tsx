@@ -32,6 +32,7 @@ export default async function EditProjectPage({
           requiredFtPerDay: project.requiredFtPerDay,
           actualFtPerDay: project.actualFtPerDay,
           pctComplete: project.pctComplete,
+          market: project.market,
           health: project.health,
           forecast: project.forecast,
         }}

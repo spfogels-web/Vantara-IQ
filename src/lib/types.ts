@@ -36,6 +36,8 @@ export interface Project {
   location: string;
   status: ProjectStatus;
   tone: Tone;
+  /** Which market the job sits in. Empty until somebody sets it. */
+  market: string;
   /** Linear feet still to install. */
   remainingFt: number;
   requiredFtPerDay: number;

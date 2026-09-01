@@ -62,6 +62,14 @@ const ES: Record<string, string> = {
   Documents: "Documentos",
   Materials: "Materiales",
   Overview: "Resumen",
+  // Markets. The names stay as they are said on site — a crew asks about
+  // "Alabama", not about "el mercado de Alabama".
+  Market: "Mercado",
+  "All markets": "Todos los mercados",
+  "North Georgia": "Norte de Georgia",
+  "South Georgia": "Sur de Georgia",
+  Alabama: "Alabama",
+  Unassigned: "Sin asignar",
   "My work": "Mi trabajo",
   Network: "Red",
   Financials: "Finanzas",

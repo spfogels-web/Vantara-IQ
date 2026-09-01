@@ -7,6 +7,7 @@ import { ArrowLeft, Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { createProject, updateProject, type ProjectInput } from "@/app/actions";
+import { MARKETS } from "@/lib/markets";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { Button } from "@/components/ui/button";
 
@@ -22,6 +23,7 @@ const BLANK: ProjectInput = {
   name: "",
   client: "",
   location: "",
+  market: "",
   status: "On schedule",
   crew: "",
   remainingFt: 0,
@@ -101,6 +103,20 @@ export function ProjectForm({
           </Field>
           <Field label="Location">
             <input value={f.location} onChange={(e) => set("location", e.target.value)} placeholder="White Plains, SC" className={inputClass} />
+          </Field>
+          {/* Which book the job belongs to. Named next to the location it is
+              usually inferred from, and left blank rather than defaulted —
+              two of these markets share a prime and pay differently, so a
+              guessed market is a job billed at the wrong rate. */}
+          <Field label="Market">
+            <select value={f.market} onChange={(e) => set("market", e.target.value)} className={inputClass}>
+              <option value="">Not set</option>
+              {MARKETS.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.label} — {m.prime}
+                </option>
+              ))}
+            </select>
           </Field>
           <Field label="Status">
             <select value={f.status} onChange={(e) => set("status", e.target.value)} className={cn(inputClass, "appearance-none")}>

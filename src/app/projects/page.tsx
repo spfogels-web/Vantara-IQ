@@ -12,6 +12,8 @@ import { Panel } from "@/components/common/panel";
 import { HealthRing } from "@/components/common/health-ring";
 import { StatusPill } from "@/components/common/status-pill";
 import { Meter } from "@/components/common/metric";
+import { MarketFilter } from "@/components/projects/market-filter";
+import { isMarketId, MARKETS } from "@/lib/markets";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Projects · Vantara IQ" };
@@ -25,11 +27,35 @@ export const metadata = { title: "Projects · Vantara IQ" };
  * than information they can act on. A crew gets the one fact that concerns
  * them: whether the job is on schedule.
  */
-export default async function ProjectsPage() {
-  const me = await getCurrentUser();
+export default async function ProjectsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ market?: string }>;
+}) {
+  const [me, all, sp] = await Promise.all([getCurrentUser(), getProjects(), searchParams]);
   const staff = !!me && isStaff(me.role);
-  const projects = await getProjects();
 
+  // Counted across every job, not the filtered set — a chip has to say how many
+  // it would show, which is the whole reason to read it before pressing it.
+  const counts = Object.fromEntries(
+    MARKETS.map((m) => [m.id, all.filter((p) => p.market === m.id).length]),
+  );
+  const unassigned = all.filter((p) => !isMarketId(p.market)).length;
+
+  const choice = sp.market;
+  const selected =
+    choice === "unassigned" || isMarketId(choice) ? choice : ("all" as const);
+
+  const projects =
+    selected === "all"
+      ? all
+      : selected === "unassigned"
+        ? all.filter((p) => !isMarketId(p.market))
+        : all.filter((p) => p.market === selected);
+
+  // The strip describes what is on screen. Leaving it on the full book while
+  // the grid showed three jobs made the two disagree, and the number in
+  // bigger type is the one that gets believed.
   const remaining = projects.reduce((s, p) => s + p.remainingFt, 0);
   const atRisk = projects.filter((p) => p.tone === "critical" || p.tone === "warning").length;
   const avgHealth = projects.length
@@ -58,6 +84,13 @@ export default async function ProjectsPage() {
       }
     >
       <div className="flex flex-col gap-3">
+        {/* Markets first: which book you are looking at decides what every
+            number under it means. Staff only — a crew sees its own jobs and
+            has no book to narrow. */}
+        {staff ? (
+          <MarketFilter counts={counts} unassigned={unassigned} value={selected} />
+        ) : null}
+
         {staff ? (
           <StatStrip
             stats={[

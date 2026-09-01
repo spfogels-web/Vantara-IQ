@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import * as XLSX from "xlsx";
 
 import { prisma } from "@/lib/prisma";
+import { isMarketId } from "@/lib/markets";
 import { hashPassword, isStaff, setSessionCookie, signSession } from "@/lib/auth";
 import {
   extractDocument,
@@ -1003,6 +1004,8 @@ export type ProjectInput = {
   name: string;
   client: string;
   location: string;
+  /** Market id from src/lib/markets.ts. Empty until somebody sets it. */
+  market: string;
   status: string;
   crew: string;
   remainingFt: number;
@@ -1020,6 +1023,9 @@ function projectData(input: ProjectInput) {
     name: input.name,
     client: input.client,
     location: input.location,
+    // Validated rather than trusted: this decides which rate card a job is
+    // read against, and two markets share a prime.
+    market: isMarketId(input.market) ? input.market : "",
     status: input.status,
     tone,
     crew: input.crew || "Unassigned",

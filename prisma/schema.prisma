@@ -145,6 +145,13 @@ model Project {
   /// worked out on calendar days is quietly 30% too low.
   deadline         String            @default("")
   updatedAt        String            @default("")
+  /// Which market this job sits in — see src/lib/markets.ts.
+  ///
+  /// Stored rather than derived from the town every read, because a person
+  /// must be able to correct it: two of these markets share a prime and pay
+  /// differently, so a job in the wrong one is billed at the wrong rate.
+  /// Empty means nobody has set it, which the filter shows as unassigned.
+  market           String            @default("")
   mapUrl           String?
   mapOriginalUrl   String?
   photoUrl         String?
