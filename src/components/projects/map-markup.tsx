@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import {
   Circle,
   ImagePlus,
@@ -493,10 +494,32 @@ export function MapMarkupEditor({
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const contentW = pages.reduce((m, p) => Math.max(m, p.width), 0);
   const contentH = pages.reduce((s, p) => s + p.height, 0) + Math.max(0, pages.length - 1) * GAP;
+  // Portalling needs document, which only exists after mount.
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => setMounted(true), []);
+
+  // Fit to whatever width the box actually is, and refit when that changes.
+  // Keyed only off contentW before, so the first fit was the only fit: rotating
+  // a tablet, collapsing the sidebar or resizing the window all left the map at
+  // a scale computed for a width that no longer existed.
   React.useEffect(() => {
-    if (!contentW || !scrollRef.current) return;
-    const avail = scrollRef.current.clientWidth - 32;
-    setScale(Math.min(1.4, Math.max(0.15, avail / contentW)));
+    const el = scrollRef.current;
+    if (!contentW || !el) return;
+
+    const fit = () => {
+      // p-4 on the scroll container, both sides.
+      const avail = el.clientWidth - 32;
+      if (avail <= 0) return;
+      // No upper clamp below 1: a map narrower than the screen should fill it
+      // rather than sit small in the middle. 1.4 stays as the ceiling so a
+      // tiny map is not blown up past legibility.
+      setScale(Math.min(1.4, Math.max(0.05, avail / contentW)));
+    };
+
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
   }, [contentW]);
 
   function commit(next: Shape[]) {
@@ -767,10 +790,25 @@ export function MapMarkupEditor({
     onClose();
   }
 
-  return (
+  /**
+   * Rendered into <body>, not where it sits in the tree.
+   *
+   * AppShell wraps page content in `relative z-10`, which opens a stacking
+   * context. Inside it this layer's z-[60] only ever competed at z-10 against
+   * the sidebar's z-40 — so a full-screen map was painted over on its left by
+   * the nav, and the drawing under it could not be reached at any zoom. Moving
+   * the node to the body takes it out of that context, where its z-index means
+   * what it says.
+   *
+   * Mounted client-side only: document does not exist while rendering on the
+   * server, and this whole editor is interactive anyway.
+   */
+  if (!mounted) return null;
+
+  return createPortal(
     <div className="fixed inset-0 z-[60] flex flex-col bg-[#0b0d12]">
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-white/10 bg-[#12151c] px-3 py-2">
+      <div className="flex min-w-0 flex-wrap items-center gap-2 border-b border-white/10 bg-[#12151c] px-3 py-2">
         <button
           onClick={onClose}
           className="focus-ring inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/10 px-2.5 text-[12px] font-medium text-white/70 hover:text-white"
@@ -897,7 +935,7 @@ export function MapMarkupEditor({
           ))}
         </div>
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex w-full flex-wrap items-center justify-end gap-2 sm:w-auto sm:flex-nowrap">
           <button onClick={() => setScale((z) => Math.max(0.15, z - 0.2))} className="grid size-8 place-items-center rounded-lg border border-white/10 text-white/70 hover:text-white">
             <ZoomOut className="size-4" />
           </button>
@@ -947,8 +985,22 @@ export function MapMarkupEditor({
             </div>
           </div>
         ) : (
+          // The scaled box reserves the scroll area; the inner box is the map
+          // at its true size and is what gets scaled down into it.
           <div style={{ width: contentW * scale, height: contentH * scale }}>
-            <div style={{ transform: `scale(${scale})`, transformOrigin: "top left" }}>
+            <div
+              style={{
+                // Explicit, and unscaled. Without it this block filled its
+                // parent — which is already contentW * scale — so items-center
+                // centred a full-width page inside a box narrower than the
+                // page. That pushed the map left by contentW * (scale - 1) / 2,
+                // off the edge where overflow-auto cannot scroll to it, and
+                // left the same gap unused on the right.
+                width: contentW,
+                transform: `scale(${scale})`,
+                transformOrigin: "top left",
+              }}
+            >
               <div className="flex flex-col items-center" style={{ gap: GAP }}>
                 {pages.map((pg, pi) => {
                   const vbH = 1000 * (pg.height / pg.width);
@@ -1054,7 +1106,8 @@ export function MapMarkupEditor({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

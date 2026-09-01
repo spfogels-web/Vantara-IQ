@@ -389,10 +389,14 @@ export function Topbar({
     <header className="glass sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-border px-3 sm:gap-3 sm:px-5">
       <MobileNav logoUrl={logoUrl} badges={badges} role={user?.role} />
 
-      {/* shrink-0 so the search field absorbs the squeeze at tablet widths
-          instead of the page title collapsing to an ellipsis. */}
-      <div className="flex shrink-0 items-center gap-2.5">
-        <h1 className="whitespace-nowrap text-[14px] font-semibold tracking-[-0.01em] text-foreground">
+      {/* From md up the search field is present and absorbs the squeeze, so the
+          title keeps shrink-0 and never collapses to an ellipsis. Below md
+          there is no search field to give way, and the title was holding the
+          bar wider than the phone — enough that the whole page scrolled
+          sideways and a fixed overlay stretched with it. So it truncates there,
+          and only there. */}
+      <div className="flex min-w-0 shrink items-center gap-2.5 md:shrink-0">
+        <h1 className="truncate text-[14px] font-semibold tracking-[-0.01em] text-foreground md:whitespace-nowrap">
           {user?.role === "SUBCONTRACTOR"
             ? (user.subcontractorName ?? t("Crew portal"))
             : t("Operations Center")}
@@ -410,7 +414,7 @@ export function Topbar({
 
       <SearchTrigger className="mx-auto hidden w-full min-w-0 max-w-md md:flex" />
 
-      <div className="ml-auto flex items-center gap-1 sm:gap-1.5 md:ml-0">
+      <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-1.5 md:ml-0">
         <button
           type="button"
           aria-label="Search"
