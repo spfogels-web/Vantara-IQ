@@ -7,6 +7,8 @@ import { prisma } from "@/lib/prisma";
 import { AppShell } from "@/components/layout/app-shell";
 import { getCurrentUser } from "@/lib/auth";
 import { getNavBadges, getOrganizationLogo , getNotifications } from "@/data/queries";
+import { getLocale } from "@/lib/i18n-server";
+import { LanguageProvider } from "@/components/layout/language-provider";
 
 export const metadata: Metadata = {
   title: {
@@ -30,11 +32,12 @@ export default async function RootLayout({
 }>) {
   // Read once here so the shell can show who is signed in without every page
   // re-querying it.
-  const [user, logoUrl, badges, notifications] = await Promise.all([
+  const [user, logoUrl, badges, notifications, locale] = await Promise.all([
     getCurrentUser(),
     getOrganizationLogo(),
     getNavBadges(),
     getNotifications(),
+    getLocale(),
   ]);
 
   // Whether this crew may see their own pay. Off unless the office has
@@ -53,7 +56,7 @@ export default async function RootLayout({
 
   return (
     <html
-      lang="en"
+      lang={locale}
       className={`dark vibe-chill ${GeistSans.variable} ${GeistMono.variable}`}
       suppressHydrationWarning
     >
@@ -66,15 +69,17 @@ export default async function RootLayout({
         />
       </head>
       <body className="min-h-svh bg-background font-sans antialiased">
-        <AppShell
-          user={user}
-          logoUrl={logoUrl}
-          badges={badges}
-          notifications={notifications}
-          showPay={showPay}
-        >
-          {children}
-        </AppShell>
+        <LanguageProvider locale={locale}>
+          <AppShell
+            user={user}
+            logoUrl={logoUrl}
+            badges={badges}
+            notifications={notifications}
+            showPay={showPay}
+          >
+            {children}
+          </AppShell>
+        </LanguageProvider>
       </body>
     </html>
   );

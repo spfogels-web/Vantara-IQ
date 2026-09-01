@@ -8,6 +8,7 @@ import {
   getSubcontractors,
 } from "@/data/queries";
 import { getCurrentUser, isStaff } from "@/lib/auth";
+import { getT } from "@/lib/i18n-server";
 import { PageShell } from "@/components/common/page-shell";
 import { DailiesView } from "@/components/dailies/dailies-view";
 import { ImportDaily } from "@/components/dailies/import-daily";
@@ -20,11 +21,12 @@ export default async function DailiesPage({
 }: {
   searchParams: Promise<{ sheet?: string; status?: string }>;
 }) {
-  const [dailies, sheetByDaily, me, sp] = await Promise.all([
+  const [dailies, sheetByDaily, me, sp, t] = await Promise.all([
     getDailies(),
     getSheetIndexByDaily(),
     getCurrentUser(),
     searchParams,
+    getT(),
   ]);
 
   const staff = !!me && isStaff(me.role);
@@ -41,19 +43,21 @@ export default async function DailiesPage({
   // sheet takes the primary action.
   return (
     <PageShell
-      eyebrow="Overview"
-      title="Dailies"
+      eyebrow={t("Overview")}
+      title={t("Dailies")}
       description={
         staff
-          ? "Every crew's daily production, digitized from the field. The AI reads each sheet, reconciles quantities and documentation, and stages it for your team's review."
-          : "The days your crew has filed, and where each one stands with Fortitude."
+          ? t(
+              "Every crew's daily production, digitized from the field. The AI reads each sheet, reconciles quantities and documentation, and stages it for your team's review.",
+            )
+          : t("The days your crew has filed, and where each one stands with Fortitude.")
       }
       actions={
         <Link
           href="/dailies/sheet"
           className="brand-gradient focus-ring inline-flex h-9 items-center gap-1.5 rounded-lg px-3.5 text-[12.5px] font-semibold text-white"
         >
-          <FileText className="size-4" /> Billing sheet
+          <FileText className="size-4" /> {t("Billing sheet")}
         </Link>
       }
     >

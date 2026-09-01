@@ -21,6 +21,7 @@ import { toneStyles } from "@/lib/tone";
 import type { DailyReport, DailyStatus } from "@/lib/types";
 import { formatCurrency, formatFeet, formatNumber, formatWhen } from "@/lib/format";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
+import { useT } from "@/components/layout/language-provider";
 import { StatusPill } from "@/components/common/status-pill";
 import { Button } from "@/components/ui/button";
 import { deleteDaily, reopenDailyReview, reviewDaily, setDailyBillingWeek } from "@/app/actions";
@@ -53,6 +54,7 @@ export function DailiesView({
    */
   canReview?: boolean;
 }) {
+  const t = useT();
   const [items, setItems] = React.useState(dailies);
   const [filter, setFilter] = React.useState<(typeof FILTERS)[number]>("All");
   const [selectedId, setSelectedId] = React.useState(
@@ -108,8 +110,8 @@ export function DailiesView({
       <div className="lg:col-span-5 xl:col-span-4">
         <Panel>
           <PanelHeader
-            title="Daily billing sheets"
-            description={`${pending} awaiting review`}
+            title={t("Daily billing sheets")}
+            description={`${pending} ${t("awaiting review")}`}
             count={filtered.length}
             icon={<ClipboardList className="size-3.5 text-gold" />}
           />
@@ -125,7 +127,7 @@ export function DailiesView({
                     : "bg-foreground/[0.04] text-muted-foreground hover:text-foreground",
                 )}
               >
-                {f}
+                {t(f)}
               </button>
             ))}
 
@@ -136,7 +138,7 @@ export function DailiesView({
               <select
                 value={job}
                 onChange={(e) => setJob(e.target.value)}
-                aria-label="Filter by project"
+                aria-label={t("Filter by project")}
                 className={cn(
                   "focus-ring ml-auto h-[26px] max-w-[190px] cursor-pointer rounded-full px-2.5 text-[11.5px] font-medium outline-none transition-colors",
                   job === "All projects"
@@ -144,7 +146,7 @@ export function DailiesView({
                     : "bg-brand text-white",
                 )}
               >
-                <option>All projects</option>
+                <option>{t("All projects")}</option>
                 {jobs.map((p) => (
                   <option key={p} value={p}>
                     {p}
@@ -157,7 +159,7 @@ export function DailiesView({
               <select
                 value={crew}
                 onChange={(e) => setCrew(e.target.value)}
-                aria-label="Filter by crew"
+                aria-label={t("Filter by crew")}
                 className={cn(
                   "focus-ring h-[26px] max-w-[190px] cursor-pointer rounded-full px-2.5 text-[11.5px] font-medium outline-none transition-colors",
                   jobs.length > 1 ? "" : "ml-auto",
@@ -166,7 +168,7 @@ export function DailiesView({
                     : "bg-brand text-white",
                 )}
               >
-                <option>All crews</option>
+                <option>{t("All crews")}</option>
                 {crews.map((c) => (
                   <option key={c} value={c}>
                     {c}
@@ -195,7 +197,7 @@ export function DailiesView({
                       {d.flags.length > 0 ? (
                         <AlertTriangle className={cn("size-3.5 shrink-0", toneStyles[d.tone].text)} />
                       ) : null}
-                      <StatusPill label={d.status} tone={d.tone} className="shrink-0 text-[10px]" dot={false} />
+                      <StatusPill label={t(d.status)} tone={d.tone} className="shrink-0 text-[10px]" dot={false} />
                     </div>
                     <div className="mt-1 flex items-center justify-between text-[11px] text-muted-foreground">
                       <span className="truncate">{[d.subcontractor, d.crew].filter(Boolean).join(" · ")}</span>
@@ -220,12 +222,12 @@ export function DailiesView({
                               d.grossMargin > 0 ? "text-success" : "text-critical",
                             )}
                           >
-                            {formatCurrency(d.grossMargin)} margin
+                            {formatCurrency(d.grossMargin)} {t("margin")}
                           </span>
                         ) : null}
                         {d.unpricedCodes > 0 ? (
                           <span className="ml-auto text-[10px] text-warning">
-                            {d.unpricedCodes} unpriced
+                            {d.unpricedCodes} {t("unpriced")}
                           </span>
                         ) : null}
                       </div>
@@ -271,6 +273,7 @@ function DailyDetail({
   canReview: boolean;
 }) {
   const router = useRouter();
+  const t = useT();
   const [note, setNote] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -357,31 +360,31 @@ function DailyDetail({
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-[16px] font-semibold tracking-[-0.02em] text-foreground">{d.project}</h2>
-                <StatusPill label={d.status} tone={d.tone} />
+                <StatusPill label={t(d.status)} tone={d.tone} />
               </div>
               <p className="mt-1 text-[12px] text-muted-foreground">
                 {[d.customer, d.subcontractor, d.crew].filter(Boolean).join(" · ")}
               </p>
               <p className="mt-0.5 text-[11.5px] text-muted-foreground/80">
-                Sheet <span className="num">{d.sheetNumber}</span> · Work date {d.workDate} · submitted {formatWhen(d.submittedAt)}
+                {t("Sheet")} <span className="num">{d.sheetNumber}</span> · {t("Work date")} {d.workDate} · {t("submitted")} {formatWhen(d.submittedAt)}
               </p>
               {/* Which week this money lands in. Billing runs Saturday to
                   Friday, so the Friday is the fact that matters here — it is
                   what payment terms are counted from. */}
               {d.billingWeekEnd ? (
                 <p className="mt-0.5 text-[11.5px]">
-                  <span className="text-muted-foreground/80">Bills to week ending </span>
+                  <span className="text-muted-foreground/80">{t("Bills to week ending ")}</span>
                   <span className={cn("num", d.billingWeekOverridden ? "font-semibold text-warning" : "text-muted-foreground/80")}>
                     {d.billingWeekEnd}
                   </span>
                   {d.billingWeekOverridden ? (
-                    <span className="text-warning"> · moved by the office</span>
+                    <span className="text-warning"> · {t("moved by the office")}</span>
                   ) : null}
                 </p>
               ) : null}
             </div>
             <div className="text-right">
-              <p className="eyebrow text-gold">Billable</p>
+              <p className="eyebrow text-gold">{t("Billable")}</p>
               <p className="num gold-figure text-[20px] font-semibold tracking-[-0.02em]">
                 {formatCurrency(d.billableAmount)}
               </p>
@@ -389,9 +392,9 @@ function DailyDetail({
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <DocChip label="Photos" ok={d.photos > 0} value={d.photos > 0 ? `${d.photos}` : "None"} icon={<Camera className="size-3.5" />} />
-            <DocChip label="As-built" ok={d.hasAsBuilt} value={d.hasAsBuilt ? "Attached" : "Missing"} icon={<FileText className="size-3.5" />} />
-            <DocChip label="Bore log" ok={d.hasBoreLog} value={d.hasBoreLog ? "Attached" : "N/A"} icon={<Ruler className="size-3.5" />} neutral={!d.hasBoreLog} />
+            <DocChip label={t("Photos")} ok={d.photos > 0} value={d.photos > 0 ? `${d.photos}` : t("None")} icon={<Camera className="size-3.5" />} />
+            <DocChip label={t("As-built")} ok={d.hasAsBuilt} value={d.hasAsBuilt ? t("Attached") : t("Missing")} icon={<FileText className="size-3.5" />} />
+            <DocChip label={t("Bore log")} ok={d.hasBoreLog} value={d.hasBoreLog ? t("Attached") : "N/A"} icon={<Ruler className="size-3.5" />} neutral={!d.hasBoreLog} />
           </div>
         </PanelBody>
       </Panel>
@@ -399,15 +402,15 @@ function DailyDetail({
       {/* AI review */}
       <Panel className={cn(d.flags.length > 0 && toneStyles[d.tone].glow)}>
         <PanelHeader
-          title="AI review"
-          description={d.flags.length === 0 ? "No discrepancies detected" : `${d.flags.length} item${d.flags.length > 1 ? "s" : ""} for your team to review`}
+          title={t("AI review")}
+          description={d.flags.length === 0 ? t("No discrepancies detected") : `${d.flags.length} ${t("for your team to review")}`}
           icon={<Sparkles className="size-3.5 text-brand-bright" />}
         />
         <PanelBody className="flex flex-col gap-2">
           {d.flags.length === 0 ? (
             <div className="flex items-center gap-2 rounded-lg border border-success/25 bg-success/10 px-3 py-2.5 text-[12.5px] text-success">
               <Check className="size-4" />
-              Quantities, documentation and unit codes all reconcile. Cleared for billing.
+              {t("Quantities, documentation and unit codes all reconcile. Cleared for billing.")}
             </div>
           ) : (
             d.flags.map((f, i) => (
@@ -426,7 +429,7 @@ function DailyDetail({
             ))
           )}
           <p className="mt-1 text-[11px] text-muted-foreground">
-            Nothing is approved automatically — the AI prepares, your team decides.
+            {t("Nothing is approved automatically — the AI prepares, your team decides.")}
           </p>
         </PanelBody>
       </Panel>
@@ -446,15 +449,15 @@ function DailyDetail({
           <Panel>
             <PanelBody className="flex flex-wrap items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-[13px] font-medium text-foreground">Globe billing sheet</p>
+                <p className="text-[13px] font-medium text-foreground">{t("Globe billing sheet")}</p>
                 <p className="mt-0.5 text-[12px] text-muted-foreground">
-                  The filled-in form and the day&apos;s redlined map, as submitted.
+                  {t("The filled-in form and the day's redlined map, as submitted.")}
                 </p>
               </div>
               <span
                 className="inline-flex h-9 w-full shrink-0 items-center justify-center gap-1.5 rounded-lg bg-brand px-3.5 text-[12.5px] font-semibold text-white sm:w-auto"
               >
-                <FileText className="size-4" /> Open billing sheet
+                <FileText className="size-4" /> {t("Open billing sheet")}
               </span>
             </PanelBody>
           </Panel>
@@ -463,14 +466,14 @@ function DailyDetail({
 
       {/* Line items — the digital daily */}
       <Panel>
-        <PanelHeader title="Line items" count={d.lineItems.length} icon={<MapPin className="size-3.5 text-gold" />} />
+        <PanelHeader title={t("Line items")} count={d.lineItems.length} icon={<MapPin className="size-3.5 text-gold" />} />
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
               <tr className="border-b border-border/70 text-[10.5px] uppercase tracking-wider text-muted-foreground">
-                <th className="px-4 py-2 font-medium sm:px-5">Location</th>
-                <th className="px-4 py-2 font-medium">Unit code</th>
-                <th className="px-4 py-2 text-right font-medium sm:px-5">Quantity</th>
+                <th className="px-4 py-2 font-medium sm:px-5">{t("Location")}</th>
+                <th className="px-4 py-2 font-medium">{t("Unit code")}</th>
+                <th className="px-4 py-2 text-right font-medium sm:px-5">{t("Quantity")}</th>
               </tr>
             </thead>
             <tbody>

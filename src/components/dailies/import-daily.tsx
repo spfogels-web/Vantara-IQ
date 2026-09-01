@@ -8,6 +8,7 @@ import { AlertTriangle, Check, FileUp, Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { importDailyFromFile } from "@/app/actions";
+import { useT } from "@/components/layout/language-provider";
 
 /**
  * Drop in the daily a crew emailed over and let the system read it.
@@ -37,6 +38,7 @@ export function ImportDaily({
   crews: { id: string; company: string }[];
 }) {
   const router = useRouter();
+  const t = useT();
   const [projectId, setProjectId] = React.useState(projects[0]?.id ?? "");
   const [filedForId, setFiledForId] = React.useState("");
   const [busy, setBusy] = React.useState<string | null>(null);
@@ -81,7 +83,7 @@ export function ImportDaily({
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex min-w-[220px] flex-1 flex-col gap-1">
           <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
-            Job
+            {t("Job")}
           </span>
           <select
             value={projectId}
@@ -99,7 +101,7 @@ export function ImportDaily({
         {crews.length > 0 ? (
           <label className="flex min-w-[200px] flex-1 flex-col gap-1">
             <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">
-              Filing this for
+              {t("Filing this for")}
             </span>
             <select
               value={filedForId}
@@ -157,10 +159,10 @@ export function ImportDaily({
           <>
             <FileUp className="size-5 text-muted-foreground" />
             <span className="text-[13px] font-medium text-foreground">
-              Drop a daily here, or tap to choose
+              {t("Drop a daily here, or tap to choose")}
             </span>
             <span className="text-[11.5px] text-muted-foreground">
-              PDF or photo of the billing sheet. It comes back as a draft for you to check.
+              {t("PDF or photo of the billing sheet. It comes back as a draft for you to check.")}
             </span>
           </>
         )}

@@ -42,6 +42,8 @@ import { useSidebar } from "@/components/layout/sidebar-context";
 import { useCommandMenu } from "@/components/layout/command-menu";
 import { quickActionsFor } from "@/lib/quick-actions";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
+import { LanguageToggle } from "@/components/layout/language-toggle";
+import { useT } from "@/components/layout/language-provider";
 import { VibeToggle } from "@/components/layout/vibe-toggle";
 import { FeedbackDialog } from "@/components/layout/feedback-dialog";
 import { LiveDot } from "@/components/common/status-pill";
@@ -59,6 +61,7 @@ function useMetaKeyLabel() {
 function SearchTrigger({ className }: { className?: string }) {
   const { setOpen } = useCommandMenu();
   const meta = useMetaKeyLabel();
+  const t = useT();
 
   return (
     <button
@@ -71,7 +74,7 @@ function SearchTrigger({ className }: { className?: string }) {
     >
       <Search className="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" />
       <span className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground">
-        Search projects, dailies, crews…
+        {t("Search projects, dailies, crews…")}
       </span>
       <kbd className="hidden shrink-0 items-center gap-0.5 rounded border border-foreground/[0.08] bg-foreground/[0.04] px-1.5 py-0.5 font-mono text-[10px] font-medium text-muted-foreground sm:inline-flex">
         {meta}K
@@ -194,6 +197,7 @@ function NotificationsPopover({ notifications }: { notifications: AppNotificatio
  * palette, which offers the same three.
  */
 function QuickActions({ role }: { role?: string | null }) {
+  const t = useT();
   const actions = quickActionsFor(role);
   if (actions.length === 0) return null;
 
@@ -205,13 +209,13 @@ function QuickActions({ role }: { role?: string | null }) {
           className="brand-gradient glow-brand h-9 gap-1.5 rounded-lg px-3 text-[12.5px] font-semibold text-white"
         >
           <Plus className="size-4" strokeWidth={2.4} />
-          <span className="hidden sm:inline">Create</span>
+          <span className="hidden sm:inline">{t("Create")}</span>
           <ChevronDown className="hidden size-3 opacity-70 sm:inline" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" sideOffset={10} className="w-72 rounded-xl border-foreground/[0.08] shadow-elev-3">
         <DropdownMenuLabel className="text-[10px] font-semibold uppercase tracking-[0.09em] text-muted-foreground">
-          Quick actions
+          {t("Quick actions")}
         </DropdownMenuLabel>
         {actions.map((action) => (
           <DropdownMenuItem asChild key={action.label} className="gap-2.5 py-2">
@@ -219,10 +223,10 @@ function QuickActions({ role }: { role?: string | null }) {
               <action.icon className="size-4 shrink-0 text-muted-foreground" />
               <span className="min-w-0">
                 <span className="block text-[12.5px] leading-tight text-foreground">
-                  {action.label}
+                  {t(action.label)}
                 </span>
                 <span className="mt-0.5 block text-[11px] leading-tight text-muted-foreground">
-                  {action.hint}
+                  {t(action.hint)}
                 </span>
               </span>
             </Link>
@@ -379,6 +383,7 @@ export function Topbar({
   notifications?: AppNotification[];
 }) {
   const { setOpen: setCommandOpen } = useCommandMenu();
+  const t = useT();
 
   return (
     <header className="glass sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-border px-3 sm:gap-3 sm:px-5">
@@ -389,14 +394,14 @@ export function Topbar({
       <div className="flex shrink-0 items-center gap-2.5">
         <h1 className="whitespace-nowrap text-[14px] font-semibold tracking-[-0.01em] text-foreground">
           {user?.role === "SUBCONTRACTOR"
-            ? (user.subcontractorName ?? "Crew portal")
-            : "Operations Center"}
+            ? (user.subcontractorName ?? t("Crew portal"))
+            : t("Operations Center")}
         </h1>
         <Tooltip>
           <TooltipTrigger asChild>
             <span className="hidden items-center gap-1.5 rounded-full border border-success/25 bg-success/10 px-2 py-[3px] text-[10.5px] font-medium text-success sm:inline-flex">
               <LiveDot />
-              Live
+              {t("Live")}
             </span>
           </TooltipTrigger>
           <TooltipContent>Data refreshed 2 minutes ago</TooltipContent>
@@ -415,6 +420,7 @@ export function Topbar({
           <Search className="size-[18px]" />
         </button>
         <QuickActions role={user?.role} />
+        <LanguageToggle />
         <VibeToggle />
         <ThemeToggle />
         <NotificationsPopover notifications={notifications} />

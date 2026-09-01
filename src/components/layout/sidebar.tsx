@@ -23,6 +23,7 @@ import {
 import { BrandLogo, BrandMark } from "@/components/common/brand-logo";
 import { FeedbackDialog } from "@/components/layout/feedback-dialog";
 import { useSidebar } from "@/components/layout/sidebar-context";
+import { useT } from "@/components/layout/language-provider";
 
 export const SIDEBAR_WIDTH = 264;
 export const SIDEBAR_WIDTH_COLLAPSED = 68;
@@ -36,6 +37,7 @@ function NavRow({
   collapsed: boolean;
   onNavigate?: () => void;
 }) {
+  const t = useT();
   const pathname = usePathname();
   const Icon = getIcon(item.icon);
   const active = pathname === item.href;
@@ -70,7 +72,7 @@ function NavRow({
       />
       {!collapsed && (
         <>
-          <span className="min-w-0 flex-1 truncate">{item.label}</span>
+          <span className="min-w-0 flex-1 truncate">{t(item.label)}</span>
           {item.badge ? (
             <span
               className={cn(
@@ -97,7 +99,7 @@ function NavRow({
     <Tooltip>
       <TooltipTrigger asChild>{row}</TooltipTrigger>
       <TooltipContent side="right" sideOffset={10} className="flex items-center gap-2">
-        {item.label}
+        {t(item.label)}
         {item.badge ? (
           <span className="num rounded-full bg-foreground/15 px-1.5 text-[10px] font-semibold">
             {item.badge}
@@ -129,6 +131,7 @@ export function SidebarContent({
   showPay?: boolean;
 }) {
   const { toggle } = useSidebar();
+  const t = useT();
   const [feedbackOpen, setFeedbackOpen] = React.useState(false);
 
   return (
@@ -170,7 +173,7 @@ export function SidebarContent({
           <div key={section.title} className="space-y-1">
             {!collapsed ? (
               <p className="sheet-label px-2.5 pb-1 text-[10px] font-semibold uppercase tracking-[0.12em] opacity-90">
-                {section.title}
+                {t(section.title)}
               </p>
             ) : (
               <div className="mx-auto mb-2 h-px w-6 bg-foreground/[0.07]" />

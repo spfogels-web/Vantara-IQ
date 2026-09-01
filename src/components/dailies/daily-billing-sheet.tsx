@@ -19,6 +19,7 @@ import {
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/components/layout/language-provider";
 import {
   deleteDailySheet,
   saveDailySheet,
@@ -289,6 +290,10 @@ function Field({
    */
   required?: boolean;
 }) {
+  const t = useT();
+  // The Spanish name for this box, when the viewer is reading Spanish. Falls
+  // back to the label itself, and the render below skips it when they match.
+  const hint = t(label);
   const missing = required && !value.trim();
 
   return (
@@ -308,8 +313,20 @@ function Field({
         )}
       >
         {label}
-        {missing ? <span className="ml-1 print:hidden">— required</span> : null}
+        {missing ? <span className="ml-1 print:hidden">{t("— required")}</span> : null}
       </span>
+      {/* The Spanish name for the box, on screen only.
+
+          Globe's form is Globe's document — this is what they pay against, and
+          a Spanish column header on a submitted sheet is a rejected sheet. So
+          the English label above stays exactly as printed and this sits under
+          it, hidden from print and absent from the server-drawn PDF entirely.
+          The crew knows what goes in the box; Globe still gets its form. */}
+      {hint && hint !== label ? (
+        <span className="truncate px-1.5 text-[7.5px] font-medium normal-case leading-tight text-muted-foreground print:hidden">
+          {hint}
+        </span>
+      ) : null}
       <input
         type={type}
         value={value}
