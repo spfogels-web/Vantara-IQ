@@ -27,11 +27,12 @@ import {
 } from "@/app/actions";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { RateSheetUpload } from "@/components/common/rate-sheet-upload";
+import { marketLabel } from "@/lib/markets";
 import { StatusPill } from "@/components/common/status-pill";
 import { Button } from "@/components/ui/button";
 
 type Doc = { id: string; section: string; fileName: string; sizeBytes: number; dataUrl: string; createdAt: string };
-type Rate = { id: string; code: string; description: string; unit: string; rate: number; minimum: number | null; source: string };
+type Rate = { id: string; code: string; market: string; description: string; unit: string; rate: number; minimum: number | null; source: string };
 type Imp = { id: string; fileName: string; rowCount: number };
 
 const DOC_SECTIONS = [
@@ -56,6 +57,14 @@ export function CustomerBilling({ customerId }: { customerId: string }) {
   const [busy, setBusy] = React.useState<string | null>(null);
   const [importId, setImportId] = React.useState("");
   const [draft, setDraft] = React.useState({ code: "", description: "", unit: "ft", rate: "", minimum: "" });
+
+  // Two cards under one customer is the case this column exists for — Trawick
+  // runs South Georgia and Alabama at different prices. Without it the same
+  // code appears twice at two prices and reads as duplicated data.
+  const split = React.useMemo(
+    () => new Set((rates ?? []).map((r) => r.market)).size > 1,
+    [rates],
+  );
 
   React.useEffect(() => {
     let on = true;
@@ -190,6 +199,10 @@ export function CustomerBilling({ customerId }: { customerId: string }) {
             <thead>
               <tr className="border-b border-border/70 text-[10.5px] uppercase tracking-wider text-muted-foreground">
                 <th className="px-4 py-2 font-medium sm:px-5">Code</th>
+                {/* Only when this customer actually has more than one card.
+                    A market column on a single-market customer is a column of
+                    the same word repeated four hundred times. */}
+                {split ? <th className="px-3 py-2 font-medium">Market</th> : null}
                 <th className="px-3 py-2 font-medium">Description</th>
                 <th className="px-3 py-2 font-medium">Unit</th>
                 <th className="px-3 py-2 text-right font-medium">Rate</th>
@@ -206,6 +219,17 @@ export function CustomerBilling({ customerId }: { customerId: string }) {
                 rates.map((r) => (
                   <tr key={r.id} className="border-b border-border/40 last:border-0 hover:bg-foreground/[0.02]">
                     <td className="px-4 py-2 sm:px-5"><span className="num rounded bg-foreground/[0.06] px-1.5 py-0.5 text-[11.5px] font-semibold text-foreground ring-1 ring-inset ring-foreground/[0.06]">{r.code}</span></td>
+                    {split ? (
+                      <td className="px-3 py-2 text-[12px]">
+                        {r.market ? (
+                          <span className="rounded-full border border-gold/40 bg-gold/[0.1] px-1.5 py-0.5 text-[11px] font-medium text-foreground">
+                            {marketLabel(r.market)}
+                          </span>
+                        ) : (
+                          <span className="text-[11.5px] text-muted-foreground">Every market</span>
+                        )}
+                      </td>
+                    ) : null}
                     <td className="px-3 py-2 text-[12px] text-muted-foreground">{r.description}</td>
                     <td className="px-3 py-2 text-[12px] text-muted-foreground">{r.unit}</td>
                     <td className="num px-3 py-2 text-right text-[12.5px] font-medium text-foreground">{formatRate(r.rate)}</td>

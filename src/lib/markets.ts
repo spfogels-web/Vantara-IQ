@@ -125,3 +125,48 @@ export function inferMarket(input: {
   );
   return unambiguous.length === 1 ? unambiguous[0].id : null;
 }
+
+/**
+ * Pick the rows that apply in a market, one per code.
+ *
+ * A row naming the market beats a row that names none. That is what lets one
+ * customer hold two cards at different prices: Trawick's South Georgia sheet
+ * and Trawick's Alabama sheet both live under Trawick, and a job is priced off
+ * whichever matches the market it is in.
+ *
+ * A blank market means "everywhere". Most customers work one market and expect
+ * their card to follow them, so that is the default and nothing has to be
+ * tagged until there is a second card to tell apart.
+ *
+ * When a market-specific card omits a code the general card has, the general
+ * one is used. That is deliberate: a card is usually a delta against a base,
+ * and refusing to price a code somebody did not re-list would read as the work
+ * being unbillable rather than as unchanged.
+ */
+export function ratesForMarket<T extends { code: string; market?: string | null }>(
+  rows: T[],
+  market: string | null | undefined,
+): T[] {
+  const m = (market ?? "").trim();
+  const byCode = new Map<string, T>();
+
+  for (const r of rows) {
+    const rowMarket = (r.market ?? "").trim();
+    // A row for some other market is not a fallback for this one — it is a
+    // different price for a different place, and using it is the mistake this
+    // whole column exists to prevent.
+    if (rowMarket && rowMarket !== m) continue;
+
+    const key = r.code.trim().toUpperCase();
+    const held = byCode.get(key);
+    if (!held) {
+      byCode.set(key, r);
+      continue;
+    }
+    // Both apply; the one that names the market is the more specific answer.
+    const heldMarket = (held.market ?? "").trim();
+    if (!heldMarket && rowMarket) byCode.set(key, r);
+  }
+
+  return [...byCode.values()];
+}

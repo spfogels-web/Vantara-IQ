@@ -4,6 +4,7 @@ import { cache } from "react";
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { ratesForMarket } from "@/lib/markets";
 import {
   assertOwnSubcontractor,
   assertProjectAccess,
@@ -1411,6 +1412,10 @@ export async function priceDailies(
   const rateSelect = {
     code: true, description: true, unit: true,
     rate: true, effectiveDate: true, expirationDate: true,
+    // Which market's price this is. Two of Fortitude's markets run through
+    // the same prime at different rates, so the customer alone no longer
+    // identifies a price.
+    market: true,
   } as const;
 
   // The job's customer is a foreign key; the name written on the daily is free
@@ -1422,7 +1427,7 @@ export async function priceDailies(
     projectIds.length
       ? prisma.project.findMany({
           where: { id: { in: projectIds } },
-          select: { id: true, customerId: true },
+          select: { id: true, customerId: true, market: true },
         })
       : Promise.resolve([]),
     customerNames.length
@@ -1440,6 +1445,7 @@ export async function priceDailies(
   ]);
 
   const customerIdByProject = new Map(projects.map((p) => [p.id, p.customerId]));
+  const marketByProject = new Map(projects.map((p) => [p.id, p.market]));
   const linkedIds = [...new Set([...customerIdByProject.values()].filter(Boolean))] as string[];
   const linked = linkedIds.length
     ? await prisma.customer.findMany({
@@ -1463,11 +1469,18 @@ export async function priceDailies(
       }));
 
     const linkedId = r.projectId ? customerIdByProject.get(r.projectId) : null;
-    const ours =
+    // The job's market decides which of a customer's cards applies. A daily
+    // with no job behind it has no market, which resolves to the cards that
+    // name none — the same rates it was priced at before markets existed.
+    const market = r.projectId ? marketByProject.get(r.projectId) ?? "" : "";
+
+    const ours = ratesForMarket(
       (linkedId ? ratesByCustomerId.get(linkedId) : undefined) ??
-      customerRates.get(r.customer?.trim() ?? "") ??
-      [];
-    const theirs = subRates.get(r.subcontractor?.trim() ?? "") ?? [];
+        customerRates.get(r.customer?.trim() ?? "") ??
+        [],
+      market,
+    );
+    const theirs = ratesForMarket(subRates.get(r.subcontractor?.trim() ?? "") ?? [], market);
 
     const revenue = priceQuantities(quantities, ours, r.workDate);
     const cost = theirs.length > 0 ? priceQuantities(quantities, theirs, r.workDate) : null;
@@ -2232,6 +2245,8 @@ export async function getProjectValuation(projectId: string): Promise<ProjectVal
     select: {
       client: true,
       customerId: true,
+      // Decides which of the customer's cards this job is priced against.
+      market: true,
       materials: {
         where: { inScope: true },
         select: { code: true, item: true, unit: true, planned: true },
@@ -2292,12 +2307,15 @@ export async function getProjectValuation(projectId: string): Promise<ProjectVal
         select: { id: true },
       });
 
-  const customerRates = customer
-    ? await prisma.customerRate.findMany({
-        where: { customerId: customer.id },
-        select: { code: true, description: true, unit: true, rate: true, effectiveDate: true, expirationDate: true },
-      })
-    : [];
+  const customerRates = ratesForMarket(
+    customer
+      ? await prisma.customerRate.findMany({
+          where: { customerId: customer.id },
+        select: { code: true, description: true, unit: true, rate: true, effectiveDate: true, expirationDate: true, market: true },
+        })
+      : [],
+    project.market,
+  );
 
   /**
    * Cost the plan at the one crew that has a signed card.
@@ -2309,13 +2327,16 @@ export async function getProjectValuation(projectId: string): Promise<ProjectVal
    * which does which footage — that still reports nothing rather than guessing
    * a split.
    */
-  const crewCards = await prisma.subcontractorRate.findMany({
-    where: { subcontractorId: { in: project.crews.map((c) => c.id) } },
-    select: {
-      subcontractorId: true, code: true, description: true,
-      unit: true, rate: true, effectiveDate: true, expirationDate: true,
-    },
-  });
+  const crewCards = ratesForMarket(
+    await prisma.subcontractorRate.findMany({
+      where: { subcontractorId: { in: project.crews.map((c) => c.id) } },
+      select: {
+        subcontractorId: true, code: true, description: true,
+        unit: true, rate: true, effectiveDate: true, expirationDate: true, market: true,
+      },
+    }),
+    project.market,
+  );
 
   const ratesByCrew = new Map<string, typeof crewCards>();
   for (const r of crewCards) {
@@ -3328,6 +3349,8 @@ export async function getProjectRates(projectId: string): Promise<ProjectRates> 
     where: { id: projectId },
     select: {
       customerId: true,
+      // Decides which of the customer's cards this job is priced against.
+      market: true,
       client: true,
       materials: {
         where: { inScope: true },
@@ -3343,21 +3366,27 @@ export async function getProjectRates(projectId: string): Promise<ProjectRates> 
     (await prisma.customer.findFirst({ where: { name: project.client }, select: { id: true } }))?.id ??
     null;
 
-  const customerRates = customerId
-    ? await prisma.customerRate.findMany({
-        where: { customerId },
-        select: { code: true, description: true, unit: true, rate: true, effectiveDate: true, expirationDate: true },
-      })
-    : [];
+  const customerRates = ratesForMarket(
+    customerId
+      ? await prisma.customerRate.findMany({
+          where: { customerId },
+        select: { code: true, description: true, unit: true, rate: true, effectiveDate: true, expirationDate: true, market: true },
+        })
+      : [],
+    project.market,
+  );
 
   // Same rule the valuation uses: cost at the one crew that has a card.
-  const cards = await prisma.subcontractorRate.findMany({
-    where: { subcontractorId: { in: project.crews.map((c) => c.id) } },
-    select: {
-      id: true, subcontractorId: true, code: true, description: true,
-      unit: true, rate: true, effectiveDate: true, expirationDate: true,
-    },
-  });
+  const cards = ratesForMarket(
+    await prisma.subcontractorRate.findMany({
+      where: { subcontractorId: { in: project.crews.map((c) => c.id) } },
+      select: {
+        id: true, subcontractorId: true, code: true, description: true,
+        unit: true, rate: true, effectiveDate: true, expirationDate: true, market: true,
+      },
+    }),
+    project.market,
+  );
   const byCrew = new Map<string, typeof cards>();
   for (const r of cards) byCrew.set(r.subcontractorId, [...(byCrew.get(r.subcontractorId) ?? []), r]);
 

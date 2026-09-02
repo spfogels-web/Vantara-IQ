@@ -112,6 +112,14 @@ model CustomerRate {
   id             String   @id @default(cuid())
   customer       Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
   customerId     String
+  /// Which market this price applies in — see src/lib/markets.ts.
+  ///
+  /// Empty means every market, which is the right default: most customers
+  /// work one market and a card that follows them everywhere is what people
+  /// expect. A market-specific row wins over a blank one, so Trawick can
+  /// hold a South Georgia card and an Alabama card at different prices
+  /// under the same customer without either overwriting the other.
+  market         String   @default("")
   code           String
   description    String   @default("")
   unit           String   @default("")
@@ -284,6 +292,14 @@ model SubcontractorRate {
   id              String        @id @default(cuid())
   subcontractor   Subcontractor @relation(fields: [subcontractorId], references: [id], onDelete: Cascade)
   subcontractorId String
+  /// Which market this price applies in — see src/lib/markets.ts.
+  ///
+  /// Empty means every market, which is the right default: most customers
+  /// work one market and a card that follows them everywhere is what people
+  /// expect. A market-specific row wins over a blank one, so Trawick can
+  /// hold a South Georgia card and an Alabama card at different prices
+  /// under the same customer without either overwriting the other.
+  market          String        @default("")
   code            String
   description     String        @default("")
   unit            String        @default("")

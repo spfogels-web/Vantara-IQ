@@ -345,6 +345,7 @@ export async function listSubRates(subcontractorId: string) {
   return rows.map((r) => ({
     id: r.id,
     code: r.code,
+    market: r.market,
     description: r.description,
     unit: r.unit,
     rate: r.rate,
@@ -917,6 +918,7 @@ export async function listCustomerRates(customerId: string) {
   return rows.map((r) => ({
     id: r.id,
     code: r.code,
+    market: r.market,
     description: r.description,
     unit: r.unit,
     rate: r.rate,
@@ -3164,6 +3166,12 @@ export async function voidInvoice(id: string, reason: string) {
  * leave the card matching the sheet, not the sheet plus every prior version of
  * it, and rates that only existed on the old sheet are reported so a rate that
  * quietly disappeared is visible rather than assumed dropped on purpose.
+ *
+ * Replacement is scoped to the market the sheet is for. Trawick runs South
+ * Georgia and Alabama at different prices under one customer, and matching on
+ * the code alone meant the second sheet silently overwrote the first — same
+ * codes, different money, no warning. A sheet loaded for a market only ever
+ * touches that market's rows.
  */
 export async function uploadRateSheet(formData: FormData) {
   await requireStaff();
@@ -3171,6 +3179,11 @@ export async function uploadRateSheet(formData: FormData) {
   const file = formData.get("file") as File | null;
   const subcontractorId = String(formData.get("subcontractorId") || "");
   const customerId = String(formData.get("customerId") || "");
+  // Blank means the sheet applies in every market, which is right for a
+  // customer who only works one. Validated, because an unrecognised value
+  // would quietly create a market nothing prices against.
+  const marketRaw = String(formData.get("market") || "");
+  const market = isMarketId(marketRaw) ? marketRaw : "";
 
   if (!file) return { ok: false as const, error: "Choose a file." };
   if (!subcontractorId && !customerId) {
@@ -3241,7 +3254,7 @@ export async function uploadRateSheet(formData: FormData) {
 
   if (subcontractorId) {
     const existing = await prisma.subcontractorRate.findMany({
-      where: { subcontractorId },
+      where: { subcontractorId, market },
       select: { id: true, code: true, rate: true, unit: true, description: true },
     });
     const byCode = new Map(existing.map((r) => [r.code.toUpperCase(), r]));
@@ -3252,6 +3265,7 @@ export async function uploadRateSheet(formData: FormData) {
         await prisma.subcontractorRate.create({
           data: {
             subcontractorId,
+            market,
             code: r.code,
             description: r.description ?? "",
             unit: r.unit ?? "",
@@ -3278,7 +3292,7 @@ export async function uploadRateSheet(formData: FormData) {
     }
   } else {
     const existing = await prisma.customerRate.findMany({
-      where: { customerId },
+      where: { customerId, market },
       select: { id: true, code: true, rate: true, unit: true, description: true },
     });
     const byCode = new Map(existing.map((r) => [r.code.toUpperCase(), r]));
@@ -3289,6 +3303,7 @@ export async function uploadRateSheet(formData: FormData) {
         await prisma.customerRate.create({
           data: {
             customerId,
+            market,
             code: r.code,
             description: r.description ?? "",
             unit: r.unit ?? "",

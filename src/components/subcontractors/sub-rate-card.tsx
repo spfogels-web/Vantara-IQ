@@ -4,6 +4,7 @@ import * as React from "react";
 import { Download, Loader2, Plus, Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { marketLabel } from "@/lib/markets";
 import { formatRate } from "@/lib/format";
 import { compareByPriority } from "@/lib/unit-codes";
 import {
@@ -35,6 +36,13 @@ const inputClass =
 
 export function SubRateCard({ subcontractorId }: { subcontractorId: string }) {
   const [rates, setRates] = React.useState<Rate[] | null>(null);
+
+  // A crew can run in two markets at two prices — Trawick's South Georgia and
+  // Alabama pay differently, and what we pay a crew follows the same split.
+  const split = React.useMemo(
+    () => new Set((rates ?? []).map((r) => r.market)).size > 1,
+    [rates],
+  );
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [adding, setAdding] = React.useState(false);
@@ -292,6 +300,9 @@ export function SubRateCard({ subcontractorId }: { subcontractorId: string }) {
             <thead>
               <tr className="border-b border-border/70 text-[10.5px] uppercase tracking-wider text-muted-foreground">
                 <th className="px-4 py-2 font-medium sm:px-5">Code</th>
+                {/* Only once this crew has more than one card. A crew working
+                    one market would otherwise get a column of the same word. */}
+                {split ? <th className="px-3 py-2 font-medium">Market</th> : null}
                 <th className="px-3 py-2 font-medium">Description</th>
                 <th className="px-3 py-2 font-medium">Unit</th>
                 <th className="px-3 py-2 text-right font-medium">Rate</th>
@@ -335,6 +346,17 @@ export function SubRateCard({ subcontractorId }: { subcontractorId: string }) {
                       </span>
                     ) : null}
                   </td>
+                  {split ? (
+                    <td className="px-3 py-1.5 text-[12px]">
+                      {r.market ? (
+                        <span className="rounded-full border border-gold/40 bg-gold/[0.1] px-1.5 py-0.5 text-[11px] font-medium text-foreground">
+                          {marketLabel(r.market)}
+                        </span>
+                      ) : (
+                        <span className="text-[11.5px] text-muted-foreground">Every market</span>
+                      )}
+                    </td>
+                  ) : null}
                   <td className="px-3 py-1.5">
                     <input
                       defaultValue={r.description}

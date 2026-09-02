@@ -5,6 +5,7 @@ import { FileUp, Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { uploadRateSheet } from "@/app/actions";
+import { MARKETS } from "@/lib/markets";
 
 /**
  * Drop a signed rate sheet onto a card.
@@ -18,6 +19,12 @@ import { uploadRateSheet } from "@/app/actions";
  * The result says what changed, not just that it worked. A revised sheet that
  * moves eleven rates and leaves four hundred alone is a very different event
  * from one that moves nothing, and "uploaded" tells you neither.
+ *
+ * The market is chosen before the file, and it is part of what a sheet
+ * replaces. Trawick runs South Georgia and Alabama at different prices under
+ * one customer; without naming the market, loading the second sheet would
+ * overwrite the first code for code and report it as a few hundred rates
+ * "changed".
  */
 export function RateSheetUpload({
   subcontractorId,
@@ -29,6 +36,7 @@ export function RateSheetUpload({
   onLoaded?: () => void;
 }) {
   const inputRef = React.useRef<HTMLInputElement>(null);
+  const [market, setMarket] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [result, setResult] = React.useState<
@@ -53,6 +61,7 @@ export function RateSheetUpload({
     fd.set("file", file);
     if (subcontractorId) fd.set("subcontractorId", subcontractorId);
     if (customerId) fd.set("customerId", customerId);
+    fd.set("market", market);
 
     const res = await uploadRateSheet(fd);
     setBusy(false);
@@ -91,8 +100,27 @@ export function RateSheetUpload({
           {busy ? <Loader2 className="size-3.5 animate-spin" /> : <FileUp className="size-3.5" />}
           {busy ? "Reading…" : "Upload rate sheet"}
         </button>
+        {/* Before the file, because it decides what the file replaces. */}
+        <label className="inline-flex items-center gap-1.5 text-[11.5px] text-muted-foreground">
+          <span className="font-medium">Market</span>
+          <select
+            value={market}
+            onChange={(e) => setMarket(e.target.value)}
+            disabled={busy}
+            className="h-8 rounded-lg border border-border bg-transparent px-2 text-[12px] text-foreground outline-none focus:border-brand"
+          >
+            <option value="">Every market</option>
+            {MARKETS.map((m) => (
+              <option key={m.id} value={m.id}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
         <span className="text-[11.5px] text-muted-foreground">
-          PDF, XLSX or CSV. Codes replace by code — the card ends up matching the sheet.
+          PDF, XLSX or CSV. Codes replace by code{market ? " within this market" : ""} — the card
+          ends up matching the sheet.
         </span>
       </div>
 
@@ -101,8 +129,10 @@ export function RateSheetUpload({
       {result ? (
         <div className="mt-1.5 text-[11.5px]">
           <p className="text-success">
-            {result.fileName}: {result.parsed} priced rows — {result.added} added,{" "}
-            {result.changed} changed, {result.same} already matching.
+            {result.fileName}
+            {market ? ` → ${MARKETS.find((m) => m.id === market)?.label}` : ""}: {result.parsed}{" "}
+            priced rows — {result.added} added, {result.changed} changed, {result.same} already
+            matching.
           </p>
           {result.moved.length > 0 ? (
             <ul className="mt-0.5 flex flex-wrap gap-x-4 text-muted-foreground">
