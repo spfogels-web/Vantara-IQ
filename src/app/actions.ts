@@ -3213,8 +3213,23 @@ export async function uploadRateSheet(formData: FormData) {
     const wb = XLSX.read(buf, { type: "buffer" });
     const sheet = wb.Sheets[wb.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
-    const keyFor = (row: Record<string, unknown>, want: RegExp) =>
-      Object.keys(row).find((k) => want.test(k.trim()));
+    /**
+     * Find a column by name.
+     *
+     * Exact first, then a contained match. These sheets are hand-made and a
+     * header is as likely to say "CWI Code" or "Unit Price ($)" as "Code" —
+     * requiring the exact word meant a perfectly readable sheet came back as
+     * "no code column". Exact still wins, so a sheet carrying both "Code" and
+     * "Rate Code" resolves to the right one rather than to whichever column
+     * happened to come first.
+     */
+    const keyFor = (row: Record<string, unknown>, want: RegExp) => {
+      const keys = Object.keys(row);
+      const exact = keys.find((k) => want.test(k.trim()));
+      if (exact) return exact;
+      const loose = new RegExp(want.source.replace(/^^|$/g, ""), "i");
+      return keys.find((k) => loose.test(k.trim()));
+    };
 
     for (const row of rows) {
       const codeKey = keyFor(row, /^(code|unit ?code|item|cwi)$/i);
@@ -3233,9 +3248,20 @@ export async function uploadRateSheet(formData: FormData) {
       });
     }
     if (parsed.length === 0) {
+      // Name the columns actually present. "Couldn't find a code column" on a
+      // sheet that plainly has one is a dead end; the header row is the thing
+      // a person needs to see to know what to rename or what to tell us.
+      const headers = Object.keys(rows[0] ?? {})
+        .map((h) => h.trim())
+        .filter(Boolean)
+        .slice(0, 12);
       return {
         ok: false as const,
-        error: "Couldn't find a code column and a rate column in that spreadsheet.",
+        error:
+          "Couldn't find a code column and a rate column in that spreadsheet." +
+          (headers.length
+            ? ` The columns it found were: ${headers.join(", ")}.`
+            : " The first sheet appears to have no header row."),
       };
     }
   } else {
