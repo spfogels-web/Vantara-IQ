@@ -45,3 +45,6 @@ next-env.d.ts
 
 .vercel
 .env*.local
+
+# Scratch scripts used while debugging — never part of the app.
+_*.mjs
