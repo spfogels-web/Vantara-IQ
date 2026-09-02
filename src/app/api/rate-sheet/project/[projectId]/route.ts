@@ -5,6 +5,7 @@ import { requireStaff } from "@/lib/authz";
 import { assertProjectAccess } from "@/lib/authz";
 import { buildRateSheetPdf } from "@/lib/rate-sheet-pdf";
 import { companyLogo } from "@/lib/rate-sheet-logo";
+import { normalizeCode } from "@/lib/unit-codes";
 
 export const runtime = "nodejs";
 
@@ -42,6 +43,9 @@ export async function GET(
           orderBy: { code: "asc" },
           select: { code: true, description: true, unit: true, rate: true },
         },
+        // What the job actually builds. The pay card accumulates codes from
+        // every sheet ever loaded onto it; this is the shorter, real list.
+        materials: { where: { inScope: true }, select: { code: true } },
       },
     }),
     prisma.organization.findFirst({ select: { name: true, logoUrl: true } }),
@@ -49,9 +53,53 @@ export async function GET(
 
   if (!project) return NextResponse.json({ error: "Project not found." }, { status: 404 });
 
+  /**
+   * What goes on the sheet.
+   *
+   * The codes this job uses, plus every handhole. A crew quoting a job needs
+   * the handhole prices whether or not this particular material list happens
+   * to call for that size — the size found in the ground is rarely the size on
+   * the print, and a rate agreed after the hole is open is a rate agreed
+   * badly.
+   *
+   * Everything else on the card is left off. The pay card collects codes from
+   * every sheet ever loaded onto it, so it had grown to twenty-five lines on a
+   * sixteen-code job — and a sheet padded with work that is not on the job
+   * reads as a price list to negotiate rather than an offer to sign.
+   */
+  const used = new Set(project.materials.map((m) => normalizeCode(m.code)));
+  const isHandhole = (code: string) => /^BHF/i.test(code.trim());
+
   // A rate of zero is a line nobody has filled in yet, not an agreement to
   // work for nothing. Sending it would be quoting a crew zero.
-  const lines = project.rates.filter((r) => r.rate > 0);
+  const candidates = project.rates.filter(
+    (r) => r.rate > 0 && (used.has(normalizeCode(r.code)) || isHandhole(r.code)),
+  );
+
+  /**
+   * One row per code.
+   *
+   * The same code gets stored under both spellings the paperwork uses —
+   * BFOV(12.7)(2W)12"DEPTH and BFOV(12.7)(2W)12IN DEPTH — at two different
+   * prices, and the sheet printed both. A crew reading two prices for one
+   * piece of work will pick one, and it will not be ours.
+   *
+   * The spelling the material list uses wins, because that is the one the job
+   * is measured and billed against.
+   */
+  const exactOnJob = new Set(project.materials.map((m) => m.code.trim().toUpperCase()));
+  const byCode = new Map<string, (typeof candidates)[number]>();
+  for (const r of candidates) {
+    const key = normalizeCode(r.code);
+    const held = byCode.get(key);
+    if (!held) {
+      byCode.set(key, r);
+      continue;
+    }
+    if (exactOnJob.has(r.code.trim().toUpperCase())) byCode.set(key, r);
+  }
+
+  const lines = [...byCode.values()].sort((a, b) => a.code.localeCompare(b.code));
   if (lines.length === 0) {
     return NextResponse.json(
       { error: "No pay rates set on this job yet — fill the we-pay column first." },
