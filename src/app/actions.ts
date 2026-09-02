@@ -22,7 +22,7 @@ import {
   pdfTextPages,
 } from "@/lib/parse-material-list";
 import { findJobProfile } from "@/lib/job-profiles";
-import {
+import { normalizeCode,
   isLabourOrEquipmentCode,
   isLinearFootageCode,
   isMainBillableCode,
@@ -969,16 +969,43 @@ export async function listRateImports() {
   return imps.map((i) => ({ id: i.id, fileName: i.fileName, rowCount: i._count.rows }));
 }
 
-/** Push approved rows from a Rate Import onto a customer's rate card. */
-export async function pushImportToCustomer(importId: string, customerId: string) {
+/**
+ * Push approved rows from a Rate Import onto a customer's rate card.
+ *
+ * The market has to come with it. Written without one these land as "every
+ * market", which is how a South Georgia sheet ends up pricing North Georgia
+ * work — the import already records which market it was uploaded for, so it
+ * is read from there rather than guessed.
+ */
+export async function pushImportToCustomer(
+  importId: string,
+  customerId: string,
+  market = "",
+) {
   await requireStaff();
-  const rows = await prisma.extractedRow.findMany({
-    where: { importId, status: "APPROVED" },
-  });
+  const [rows, imp] = await Promise.all([
+    prisma.extractedRow.findMany({ where: { importId, status: "APPROVED" } }),
+    prisma.rateImport.findUnique({ where: { id: importId }, select: { market: true } }),
+  ]);
   if (rows.length === 0) return { ok: false as const, error: "No approved rows in that import." };
+
+  // The caller's market wins; otherwise fall back to what was typed at upload,
+  // which is free text and only usable when it names a market we know.
+  const typed = (imp?.market ?? "").trim().toLowerCase().replace(/s+/g, "-");
+  const resolved = isMarketId(market)
+    ? market
+    : isMarketId(typed)
+      ? typed
+      : typed === "s-georgia" || typed === "south-georgia"
+        ? "south-ga"
+        : typed === "n-georgia" || typed === "north-georgia"
+          ? "north-ga"
+          : "";
+
   await prisma.customerRate.createMany({
     data: rows.map((r) => ({
       customerId,
+      market: resolved,
       code: r.code || "—",
       description: r.description,
       unit: r.unit,
@@ -6263,21 +6290,66 @@ export async function listCustomerRateCards() {
 
   const nameById = new Map(customers.map((c) => [c.id, c.name]));
 
-  return grouped
+  const cards = grouped
     .map((g) => ({
       // One value the <select> can carry, since a card is two fields.
       key: `${g.customerId}::${g.market}`,
-      customerId: g.customerId,
       customerName: nameById.get(g.customerId) ?? "Unknown customer",
-      market: g.market,
       marketLabel: g.market ? marketLabel(g.market) : "Every market",
       count: g._count._all,
+      isSheet: false,
     }))
-    .filter((c) => c.count > 0)
-    .sort(
+    .filter((c) => c.count > 0);
+
+  /**
+   * Approved rate sheets, offered alongside the live cards.
+   *
+   * A sheet that has been read and approved is a rate card in every sense
+   * except that nobody has put it anywhere. Leaving it out of this list meant
+   * approving forty-one rows and then having no way to reach them — the sheet
+   * sat in the import screen while the job it was for still read "no rate".
+   */
+  const sheets = await prisma.rateImport.findMany({
+    where: { status: "APPROVED", docType: { in: ["GC_RATE_SHEET", "UNIT_DESCRIPTION"] } },
+    orderBy: { createdAt: "desc" },
+    take: 20,
+    select: {
+      id: true,
+      fileName: true,
+      customer: true,
+      market: true,
+      _count: { select: { rows: true } },
+    },
+  });
+
+  const sheetOptions = [];
+  for (const sh of sheets) {
+    const priced = await prisma.extractedRow.count({
+      where: { importId: sh.id, status: "APPROVED", rate: { not: null } },
+    });
+    if (priced === 0) continue;
+    sheetOptions.push({
+      key: `import::${sh.id}`,
+      // The file name leads. Two sheets uploaded for the same customer and
+      // market are otherwise the same line twice, and one of them can be the
+      // sub's card — picking the wrong one puts what we pay a crew into what
+      // we charge a customer.
+      customerName: sh.fileName.replace(/.[a-z]+$/i, ""),
+      marketLabel: [sh.customer?.trim(), sh.market?.trim()].filter(Boolean).join(" · ") || "rate sheet",
+      count: priced,
+      isSheet: true,
+    });
+  }
+
+  return [
+    // Sheets first: a freshly approved one is almost always what somebody is
+    // reaching for, and it is the newest information in the system.
+    ...sheetOptions,
+    ...cards.sort(
       (a, b) =>
         a.customerName.localeCompare(b.customerName) || a.marketLabel.localeCompare(b.marketLabel),
-    );
+    ),
+  ];
 }
 
 /**
@@ -6292,16 +6364,25 @@ export async function listCustomerRateCards() {
  * the prices", not "bill this job to Globe" — the rates land on Trawick's
  * South Georgia card, where every other South Georgia job will also find them.
  *
- * Existing prices are left alone. A card that is already set is somebody's
- * decision, and silently restating it from another customer's sheet is how a
- * negotiated rate quietly reverts.
+ * Two sources, two different rules.
+ *
+ * Another customer's **card** only fills blanks. A price already on this job's
+ * card is somebody's decision, and silently restating it from a different
+ * customer is how a negotiated rate quietly reverts.
+ *
+ * An approved **rate sheet** replaces. A signed sheet is the agreement itself,
+ * so a code it prices differently is not a conflict to preserve — it is the
+ * correction. Every price it moves is reported with its before and after,
+ * because a sheet that quietly changes forty rates should not read the same as
+ * one that changes none.
  */
 export async function applyCustomerRateCard(projectId: string, sourceKey: string) {
   await requireStaff();
   await assertProjectAccess(projectId);
 
-  const [sourceCustomerId, sourceMarket = ""] = sourceKey.split("::");
-  if (!sourceCustomerId) return { ok: false as const, error: "Pick a rate card." };
+  const [sourceHead, sourceTail = ""] = sourceKey.split("::");
+  if (!sourceHead) return { ok: false as const, error: "Pick a rate card." };
+  const fromSheet = sourceHead === "import";
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },
@@ -6324,38 +6405,92 @@ export async function applyCustomerRateCard(projectId: string, sourceKey: string
 
   const wanted = new Map<string, { item: string; unit: string }>();
   for (const m of project.materials) {
-    const code = m.code.trim().toUpperCase();
+    const code = normalizeCode(m.code);
     if (code) wanted.set(code, { item: m.item, unit: m.unit });
   }
-  if (wanted.size === 0) {
+  // A sheet is loaded whole; only a donor card is narrowed to this job.
+  //
+  // A rate sheet is the agreement for the market, not for one job — loading
+  // only the thirteen codes in front of us would leave the card looking
+  // finished while the next job in the same market opens unpriced. A card
+  // borrowed from another customer is different: that can be thousands of
+  // codes, and dumping them all to settle thirteen lines is noise.
+  if (!fromSheet && wanted.size === 0) {
     return { ok: false as const, error: "This job has no material codes to price yet." };
   }
 
   const [source, existing] = await Promise.all([
-    prisma.customerRate.findMany({
-      where: { customerId: sourceCustomerId, market: sourceMarket },
-      select: { code: true, description: true, unit: true, rate: true, minimum: true },
-    }),
+    fromSheet
+      ? prisma.extractedRow
+          .findMany({
+            where: { importId: sourceTail, status: "APPROVED", rate: { not: null } },
+            select: { code: true, description: true, unit: true, rate: true, minimum: true },
+          })
+          .then((rows) =>
+            rows
+              .filter((r) => r.code?.trim())
+              .map((r) => ({
+                code: r.code!.trim(),
+                description: r.description ?? "",
+                unit: r.unit ?? "",
+                rate: r.rate as number,
+                minimum: r.minimum,
+              })),
+          )
+      : prisma.customerRate.findMany({
+          where: { customerId: sourceHead, market: sourceTail },
+          select: { code: true, description: true, unit: true, rate: true, minimum: true },
+        }),
     prisma.customerRate.findMany({
       where: { customerId: targetCustomerId, market: project.market },
-      select: { code: true },
+      select: { id: true, code: true, rate: true },
     }),
   ]);
-  if (source.length === 0) return { ok: false as const, error: "That card has no rates on it." };
+  if (source.length === 0) return { ok: false as const, error: "That card has no priced rows on it." };
 
-  const already = new Set(existing.map((r) => r.code.trim().toUpperCase()));
-  const bySourceCode = new Map(source.map((r) => [r.code.trim().toUpperCase(), r]));
+  const priorByCode = new Map(existing.map((r) => [normalizeCode(r.code), r]));
+  const bySourceCode = new Map(source.map((r) => [normalizeCode(r.code), r]));
 
   const toWrite: { code: string; rate: number; description: string; unit: string; minimum: number | null }[] = [];
   const notOnCard: string[] = [];
+  const moved: string[] = [];
+  let alreadySet = 0;
 
-  for (const [code, meta] of wanted) {
-    if (already.has(code)) continue;
+  const codesToPrice = fromSheet
+    ? new Set([...bySourceCode.keys(), ...wanted.keys()])
+    : new Set(wanted.keys());
+
+  for (const code of codesToPrice) {
+    const meta = wanted.get(code) ?? { item: "", unit: "" };
     const found = bySourceCode.get(code);
+    const prior = priorByCode.get(code);
+
     if (!found) {
-      notOnCard.push(code);
+      if (!prior) notOnCard.push(code);
+      else alreadySet++;
       continue;
     }
+
+    if (prior) {
+      // A card only fills gaps; a sheet is the agreement and overrules.
+      if (!fromSheet || prior.rate === found.rate) {
+        alreadySet++;
+        continue;
+      }
+      await prisma.customerRate.update({
+        where: { id: prior.id },
+        data: {
+          rate: found.rate,
+          description: found.description || meta.item,
+          unit: found.unit || meta.unit,
+          minimum: found.minimum,
+          source: "sheet",
+        },
+      });
+      moved.push(`${found.code} ${prior.rate} → ${found.rate}`);
+      continue;
+    }
+
     toWrite.push({
       code: found.code,
       rate: found.rate,
@@ -6375,7 +6510,7 @@ export async function applyCustomerRateCard(projectId: string, sourceKey: string
         unit: r.unit,
         rate: r.rate,
         minimum: r.minimum,
-        source: "copied",
+        source: fromSheet ? "sheet" : "copied",
       })),
     });
   }
@@ -6386,7 +6521,9 @@ export async function applyCustomerRateCard(projectId: string, sourceKey: string
   return {
     ok: true as const,
     written: toWrite.length,
-    alreadySet: wanted.size - toWrite.length - notOnCard.length,
+    alreadySet,
+    /** Prices this sheet corrected, with what they were. */
+    moved,
     // Named, not counted. These are the lines that will still read "no rate",
     // and knowing which ones is the difference between finishing the card and
     // wondering why it is still short.

@@ -33,6 +33,9 @@ export type RateCardOption = {
   customerName: string;
   marketLabel: string;
   count: number;
+  /** An approved rate sheet rather than a live card. Marked, because one
+      fills gaps and the other overrules what is already there. */
+  isSheet: boolean;
 };
 
 export function ProjectRatesPanel({
@@ -110,12 +113,14 @@ export function ProjectRatesPanel({
       setError(res.error);
       return;
     }
-    setCardNote(
+setCardNote(
       `Priced ${res.written} of the codes on this job` +
+        (res.moved.length > 0 ? `, corrected ${res.moved.length}` : "") +
         (res.alreadySet > 0 ? `, left ${res.alreadySet} already set` : "") +
-        (res.notOnCard.length > 0
-          ? `. Not on that card: ${res.notOnCard.join(", ")}`
-          : "."),
+        (res.notOnCard.length > 0 ? `. Not on it: ${res.notOnCard.join(", ")}` : ".") +
+        // The before-and-after, because a sheet that quietly moves a rate is
+        // the thing worth seeing.
+        (res.moved.length > 0 ? ` Changed: ${res.moved.join("; ")}` : ""),
     );
     router.refresh();
   }
@@ -183,7 +188,7 @@ export function ProjectRatesPanel({
               {/* The bill side. Sits before the crew picker because a job with
                   no billing rates has no margin to judge a cost against, and
                   that is the column somebody opens this panel for. */}
-              {rateCards.length > 0 && rates.missingCustomerRates > 0 ? (
+              {rateCards.length > 0 ? (
                 <select
                   defaultValue=""
                   disabled={busy === "card"}
@@ -193,6 +198,7 @@ export function ProjectRatesPanel({
                   <option value="">Price it from a rate card…</option>
                   {rateCards.map((c) => (
                     <option key={c.key} value={c.key}>
+                      {c.isSheet ? "Sheet · " : ""}
                       {c.customerName} · {c.marketLabel} ({c.count})
                     </option>
                   ))}
@@ -205,7 +211,7 @@ export function ProjectRatesPanel({
                   onChange={(e) => void copyFrom(e.target.value)}
                   className={cn(
                     "h-7 rounded-lg border border-border bg-foreground/[0.03] px-2 text-[11.5px] text-foreground outline-none focus:border-brand/60",
-                    rateCards.length > 0 && rates.missingCustomerRates > 0 ? "" : "ml-auto",
+                    rateCards.length > 0 ? "" : "ml-auto",
                   )}
                 >
                   <option value="">Start from a crew&apos;s card…</option>
@@ -339,8 +345,20 @@ export function ProjectRatesPanel({
                   <td className="num px-3 py-2.5 text-right text-[12.5px] font-semibold text-foreground">
                     {formatCurrency(totals.revenue)}
                   </td>
-                  <td className="num px-3 py-2.5 text-right text-[12.5px] font-semibold text-foreground">
-                    {crew ? formatCurrency(totals.cost) : "—"}
+                  {/* What the job pays out, whether that is a signed card or the
+                      budget. It used to show only once a crew was assigned —
+                      but every row above already shows its pay rate, and the
+                      margin beside this is revenue minus this number, so
+                      hiding it withheld the one figure somebody adds up by
+                      hand while showing them its two neighbours. */}
+                  <td
+                    className={cn(
+                      "num px-3 py-2.5 text-right text-[12.5px] font-semibold",
+                      crew ? "text-foreground" : "text-muted-foreground",
+                    )}
+                    title={crew ? undefined : "Budgeted, not a signed card"}
+                  >
+                    {totals.margin !== null ? formatCurrency(totals.cost) : "—"}
                   </td>
                   <td className="px-3 py-2.5" />
                   <td className="num px-4 py-2.5 text-right text-[12.5px] font-semibold sm:px-5">
