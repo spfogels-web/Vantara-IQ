@@ -136,10 +136,45 @@ setCardNote(
     else router.refresh();
   }
 
-  // Something to send: a signed card, or a pay column with a real figure in
-  // it. A rate of zero is a line nobody has filled in, and a sheet quoting
+  /**
+   * Which codes go on the sheet.
+   *
+   * Everything with a real pay rate to begin with, because that is the sheet
+   * somebody wants nine times out of ten and nobody should have to tick
+   * sixteen boxes to get it. Unticking is for the job you are putting out to
+   * bid in parts.
+   *
+   * Keyed by code rather than by row index so a re-sort or a re-price does not
+   * quietly move the ticks onto different work.
+   */
+  const sendable = React.useMemo(
+    () => lines.filter((l) => (l.subRate ?? 0) > 0).map((l) => l.code),
+    [lines],
+  );
+  const [picked, setPicked] = React.useState<Set<string> | null>(null);
+  const chosen = picked ?? new Set(sendable);
+
+  // A code that stops being sendable — its rate cleared — must not linger in
+  // the selection and put a stale line on a sheet.
+  const live = sendable.filter((c) => chosen.has(c));
+
+  function toggle(code: string) {
+    const next = new Set(chosen);
+    if (next.has(code)) next.delete(code);
+    else next.add(code);
+    setPicked(next);
+  }
+
+  const allOn = sendable.length > 0 && live.length === sendable.length;
+
+  // Something to send: a signed card, or ticked rows with a real figure in
+  // them. A rate of zero is a line nobody has filled in, and a sheet quoting
   // zero is worse than no sheet.
-  const canSend = crew ? true : lines.some((l) => (l.subRate ?? 0) > 0);
+  const canSend = crew ? true : live.length > 0;
+
+  const sheetHref = crew
+    ? `/api/rate-sheet/${crew.id}`
+    : `/api/rate-sheet/project/${projectId}?codes=${live.map(encodeURIComponent).join(",")}`;
 
   const marginPct =
     totals.margin !== null && totals.revenue > 0 ? totals.margin / totals.revenue : null;
@@ -170,7 +205,7 @@ setCardNote(
             us, the spread and the margin are on this same screen and none of
             them belong in a crew's hands. */}
         <a
-          href={crew ? `/api/rate-sheet/${crew.id}` : `/api/rate-sheet/project/${projectId}`}
+          href={sheetHref}
           className={cn(
             "focus-ring inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand px-2.5 text-[12px] font-semibold text-white hover:bg-brand-bright",
             !canSend && "pointer-events-none opacity-40",
@@ -179,8 +214,8 @@ setCardNote(
             canSend
               ? crew
                 ? `${crew.company}'s signed rates`
-                : "This job's pay rates — for a crew you are still onboarding"
-              : "Fill the we-pay column first"
+                : `${live.length} code${live.length === 1 ? "" : "s"} — handholes are always included`
+              : "Tick a code with a pay rate on it"
           }
         >
           <Download className="size-3.5" /> Rate sheet to send
@@ -267,7 +302,20 @@ setCardNote(
             <table className="w-full min-w-[720px] text-left">
               <thead>
                 <tr className="border-b border-border/70 text-[10.5px] uppercase tracking-wider text-muted-foreground">
-                  <th className="px-4 py-2 font-medium sm:px-5">Code</th>
+                  {/* Ticks decide what goes on the sheet, so the box that
+                      turns them all on sits above them rather than in a menu
+                      somewhere else. */}
+                  <th className="w-8 py-2 pl-4 pr-0 sm:pl-5">
+                    <input
+                      type="checkbox"
+                      aria-label={allOn ? "Clear all" : "Select all"}
+                      title={allOn ? "Clear all" : "Select all"}
+                      checked={allOn}
+                      onChange={() => setPicked(allOn ? new Set() : new Set(sendable))}
+                      className="size-3.5 cursor-pointer accent-brand align-middle"
+                    />
+                  </th>
+                  <th className="px-3 py-2 font-medium">Code</th>
                   <th className="px-3 py-2 font-medium">Work</th>
                   <th className="px-3 py-2 text-right font-medium">Planned</th>
                   <th className="px-3 py-2 text-right font-medium">We bill</th>
@@ -287,7 +335,18 @@ setCardNote(
                       key={l.code}
                       className="border-b border-border/40 last:border-0 hover:bg-foreground/[0.02]"
                     >
-                      <td className="num px-4 py-2 text-[12px] font-semibold uppercase text-brand-bright sm:px-5">
+                      <td className="w-8 py-2 pl-4 pr-0 sm:pl-5">
+                        <input
+                          type="checkbox"
+                          aria-label={`Put ${l.code} on the sheet`}
+                          checked={chosen.has(l.code)}
+                          disabled={(l.subRate ?? 0) <= 0}
+                          onChange={() => toggle(l.code)}
+                          className="size-3.5 cursor-pointer accent-brand align-middle disabled:cursor-not-allowed disabled:opacity-30"
+                          title={(l.subRate ?? 0) > 0 ? undefined : "No pay rate set — nothing to quote"}
+                        />
+                      </td>
+                      <td className="num px-3 py-2 text-[12px] font-semibold uppercase text-brand-bright">
                         {l.code}
                       </td>
                       <td className="max-w-[220px] truncate px-3 py-2 text-[12px] text-muted-foreground">
@@ -348,7 +407,7 @@ setCardNote(
               </tbody>
               <tfoot>
                 <tr className="border-t border-border/70 bg-foreground/[0.02]">
-                  <td colSpan={3} className="px-4 py-2.5 text-[11.5px] text-muted-foreground sm:px-5">
+                  <td colSpan={4} className="px-4 py-2.5 text-[11.5px] text-muted-foreground sm:px-5">
                     {rates.missingCustomerRates > 0 ? (
                       <span className="text-warning">
                         {rates.missingCustomerRates} code

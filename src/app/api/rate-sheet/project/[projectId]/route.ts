@@ -26,7 +26,7 @@ export const runtime = "nodejs";
  * print even by mistake.
  */
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ projectId: string }> },
 ) {
   const { projectId } = await params;
@@ -67,14 +67,37 @@ export async function GET(
    * sixteen-code job — and a sheet padded with work that is not on the job
    * reads as a price list to negotiate rather than an offer to sign.
    */
+  /**
+   * A chosen set of codes, when the page sent one.
+   *
+   * Ticking rows is how somebody tailors a sheet to what they are actually
+   * putting out to bid, and the choice has to survive the trip to the PDF.
+   * Absent — a link opened directly, or a bookmark — it falls back to the
+   * whole job, which is the sheet this route produced before there was
+   * anything to tick.
+   */
+  const asked = new URL(request.url).searchParams.get("codes");
+  const chosen = asked
+    ? new Set(
+        asked
+          .split(",")
+          .map((c) => normalizeCode(decodeURIComponent(c)))
+          .filter(Boolean),
+      )
+    : null;
+
   const used = new Set(project.materials.map((m) => normalizeCode(m.code)));
   const isHandhole = (code: string) => /^BHF/i.test(code.trim());
 
   // A rate of zero is a line nobody has filled in yet, not an agreement to
   // work for nothing. Sending it would be quoting a crew zero.
-  const candidates = project.rates.filter(
-    (r) => r.rate > 0 && (used.has(normalizeCode(r.code)) || isHandhole(r.code)),
-  );
+  const candidates = project.rates.filter((r) => {
+    if (r.rate <= 0) return false;
+    // Handholes ride along either way: a crew needs the price for the size
+    // found in the ground, not just the size on the print.
+    if (isHandhole(r.code)) return true;
+    return chosen ? chosen.has(normalizeCode(r.code)) : used.has(normalizeCode(r.code));
+  });
 
   /**
    * One row per code.
@@ -102,7 +125,7 @@ export async function GET(
   const lines = [...byCode.values()].sort((a, b) => a.code.localeCompare(b.code));
   if (lines.length === 0) {
     return NextResponse.json(
-      { error: "No pay rates set on this job yet — fill the we-pay column first." },
+      { error: "Nothing to put on a sheet — tick some codes, or fill the we-pay column." },
       { status: 400 },
     );
   }
