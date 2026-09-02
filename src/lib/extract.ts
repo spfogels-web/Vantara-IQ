@@ -86,8 +86,13 @@ export function isConfigured() {
   return Boolean(process.env.ANTHROPIC_API_KEY);
 }
 
-/** One document → structured rows. `base64`+`mediaType` for PDF/images; `text` for CSV/XLSX. */
-export async function extractDocument(input: {
+/**
+ * One pass over one document or one slice of one.
+ *
+ * Kept separate from extractDocument because a long rate sheet is read a few
+ * pages at a time — see below for why.
+ */
+async function extractOnce(input: {
   docType: RateDocType;
   base64?: string;
   mediaType?: string;
@@ -180,6 +185,125 @@ export async function extractDocument(input: {
   }
 
   return { summary: result.summary ?? "", rows };
+}
+
+/**
+ * How many pages go into one read.
+ *
+ * A rate sheet is dense — a page can carry sixty priced rows, and each row is
+ * a fair amount of JSON. Six pages sits well inside the output budget with
+ * room for a page that is busier than the rest.
+ */
+const PAGES_PER_PASS = 6;
+
+/**
+ * One document → structured rows.
+ *
+ * A long PDF is read in slices rather than in one pass. The single-pass version
+ * failed on a 60-page Trawick sheet: the model hit its output limit part-way
+ * through the tool call, the truncated JSON parsed to nothing, and a document
+ * it had read perfectly well came back as "cut off after 0 rows". The row
+ * count is what blows the budget, and the row count follows the page count, so
+ * bounding pages per call bounds the output.
+ *
+ * Slices are read one after another rather than at once. These documents are
+ * hundreds of rows and the account has other work going through it; a
+ * fan-out of ten simultaneous reads is how a rate import starts rate-limiting
+ * the daily importer.
+ *
+ * Rows are merged by code, first read winning. A code printed on two pages is
+ * the same rate twice, and letting a later page overwrite an earlier one would
+ * silently prefer whichever copy happened to be last.
+ */
+export async function extractDocument(input: {
+  docType: RateDocType;
+  base64?: string;
+  mediaType?: string;
+  text?: string;
+}): Promise<ExtractionResult> {
+  const slices =
+    input.base64 && input.mediaType === "application/pdf"
+      ? await splitPdf(input.base64, PAGES_PER_PASS)
+      : null;
+
+  // Not a PDF, unreadable as one, or short enough to take in a single pass.
+  if (!slices || slices.length <= 1) return extractOnce(input);
+
+  const merged = new Map<string, ExtractedRowData>();
+  const summaries: string[] = [];
+  let read = 0;
+
+  for (const slice of slices) {
+    let result: ExtractionResult;
+    try {
+      result = await extractOnce({ ...input, base64: slice });
+    } catch (err) {
+      // A slice that truncates on its own is a genuinely unreadable stretch of
+      // document, not a budget problem. Say which pages rather than throwing
+      // away everything read so far.
+      if (err instanceof TruncatedExtractionError) {
+        throw new TruncatedExtractionError(
+          `Pages ${read * PAGES_PER_PASS + 1}–${(read + 1) * PAGES_PER_PASS} could not be read in one pass — ` +
+            `${merged.size} rows were read before that.`,
+          merged.size,
+        );
+      }
+      throw err;
+    }
+
+    for (const row of result.rows) {
+      const key = (row.code ?? "").trim().toUpperCase();
+      // A row with no code cannot be deduplicated, and dropping it would lose
+      // a genuine line. Keyed by position so it survives.
+      const id = key || `__row_${merged.size}`;
+      if (!merged.has(id)) merged.set(id, row);
+    }
+    if (result.summary) summaries.push(result.summary);
+    read++;
+  }
+
+  const rows = [...merged.values()];
+  return {
+    // The first slice carries the title block and the terms; later ones repeat
+    // the header, so one summary is what a person wants to read. How it was
+    // read is appended, because "93 rows" from one pass and "93 rows" from ten
+    // are worth telling apart when a number later looks wrong.
+    summary: `${summaries[0] ?? ""} (read in ${slices.length} passes, ${rows.length} rows)`.trim(),
+    rows,
+  };
+}
+
+/**
+ * Cut a PDF into groups of pages, each a PDF of its own.
+ *
+ * Returns null when the file cannot be opened as a PDF — an encrypted or
+ * malformed one is still worth handing to the model whole, which is what the
+ * caller does with a null.
+ */
+async function splitPdf(base64: string, perSlice: number): Promise<string[] | null> {
+  try {
+    const { PDFDocument } = await import("pdf-lib");
+    const src = await PDFDocument.load(Buffer.from(base64, "base64"), {
+      ignoreEncryption: true,
+    });
+    const total = src.getPageCount();
+    if (total <= perSlice) return null;
+
+    const out: string[] = [];
+    for (let start = 0; start < total; start += perSlice) {
+      const doc = await PDFDocument.create();
+      const idx = Array.from(
+        { length: Math.min(perSlice, total - start) },
+        (_, k) => start + k,
+      );
+      const pages = await doc.copyPages(src, idx);
+      for (const pg of pages) doc.addPage(pg);
+      out.push(Buffer.from(await doc.save()).toString("base64"));
+    }
+    return out;
+  } catch {
+    return null;
+  }
 }
 
 /** Thrown when the model hit its output limit before finishing the document. */
