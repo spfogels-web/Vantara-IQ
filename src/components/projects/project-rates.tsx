@@ -136,6 +136,11 @@ setCardNote(
     else router.refresh();
   }
 
+  // Something to send: a signed card, or a pay column with a real figure in
+  // it. A rate of zero is a line nobody has filled in, and a sheet quoting
+  // zero is worse than no sheet.
+  const canSend = crew ? true : lines.some((l) => (l.subRate ?? 0) > 0);
+
   const marginPct =
     totals.margin !== null && totals.revenue > 0 ? totals.margin / totals.revenue : null;
 
@@ -153,13 +158,30 @@ setCardNote(
       >
         {/* Built from the rates as they stand, so a figure edited here is
             already right on the sheet you send — no second copy to keep in
-            step. */}
+            step.
+
+            With a crew assigned it is their signed card. Without one it is
+            this job's pay column, which is the case that matters most: a sheet
+            is what you send to agree rates with somebody who has not been
+            onboarded yet, and there is no card to build from until they have.
+            The button used to be dead in exactly that situation.
+
+            Either way it carries the pay column alone. What the customer pays
+            us, the spread and the margin are on this same screen and none of
+            them belong in a crew's hands. */}
         <a
-          href={crew ? `/api/rate-sheet/${crew.id}` : undefined}
+          href={crew ? `/api/rate-sheet/${crew.id}` : `/api/rate-sheet/project/${projectId}`}
           className={cn(
             "focus-ring inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand px-2.5 text-[12px] font-semibold text-white hover:bg-brand-bright",
-            !crew && "pointer-events-none opacity-40",
+            !canSend && "pointer-events-none opacity-40",
           )}
+          title={
+            canSend
+              ? crew
+                ? `${crew.company}'s signed rates`
+                : "This job's pay rates — for a crew you are still onboarding"
+              : "Fill the we-pay column first"
+          }
         >
           <Download className="size-3.5" /> Rate sheet to send
         </a>
