@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { formatFeet, formatNumber, formatPercent } from "@/lib/format";
 import type { ProjectSchedule } from "@/data/queries";
 import { setProjectDeadline } from "@/app/actions";
+import { MarketPicker } from "@/components/projects/market-picker";
 
 /**
  * Where the job stands against its date.
@@ -39,11 +40,14 @@ export function ProjectScheduleStrip({
   projectId,
   schedule: s,
   canEdit,
+  market = "",
   showMetrics = true,
 }: {
   projectId: string;
   schedule: ProjectSchedule;
   canEdit: boolean;
+  /** Which market prices this job. Sits beside the deadline. */
+  market?: string;
   /**
    * Health, pace and feet remaining. Off for a crew: these measure their
    * output against a target they never agreed to, and a number that reads as
@@ -175,6 +179,8 @@ export function ProjectScheduleStrip({
           )}
           {error ? <p className="mt-0.5 text-[10.5px] text-critical">{error}</p> : null}
         </div>
+
+        <MarketPicker projectId={projectId} market={market} canEdit={canEdit} />
 
         {/* The numbers that follow from it. */}
         <div

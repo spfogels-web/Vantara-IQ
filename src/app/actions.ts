@@ -6393,3 +6393,33 @@ export async function applyCustomerRateCard(projectId: string, sourceKey: string
     notOnCard: notOnCard.sort(),
   };
 }
+
+/**
+ * Move a job to a market, or clear it.
+ *
+ * Its own action rather than a trip through the edit form, because this is the
+ * field somebody changes on its own — and the form asks for a customer, a rate
+ * card and a footage target to change one dropdown.
+ *
+ * The market decides which rate card the job is priced against, so a change
+ * here re-prices it. Nothing is written until the value is a market we know:
+ * an unrecognised one would leave the job matching no card at all and reading
+ * as unpriced with no explanation.
+ */
+export async function setProjectMarket(projectId: string, market: string) {
+  await requireStaff();
+  await assertProjectAccess(projectId);
+
+  const next = market.trim();
+  if (next && !isMarketId(next)) {
+    return { ok: false as const, error: "That is not a market we work in." };
+  }
+
+  await prisma.project.update({ where: { id: projectId }, data: { market: next } });
+
+  // Rates, valuation and every daily on this job all read the market.
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/projects");
+  revalidatePath("/dailies");
+  return { ok: true as const, market: next };
+}
