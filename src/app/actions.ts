@@ -7,7 +7,7 @@ import { revalidatePath } from "next/cache";
 import * as XLSX from "xlsx";
 
 import { prisma } from "@/lib/prisma";
-import { isMarketId } from "@/lib/markets";
+import { isMarketId, marketLabel } from "@/lib/markets";
 import { hashPassword, isStaff, setSessionCookie, signSession } from "@/lib/auth";
 import {
   extractDocument,
@@ -6237,4 +6237,159 @@ export async function readMapTakeoff(projectId: string) {
       error: e instanceof Error ? e.message : "Couldn't read that print.",
     };
   }
+}
+
+/* ------------------------------------------------------------------ *
+ * Billing rates on one job, from a card we already hold.
+ * ------------------------------------------------------------------ */
+
+/**
+ * Every customer rate card in the system, one entry per customer and market.
+ *
+ * A "card" is a customer and a market together, because that is how rates are
+ * stored and how they resolve — Trawick's South Georgia sheet and Trawick's
+ * Alabama sheet are two cards under one customer at different prices.
+ */
+export async function listCustomerRateCards() {
+  await requireStaff();
+
+  const [grouped, customers] = await Promise.all([
+    prisma.customerRate.groupBy({
+      by: ["customerId", "market"],
+      _count: { _all: true },
+    }),
+    prisma.customer.findMany({ select: { id: true, name: true } }),
+  ]);
+
+  const nameById = new Map(customers.map((c) => [c.id, c.name]));
+
+  return grouped
+    .map((g) => ({
+      // One value the <select> can carry, since a card is two fields.
+      key: `${g.customerId}::${g.market}`,
+      customerId: g.customerId,
+      customerName: nameById.get(g.customerId) ?? "Unknown customer",
+      market: g.market,
+      marketLabel: g.market ? marketLabel(g.market) : "Every market",
+      count: g._count._all,
+    }))
+    .filter((c) => c.count > 0)
+    .sort(
+      (a, b) =>
+        a.customerName.localeCompare(b.customerName) || a.marketLabel.localeCompare(b.marketLabel),
+    );
+}
+
+/**
+ * Fill this job's billing rates from a card we already hold.
+ *
+ * Only the codes the job actually uses. Copying a whole 2,485-code sheet to
+ * settle thirteen lines writes two thousand rows nobody asked about and buries
+ * the ones that matter — and this panel is about the codes on this job.
+ *
+ * Writes onto the job's own customer and market, not the source's. Picking
+ * Globe's North Georgia card for a Trawick South Georgia job means "these are
+ * the prices", not "bill this job to Globe" — the rates land on Trawick's
+ * South Georgia card, where every other South Georgia job will also find them.
+ *
+ * Existing prices are left alone. A card that is already set is somebody's
+ * decision, and silently restating it from another customer's sheet is how a
+ * negotiated rate quietly reverts.
+ */
+export async function applyCustomerRateCard(projectId: string, sourceKey: string) {
+  await requireStaff();
+  await assertProjectAccess(projectId);
+
+  const [sourceCustomerId, sourceMarket = ""] = sourceKey.split("::");
+  if (!sourceCustomerId) return { ok: false as const, error: "Pick a rate card." };
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: {
+      market: true,
+      customerId: true,
+      client: true,
+      materials: { where: { inScope: true }, select: { code: true, item: true, unit: true } },
+    },
+  });
+  if (!project) return { ok: false as const, error: "Project not found." };
+
+  // The job has to belong to a customer before it can have a card.
+  const targetCustomerId =
+    project.customerId ??
+    (await prisma.customer.findFirst({ where: { name: project.client }, select: { id: true } }))?.id;
+  if (!targetCustomerId) {
+    return { ok: false as const, error: "This job has no customer, so there is no card to fill." };
+  }
+
+  const wanted = new Map<string, { item: string; unit: string }>();
+  for (const m of project.materials) {
+    const code = m.code.trim().toUpperCase();
+    if (code) wanted.set(code, { item: m.item, unit: m.unit });
+  }
+  if (wanted.size === 0) {
+    return { ok: false as const, error: "This job has no material codes to price yet." };
+  }
+
+  const [source, existing] = await Promise.all([
+    prisma.customerRate.findMany({
+      where: { customerId: sourceCustomerId, market: sourceMarket },
+      select: { code: true, description: true, unit: true, rate: true, minimum: true },
+    }),
+    prisma.customerRate.findMany({
+      where: { customerId: targetCustomerId, market: project.market },
+      select: { code: true },
+    }),
+  ]);
+  if (source.length === 0) return { ok: false as const, error: "That card has no rates on it." };
+
+  const already = new Set(existing.map((r) => r.code.trim().toUpperCase()));
+  const bySourceCode = new Map(source.map((r) => [r.code.trim().toUpperCase(), r]));
+
+  const toWrite: { code: string; rate: number; description: string; unit: string; minimum: number | null }[] = [];
+  const notOnCard: string[] = [];
+
+  for (const [code, meta] of wanted) {
+    if (already.has(code)) continue;
+    const found = bySourceCode.get(code);
+    if (!found) {
+      notOnCard.push(code);
+      continue;
+    }
+    toWrite.push({
+      code: found.code,
+      rate: found.rate,
+      description: found.description || meta.item,
+      unit: found.unit || meta.unit,
+      minimum: found.minimum,
+    });
+  }
+
+  if (toWrite.length > 0) {
+    await prisma.customerRate.createMany({
+      data: toWrite.map((r) => ({
+        customerId: targetCustomerId,
+        market: project.market,
+        code: r.code,
+        description: r.description,
+        unit: r.unit,
+        rate: r.rate,
+        minimum: r.minimum,
+        source: "copied",
+      })),
+    });
+  }
+
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/customers");
+
+  return {
+    ok: true as const,
+    written: toWrite.length,
+    alreadySet: wanted.size - toWrite.length - notOnCard.length,
+    // Named, not counted. These are the lines that will still read "no rate",
+    // and knowing which ones is the difference between finishing the card and
+    // wondering why it is still short.
+    notOnCard: notOnCard.sort(),
+  };
 }

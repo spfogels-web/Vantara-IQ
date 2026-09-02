@@ -29,6 +29,7 @@ import { StatusPill } from "@/components/common/status-pill";
 import { ProjectHeaderActions, ProjectMapPanel } from "@/components/projects/project-detail-client";
 import { ProjectMaterials } from "@/components/projects/project-materials";
 import { ProjectPhotos } from "@/components/projects/project-photos";
+import { listCustomerRateCards } from "@/app/actions";
 import { ProjectRatesPanel } from "@/components/projects/project-rates";
 import { ProjectScheduleStrip } from "@/components/projects/project-schedule";
 
@@ -54,7 +55,7 @@ export default async function ProjectDetailPage({
   const customers = staff ? await getCustomers() : [];
 
   // The valuation is staff-only and throws for a crew by design, so don't ask.
-  const [materialImports, trackedMaterials, valuation, photos, projectRates, ratedCrews, schedule, projectCrews] = await Promise.all([
+  const [materialImports, trackedMaterials, valuation, photos, projectRates, ratedCrews, schedule, projectCrews, rateCards] = await Promise.all([
     getProjectMaterialImports(project.id, project.name),
     getProjectMaterials(project.id),
     staff ? getProjectValuation(project.id) : Promise.resolve(null),
@@ -63,6 +64,8 @@ export default async function ProjectDetailPage({
     staff ? getRatedCrews() : Promise.resolve([]),
     getProjectSchedule(project.id),
     staff ? getProjectCrews(project.id) : Promise.resolve([]),
+    // Every card on file, so an unpriced job can be filled from one.
+    staff ? listCustomerRateCards() : Promise.resolve([]),
   ]);
 
 
@@ -160,6 +163,7 @@ export default async function ProjectDetailPage({
             projectId={project.id}
             rates={projectRates}
             crews={ratedCrews}
+            rateCards={rateCards}
           />
         </div>
       ) : null}

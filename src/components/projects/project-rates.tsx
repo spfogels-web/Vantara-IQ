@@ -9,6 +9,7 @@ import { formatCurrency, formatNumber, formatPercent, formatRate } from "@/lib/f
 import type { ProjectRates } from "@/data/queries";
 import {
   addSubRate,
+  applyCustomerRateCard,
   copyRatesToProject,
   setProjectRate,
   updateSubRate,
@@ -27,19 +28,30 @@ import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
  * margin on the crew's own work, which is the one number they must never see.
  */
 
+export type RateCardOption = {
+  key: string;
+  customerName: string;
+  marketLabel: string;
+  count: number;
+};
+
 export function ProjectRatesPanel({
   projectId,
   rates,
   crews,
+  rateCards = [],
 }: {
   projectId: string;
   rates: ProjectRates;
+  /** Every customer card on file, so the bill side can be filled from one. */
+  rateCards?: RateCardOption[];
   /** Crews with a card on file, to seed a budget from. */
   crews: { id: string; company: string }[];
 }) {
   const router = useRouter();
   const [busy, setBusy] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [cardNote, setCardNote] = React.useState<string | null>(null);
 
   const { crew, lines, totals } = rates;
 
@@ -78,6 +90,34 @@ export function ProjectRatesPanel({
     setBusy(null);
     if (!res.ok) setError(res.error);
     else router.refresh();
+  }
+
+  /**
+   * Fill the bill side from a card we already hold.
+   *
+   * The result is reported rather than just refreshed: which codes the card
+   * did not carry is the useful part, because those are the lines that will
+   * still read "no rate" afterwards.
+   */
+  async function applyCard(key: string) {
+    if (!key) return;
+    setBusy("card");
+    setError(null);
+    setCardNote(null);
+    const res = await applyCustomerRateCard(projectId, key);
+    setBusy(null);
+    if (!res.ok) {
+      setError(res.error);
+      return;
+    }
+    setCardNote(
+      `Priced ${res.written} of the codes on this job` +
+        (res.alreadySet > 0 ? `, left ${res.alreadySet} already set` : "") +
+        (res.notOnCard.length > 0
+          ? `. Not on that card: ${res.notOnCard.join(", ")}`
+          : "."),
+    );
+    router.refresh();
   }
 
   /** Start the budget from a crew's existing card, then move what differs. */
@@ -140,12 +180,33 @@ export function ProjectRatesPanel({
                     ? ` No card on file for ${rates.unratedCrews.join(", ")}.`
                     : ""}
               </p>
+              {/* The bill side. Sits before the crew picker because a job with
+                  no billing rates has no margin to judge a cost against, and
+                  that is the column somebody opens this panel for. */}
+              {rateCards.length > 0 && rates.missingCustomerRates > 0 ? (
+                <select
+                  defaultValue=""
+                  disabled={busy === "card"}
+                  onChange={(e) => void applyCard(e.target.value)}
+                  className="ml-auto h-7 rounded-lg border border-gold/45 bg-gold/[0.08] px-2 text-[11.5px] text-foreground outline-none focus:border-gold"
+                >
+                  <option value="">Price it from a rate card…</option>
+                  {rateCards.map((c) => (
+                    <option key={c.key} value={c.key}>
+                      {c.customerName} · {c.marketLabel} ({c.count})
+                    </option>
+                  ))}
+                </select>
+              ) : null}
               {crews.length > 0 ? (
                 <select
                   defaultValue=""
                   disabled={busy === "copy"}
                   onChange={(e) => void copyFrom(e.target.value)}
-                  className="ml-auto h-7 rounded-lg border border-border bg-foreground/[0.03] px-2 text-[11.5px] text-foreground outline-none focus:border-brand/60"
+                  className={cn(
+                    "h-7 rounded-lg border border-border bg-foreground/[0.03] px-2 text-[11.5px] text-foreground outline-none focus:border-brand/60",
+                    rateCards.length > 0 && rates.missingCustomerRates > 0 ? "" : "ml-auto",
+                  )}
                 >
                   <option value="">Start from a crew&apos;s card…</option>
                   {crews.map((c) => (
@@ -155,7 +216,9 @@ export function ProjectRatesPanel({
                   ))}
                 </select>
               ) : null}
-              {busy === "copy" ? <Loader2 className="size-3.5 animate-spin text-muted-foreground" /> : null}
+              {busy === "copy" || busy === "card" ? (
+                <Loader2 className="size-3.5 animate-spin text-muted-foreground" />
+              ) : null}
             </div>
           ) : (
             <p className="border-b border-border/70 px-3 py-2 text-[11.5px] text-muted-foreground">
@@ -165,6 +228,11 @@ export function ProjectRatesPanel({
           )}
           {error ? (
             <p className="border-b border-border/70 px-3 py-2 text-[11.5px] text-critical">{error}</p>
+          ) : null}
+          {cardNote ? (
+            <p className="border-b border-border/70 px-3 py-2 text-[11.5px] text-foreground">
+              {cardNote}
+            </p>
           ) : null}
 
           <div className="overflow-x-auto">
