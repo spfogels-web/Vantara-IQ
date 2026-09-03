@@ -36,6 +36,9 @@ const PUBLIC_PREFIXES = [
   // company with nothing to show and gets the campaign rejected.
   "/privacy",
   "/terms",
+  // The opt-in itself. Behind the login it is a sign-in page, which is what
+  // got the A2P campaign rejected for an unverifiable call to action.
+  "/sms",
   // Twilio POSTs opt-outs here and cannot carry a session. It authenticates
   // instead by verifying Twilio’s signature over the body.
   "/api/sms",

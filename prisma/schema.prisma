@@ -1803,3 +1803,33 @@ model MaterialTransaction {
   @@index([custodianSubId])
   @@index([at])
 }
+
+/// Proof that a person agreed to be texted.
+///
+/// A carrier reviewing an A2P campaign asks two things: show us where someone
+/// consents, and show us the record of them consenting. The consent box inside
+/// the crew portal answers neither — a reviewer with no account sees a login
+/// page, which is what got the campaign rejected.
+///
+/// The exact wording is stored on the row rather than referenced, because the
+/// wording will change and a consent record has to say what was actually
+/// agreed to on the day, not what the page says now.
+model SmsOptIn {
+  id        String @id @default(cuid())
+  /// E.164. The identity of the consent — everything else is context.
+  phone     String
+  name      String @default("")
+  company   String @default("")
+  /// The consent language exactly as it appeared when they ticked it.
+  consentText String
+  /// Where they were when they agreed, for an audit trail.
+  source    String @default("web")
+  ip        String @default("")
+  userAgent String @default("")
+  consentedAt DateTime @default(now())
+  /// Set when they reply STOP, or ask us to stop by any other means.
+  revokedAt DateTime?
+  revokedVia String  @default("")
+
+  @@index([phone])
+}
