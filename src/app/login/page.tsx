@@ -56,6 +56,20 @@ export default function LoginPage() {
             Back to Vantara IQ
           </Link>
         </p>
+        {/* Reachable without signing in, because the people who need it are
+            the ones who cannot get past this screen — a crew wanting job
+            alerts, or wanting them to stop. */}
+        <p className="mt-3 flex flex-wrap justify-center gap-x-4 gap-y-1 text-center text-[11.5px] text-white/45">
+          <Link href="/sms" className="hover:text-white/80 hover:underline">
+            Text message alerts
+          </Link>
+          <Link href="/privacy" className="hover:text-white/80 hover:underline">
+            Privacy
+          </Link>
+          <Link href="/terms" className="hover:text-white/80 hover:underline">
+            Terms
+          </Link>
+        </p>
       </div>
     </div>
   );

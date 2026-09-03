@@ -30,6 +30,9 @@ export default function LegalLayout({ children }: { children: React.ReactNode })
           <Link href="/terms" className="hover:text-foreground">
             Terms &amp; SMS Program Conditions
           </Link>
+          <Link href="/sms" className="hover:text-foreground">
+            Text message alerts
+          </Link>
           <span>© {new Date().getFullYear()} Fortitude Infrastructure LLC</span>
         </footer>
       </div>

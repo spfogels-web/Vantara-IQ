@@ -232,7 +232,17 @@ export function VendorPacketForm({
             work assignments, priorities and due dates, schedule changes, project updates,
             daily sheet status, and invoice and payment updates. Message frequency varies.
             Message and data rates may apply. Reply STOP to opt out or HELP for help. SMS
-            consent is not required to register, use Vantara IQ, or receive work.
+            consent is not required to register, use Vantara IQ, or receive work.{" "}
+            {/* The full programme terms, for somebody who wants to read them
+                before ticking rather than after. */}
+            <a
+              href="/sms"
+              target="_blank"
+              rel="noreferrer"
+              className="font-medium text-brand-bright underline"
+            >
+              What we send and how to stop
+            </a>
           </span>
         </label>
 
