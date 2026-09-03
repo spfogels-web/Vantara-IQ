@@ -4,7 +4,7 @@ import { SMS_CONSENT_TEXT, SAMPLE_MESSAGES, HELP_REPLY } from "@/lib/sms-consent
 import { OptInForm } from "./opt-in-form";
 
 export const metadata = {
-  title: "Text message alerts · Vantara IQ",
+  title: "Text message alerts",
   description:
     "How crews working with Fortitude Infrastructure LLC sign up for Vantara IQ job alert text messages, what those messages contain, and how to stop them.",
 };
