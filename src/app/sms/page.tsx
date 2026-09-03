@@ -1,4 +1,7 @@
+import Image from "next/image";
 import Link from "next/link";
+
+import { prisma } from "@/lib/prisma";
 
 import { SMS_CONSENT_TEXT, SAMPLE_MESSAGES, HELP_REPLY } from "@/lib/sms-consent";
 import { OptInForm } from "./opt-in-form";
@@ -32,14 +35,57 @@ const MUTED = "#475569";
  * tokens put its body text at 5.45:1 — inside the standard by the letter and
  * faint to anybody actually reading it.
  */
-export default function SmsPage() {
+export default async function SmsPage() {
+  // The company mark, from the same place the rate sheets take it, so the two
+  // cannot drift. Public branding, so no session is needed to read it — which
+  // matters, because the reviewer looking at this page has no account.
+  const org = await prisma.organization
+    .findFirst({ select: { logoUrl: true } })
+    .catch(() => null);
+
   return (
     <main className="mx-auto w-full max-w-[52rem] px-5 py-10 sm:py-14">
+      {/* Both marks, together.
+          The product is Vantara IQ and the company on the paperwork is
+          Fortitude Infrastructure LLC. A carrier is checking that those are one
+          business, so showing the two lockups side by side answers the question
+          before it is asked.
+
+          The light artwork is referenced directly rather than through
+          BrandLogo, which picks its file with a dark: variant — this page is
+          always light but <html> can still be carrying .dark, and the component
+          would hide the very logo that belongs here. */}
       <header className="border-b-2 pb-5" style={{ borderColor: GOLD }}>
-        <p className="text-[12px] font-bold uppercase tracking-[0.16em]" style={{ color: GOLD }}>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
+          <Image
+            src="/vantara-logo-on-light.png"
+            alt="Vantara IQ"
+            width={2002}
+            height={381}
+            priority
+            className="block h-9 w-auto object-contain sm:h-10"
+          />
+          {org?.logoUrl ? (
+            <>
+              <span aria-hidden className="h-8 w-px bg-slate-300" />
+              {/* Resized on the way out. The original is a 2.5 MB PNG and
+                  this draws it at 48 pixels tall. */}
+              <Image
+                src={org.logoUrl}
+                alt="Fortitude Infrastructure LLC"
+                width={480}
+                height={480}
+                priority
+                className="block h-11 w-auto object-contain sm:h-12"
+              />
+            </>
+          ) : null}
+        </div>
+
+        <p className="mt-4 text-[12px] font-bold uppercase tracking-[0.16em]" style={{ color: GOLD }}>
           Fortitude Infrastructure LLC
         </p>
-        <p className="mt-1.5 text-[13.5px]" style={{ color: MUTED }}>
+        <p className="mt-1 text-[13.5px]" style={{ color: MUTED }}>
           Underground utility and fiber construction · Anderson, South Carolina
         </p>
       </header>
