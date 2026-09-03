@@ -78,9 +78,18 @@ export function AppShell({
 }) {
   const pathname = usePathname();
 
-  // Public, external-facing routes (e.g. subcontractor onboarding) render
-  // full-bleed — no internal sidebar, topbar or command palette.
-  if (pathname?.startsWith("/invite") || pathname?.startsWith("/login")) {
+  /**
+   * Public, external-facing routes render full-bleed — no internal sidebar,
+   * topbar or command palette.
+   *
+   * The compliance pages belong here and were not: a carrier vetting the A2P
+   * campaign opened /privacy and /sms and got the whole internal navigation
+   * wrapped around them, which reads as an application screenshot rather than
+   * a published policy — and puts the shape of the product in front of
+   * somebody who has no business seeing it.
+   */
+  const bare = ["/invite", "/login", "/sms", "/privacy", "/terms"];
+  if (bare.some((r) => pathname === r || pathname?.startsWith(`${r}/`))) {
     return (
       <TooltipProvider delayDuration={300} skipDelayDuration={200}>
         <div className="aurora relative min-h-svh">{children}</div>
