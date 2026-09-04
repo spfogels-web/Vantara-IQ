@@ -1,5 +1,5 @@
 ﻿import Link from "next/link";
-import { Building2, Plug, ShieldCheck } from "lucide-react";
+import { Building2, Plug, ShieldCheck, Smartphone } from "lucide-react";
 
 import { getOrganization, getOrganizationLogo } from "@/data/queries";
 import { PageShell } from "@/components/common/page-shell";
@@ -7,6 +7,9 @@ import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { StatusPill } from "@/components/common/status-pill";
 import { ProfileCard } from "@/components/settings/profile-card";
 import { OrgLogo } from "@/components/settings/org-logo";
+import { MyAlerts } from "@/components/settings/my-alerts";
+import { getMyAlertSettings } from "@/app/actions";
+import { SMS_CONSENT_TEXT } from "@/lib/sms-consent";
 import { getCurrentUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -75,10 +78,11 @@ const integrations = [
 ];
 
 export default async function SettingsPage() {
-  const [org, me, orgLogoUrl] = await Promise.all([
+  const [org, me, orgLogoUrl, myAlerts] = await Promise.all([
     getOrganization(),
     getCurrentUser(),
     getOrganizationLogo(),
+    getMyAlertSettings(),
   ]);
 
   return (
@@ -95,6 +99,15 @@ export default async function SettingsPage() {
       ) : null}
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <Panel className="lg:col-span-2">
+          <PanelHeader
+            title="Job alerts to your phone"
+            description="Your own number and your own consent. Nothing is sent until you agree, and replying STOP stops it."
+            icon={<Smartphone className="size-3.5 text-gold" />}
+          />
+          <MyAlerts initial={myAlerts} consentText={SMS_CONSENT_TEXT} />
+        </Panel>
+
         <Panel>
           <PanelHeader title="Organization" icon={<Building2 className="size-3.5" />} />
           <PanelBody className="flex flex-col gap-2.5">

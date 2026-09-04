@@ -8,6 +8,8 @@ import * as XLSX from "xlsx";
 
 import { prisma } from "@/lib/prisma";
 import { isMarketId, marketLabel } from "@/lib/markets";
+import { SMS_CONSENT_TEXT } from "@/lib/sms-consent";
+import { toE164 } from "@/lib/sms";
 import { hashPassword, isStaff, setSessionCookie, signSession } from "@/lib/auth";
 import {
   extractDocument,
@@ -6559,4 +6561,61 @@ export async function setProjectMarket(projectId: string, market: string) {
   revalidatePath("/projects");
   revalidatePath("/dailies");
   return { ok: true as const, market: next };
+}
+
+/* ------------------------------------------------------------------ *
+ * Staff job alerts — your own number, your own consent.
+ * ------------------------------------------------------------------ */
+
+/**
+ * Your own alert settings.
+ *
+ * Scoped to the signed-in user by construction — it takes no id, so there is
+ * no version of this that edits somebody else's number or agrees on their
+ * behalf. Consent is personal and has to come from the handset's owner.
+ */
+export async function saveMyAlertSettings(input: { phone: string; consent: boolean }) {
+  const me = await requireUser();
+
+  const phone = input.phone.trim();
+  if (input.consent && !toE164(phone)) {
+    return { ok: false as const, error: "Enter a mobile number, including area code." };
+  }
+
+  const prior = await prisma.user.findUnique({
+    where: { id: me.id },
+    select: { smsConsentAt: true },
+  });
+
+  await prisma.user.update({
+    where: { id: me.id },
+    data: {
+      phone,
+      // Agreeing again does not restamp the date. The first time is when they
+      // agreed, and that is the date an audit asks about.
+      smsConsentAt: input.consent ? (prior?.smsConsentAt ?? new Date()) : null,
+      smsConsentText: input.consent ? SMS_CONSENT_TEXT : "",
+      // Turning it on here is the person themselves saying yes, which is the
+      // one thing that lifts a STOP they made earlier.
+      smsOptOutAt: input.consent ? null : undefined,
+    },
+  });
+
+  revalidatePath("/settings");
+  return { ok: true as const };
+}
+
+/** The signed-in user's own alert settings, for the settings page. */
+export async function getMyAlertSettings() {
+  const me = await requireUser();
+  const row = await prisma.user.findUnique({
+    where: { id: me.id },
+    select: { phone: true, smsConsentAt: true, smsOptOutAt: true },
+  });
+  return {
+    phone: row?.phone ?? "",
+    consented: Boolean(row?.smsConsentAt),
+    consentedAt: row?.smsConsentAt ? row.smsConsentAt.toISOString().slice(0, 10) : null,
+    optedOut: Boolean(row?.smsOptOutAt),
+  };
 }

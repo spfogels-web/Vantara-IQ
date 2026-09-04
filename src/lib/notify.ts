@@ -1,7 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
-import { textCrew } from "@/lib/sms";
+import { textCrew, textUser } from "@/lib/sms";
 
 /**
  * Recording that something happened, for whoever needs to know.
@@ -27,6 +27,14 @@ export async function notifyStaff(input: {
   category?: Category;
   tone?: Tone;
   actor?: string;
+  /**
+   * Also text the staff who asked to be texted.
+   *
+   * Off by default, same as for a crew and for the same reason: the office
+   * generates far more notifications than a phone should ever buzz for.
+   * Reserve it for what somebody has to act on away from a desk.
+   */
+  sms?: boolean;
 }): Promise<void> {
   await prisma.notification
     .create({
@@ -41,6 +49,25 @@ export async function notifyStaff(input: {
       },
     })
     .catch(() => undefined);
+
+  if (!input.sms) return;
+
+  // Only the ones who gave a number and agreed. textUser re-checks consent and
+  // opt-out itself, so a stale row here cannot cause a send — this narrowing is
+  // to avoid asking Twilio about people who were never going to be texted.
+  const staff = await prisma.user
+    .findMany({
+      where: { smsConsentAt: { not: null }, smsOptOutAt: null, phone: { not: "" } },
+      select: { id: true },
+    })
+    .catch(() => []);
+
+  const line = input.detail ? `${input.title} — ${input.detail}` : input.title;
+  await Promise.all(
+    staff.map((u) =>
+      textUser(u.id, `Vantara IQ: ${line}`.slice(0, 320)).catch(() => undefined),
+    ),
+  );
 }
 
 /**

@@ -46,6 +46,17 @@ model User {
   email           String         @unique
   passwordHash    String?
   name            String
+
+  /// Mobile number for job alerts. Staff get texted the same way crews do,
+  /// and the same rules apply: nothing is sent without consent, and a STOP
+  /// from this handset stops it.
+  phone         String    @default("")
+  /// When they agreed, and the wording they agreed to as it read that day.
+  /// Null means they have never agreed and nothing may be sent.
+  smsConsentAt  DateTime?
+  smsConsentText String   @default("")
+  /// Set when they reply STOP. Clears only when they reply START.
+  smsOptOutAt   DateTime?
   role            Role           @default(SUBCONTRACTOR)
   organization    Organization?  @relation(fields: [organizationId], references: [id])
   organizationId  String?

@@ -125,7 +125,7 @@ export default async function SmsPage() {
 
       <Section title="How people opt in">
         <p className="text-[14.5px] leading-relaxed" style={{ color: BODY }}>
-          There are three ways and no others. We never buy, rent, or import phone numbers.
+          There are four ways and no others. We never buy, rent, or import phone numbers.
         </p>
         <ol className="mt-4 space-y-3">
           <Step n={1} title="This page">
@@ -142,6 +142,11 @@ export default async function SmsPage() {
             A crew owner may authorize alerts for a number in writing or in person, in which case
             a member of our staff records the number and the date. Staff must confirm they hold
             that authorization before any number is added.
+          </Step>
+          <Step n={4} title="Our own staff, in their account settings">
+            Fortitude employees add their own mobile number and tick the same unticked consent
+            box, with the same wording, on their Vantara IQ settings page. Nobody can enter a
+            number or agree on another person&rsquo;s behalf.
           </Step>
         </ol>
         <p className="mt-4 text-[14.5px] leading-relaxed" style={{ color: BODY }}>

@@ -124,6 +124,37 @@ export async function textCrew(
 }
 
 /**
+ * Text one member of staff.
+ *
+ * The same three gates as a crew: consent given, no STOP on record, and a
+ * number that normalises. Staff are not a special case — the obligation is to
+ * the handset, not to the org chart, and a campaign is judged on every number
+ * it sends to.
+ */
+export async function textUser(userId: string, body: string): Promise<SmsResult> {
+  try {
+    if (!smsReady()) return { sent: false, reason: "Twilio isn't configured in this environment." };
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { name: true, phone: true, smsConsentAt: true, smsOptOutAt: true },
+    });
+    if (!user) return { sent: false, reason: "No such user." };
+
+    const who = user.name.trim() || "That user";
+    if (user.smsOptOutAt) return { sent: false, reason: `${who} replied STOP.` };
+    if (!user.smsConsentAt) return { sent: false, reason: `${who} hasn't agreed to texts yet.` };
+
+    const to = toE164(user.phone);
+    if (!to) return { sent: false, reason: `${who} has no usable phone number.` };
+
+    return await post(to, body);
+  } catch (e) {
+    return { sent: false, reason: e instanceof Error ? e.message : "Send failed." };
+  }
+}
+
+/**
  * Record a STOP or a START.
  *
  * Matched on the phone number rather than an id, because the person replying
@@ -136,21 +167,33 @@ export async function applyOptOut(from: string, keyword: "STOP" | "START"): Prom
   const e164 = toE164(from);
   if (!e164) return 0;
 
-  const subs = await prisma.subcontractor.findMany({
-    select: { id: true, phone: true },
-  });
-  const hit = subs.filter((s) => toE164(s.phone) === e164).map((s) => s.id);
-  if (hit.length === 0) return 0;
+  // START clears the opt-out. Consent is not re-granted here: someone who
+  // never consented cannot opt back into something they never agreed to.
+  const data =
+    keyword === "STOP" ? { smsOptOutAt: new Date() } : { smsOptOutAt: null };
 
-  await prisma.subcontractor.updateMany({
-    where: { id: { in: hit } },
-    data:
-      keyword === "STOP"
-        ? { smsOptOutAt: new Date() }
-        : // START clears the opt-out. Consent is not re-granted here: someone
-          // who never consented cannot opt back into something they never
-          // agreed to in the first place.
-          { smsOptOutAt: null },
-  });
-  return hit.length;
+  const [subs, users, contacts] = await Promise.all([
+    prisma.subcontractor.findMany({ select: { id: true, phone: true } }),
+    prisma.user.findMany({ select: { id: true, phone: true } }),
+    prisma.crewContact.findMany({ select: { id: true, phone: true } }),
+  ]);
+
+  const subHit = subs.filter((s) => toE164(s.phone) === e164).map((s) => s.id);
+  const userHit = users.filter((u) => toE164(u.phone) === e164).map((u) => u.id);
+  const contactHit = contacts.filter((c) => toE164(c.phone) === e164).map((c) => c.id);
+
+  // Every record carrying this number, not just the first kind we look in. One
+  // handset can be a crew owner, a named contact and a staff login at once, and
+  // honouring STOP on one of the three is how a campaign gets shut down.
+  await Promise.all([
+    subHit.length
+      ? prisma.subcontractor.updateMany({ where: { id: { in: subHit } }, data })
+      : null,
+    userHit.length ? prisma.user.updateMany({ where: { id: { in: userHit } }, data }) : null,
+    contactHit.length
+      ? prisma.crewContact.updateMany({ where: { id: { in: contactHit } }, data })
+      : null,
+  ]);
+
+  return subHit.length + userHit.length + contactHit.length;
 }
