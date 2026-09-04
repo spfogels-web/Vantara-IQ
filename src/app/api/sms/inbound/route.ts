@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 
 import { applyOptOut } from "@/lib/sms";
+import { HELP_REPLY } from "@/lib/sms-consent";
 import { notifyStaff } from "@/lib/notify";
 
 export const runtime = "nodejs";
@@ -88,8 +89,11 @@ export async function POST(request: Request) {
   }
 
   if (word === "HELP" || word === "INFO") {
+    // The same constant the opt-in page prints. A vetter texts HELP and then
+    // reads the page; the two saying different things is a rejection, and the
+    // only way they cannot differ is to have one source.
     return new NextResponse(
-      '<?xml version="1.0" encoding="UTF-8"?><Response><Message>Vantara IQ job alerts. Call (864) 365-1521 or email sean.fogelson@fortitude-infra.com. Reply STOP to opt out.</Message></Response>',
+      `<?xml version="1.0" encoding="UTF-8"?><Response><Message>${HELP_REPLY}</Message></Response>`,
       { headers: { "Content-Type": "text/xml" } },
     );
   }

@@ -222,11 +222,11 @@ export default async function SmsPage() {
         <p className="mt-3 text-[14.5px] leading-relaxed" style={{ color: BODY }}>
           Questions about these messages:{" "}
           <a
-            href="mailto:support@vantaraiq.com"
+            href="mailto:sean.fogelson@fortitude-infra.com"
             className="font-semibold underline"
             style={{ color: GOLD }}
           >
-            support@vantaraiq.com
+            sean.fogelson@fortitude-infra.com
           </a>
         </p>
       </Section>
