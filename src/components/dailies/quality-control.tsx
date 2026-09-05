@@ -59,10 +59,19 @@ const GUIDE = {
   note: "Windstream's own standard — pedestals, flowerpots, FDHs, handholes, depths, restoration",
 };
 
-/** Reference sheets, if they have been dropped into public/qc. */
-const SPECS = [
-  { src: "/qc/fdh-pedestal.png", label: "FDH pedestal — what a finished one looks like" },
-  { src: "/qc/flowerpot.png", label: "Flowerpot — grade, gravel, ducts, lid" },
+/**
+ * The pages of the guide worth opening from here.
+ *
+ * Deep links rather than copies. Exporting two pages as images would have
+ * meant a second set of files to keep in step with a document that gets
+ * revised — and this way a crew lands inside the standard itself, one page
+ * from everything around it.
+ */
+const SPEC_PAGES = [
+  { page: 25, label: "Pedestals", note: "grounding, labels, gravel, moisture barrier" },
+  { page: 26, label: "Flowerpots", note: "grade, gravel, ducts trimmed, lid level" },
+  { page: 28, label: "FDH pedestal", note: "ground rod to GBB, ty-wraps, FDH # and 811" },
+  { page: 29, label: "Handholes", note: "innerducts, coiling, gravel, restoration" },
 ];
 
 export function QualityControl({ className }: { className?: string }) {
@@ -136,8 +145,7 @@ export function QualityControl({ className }: { className?: string }) {
             approving your sheet was not standing there.
           </p>
 
-          <GuideLink />
-          <SpecSheets />
+          <Guide />
         </div>
       ) : null}
     </section>
@@ -167,18 +175,19 @@ function Shot({ n, title, items }: { n: number; title: string; items: string[] }
 }
 
 /**
- * A link to the full standard, shown only once the file is actually there.
+ * The standard, and shortcuts into the pages that matter here.
  *
- * A link cannot report a 404 the way an image can, so this asks for the
- * headers first. Sending a crew to a missing file is worse than not offering
- * it — they stop trusting the other links on the page.
+ * Shown only once the file is really there. A link cannot report a 404 the way
+ * an image can, so this asks for the headers first — and a 200 is not enough
+ * on its own, because an unknown path in this app is answered by the catch-all
+ * route with a healthy placeholder page and unauthenticated it redirects to
+ * the login screen. Both look like success to fetch, so the content type has
+ * to say PDF as well.
  *
- * A 200 is not enough on its own. An unknown path in this app is caught by the
- * catch-all route and answered with a perfectly healthy placeholder page, and
- * unauthenticated it redirects to the login screen — both of which look like
- * success to fetch. So the content type has to say PDF as well.
+ * Sending a crew to a missing file is worse than not offering it: they stop
+ * trusting the other links on the page.
  */
-function GuideLink() {
+function Guide() {
   const [there, setThere] = React.useState(false);
 
   React.useEffect(() => {
@@ -197,55 +206,44 @@ function GuideLink() {
   if (!there) return null;
 
   return (
-    <a
-      href={GUIDE.href}
-      target="_blank"
-      rel="noreferrer"
-      className="focus-ring mt-3 flex items-start gap-2.5 rounded-lg border border-border bg-background/40 p-3 transition-colors hover:border-brand/50"
-    >
-      <BookOpen className="mt-0.5 size-4 shrink-0 text-gold" />
-      <span className="min-w-0">
-        <span className="block text-[12.5px] font-semibold text-foreground">{GUIDE.label}</span>
-        <span className="mt-0.5 block text-[11.5px] leading-relaxed text-muted-foreground">
-          {GUIDE.note}
-        </span>
-      </span>
-    </a>
-  );
-}
-
-/**
- * The reference sheets.
- *
- * Each hides itself if the file is not there, so the guidance above still
- * stands on a deploy where the images have not been dropped in yet — a broken
- * image icon on a compliance panel reads as a broken app.
- */
-function SpecSheets() {
-  const [gone, setGone] = React.useState<string[]>([]);
-  const shown = SPECS.filter((s) => !gone.includes(s.src));
-  if (shown.length === 0) return null;
-
-  return (
     <div className="mt-4">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+      <a
+        href={GUIDE.href}
+        target="_blank"
+        rel="noreferrer"
+        className="focus-ring flex items-start gap-2.5 rounded-lg border border-border bg-background/40 p-3 transition-colors hover:border-brand/50"
+      >
+        <BookOpen className="mt-0.5 size-4 shrink-0 text-gold" />
+        <span className="min-w-0">
+          <span className="block text-[12.5px] font-semibold text-foreground">{GUIDE.label}</span>
+          <span className="mt-0.5 block text-[11.5px] leading-relaxed text-muted-foreground">
+            {GUIDE.note}
+          </span>
+        </span>
+      </a>
+
+      <p className="mt-2.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
         What a finished one looks like
       </p>
-      <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {shown.map((s) => (
-          <figure key={s.src} className="overflow-hidden rounded-lg border border-border bg-white">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={s.src}
-              alt={s.label}
-              loading="lazy"
-              onError={() => setGone((g) => [...g, s.src])}
-              className="block w-full object-contain"
-            />
-            <figcaption className="border-t border-border bg-background px-2.5 py-1.5 text-[11.5px] text-muted-foreground">
-              {s.label}
-            </figcaption>
-          </figure>
+      <div className="mt-1.5 grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {SPEC_PAGES.map((s) => (
+          <a
+            key={s.page}
+            /* #page= is honoured by every browser PDF viewer, so this opens on
+               the right page rather than at the cover of a 45-page document. */
+            href={`${GUIDE.href}#page=${s.page}`}
+            target="_blank"
+            rel="noreferrer"
+            className="focus-ring flex items-baseline gap-2 rounded-lg border border-border bg-background/40 px-3 py-2 transition-colors hover:border-brand/50"
+          >
+            <span className="num text-[10.5px] font-semibold text-gold">p{s.page}</span>
+            <span className="min-w-0">
+              <span className="block text-[12px] font-medium text-foreground">{s.label}</span>
+              <span className="block text-[11px] leading-relaxed text-muted-foreground">
+                {s.note}
+              </span>
+            </span>
+          </a>
         ))}
       </div>
     </div>
