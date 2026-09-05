@@ -1,7 +1,14 @@
 "use client";
 
 import * as React from "react";
-import { AlertTriangle, BookOpen, Camera, CheckCircle2, ChevronDown } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  BookOpen,
+  Camera,
+  CheckCircle2,
+  ChevronDown,
+} from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -222,14 +229,29 @@ function Guide() {
         href={GUIDE.href}
         target="_blank"
         rel="noreferrer"
-        className="focus-ring flex items-start gap-2.5 rounded-lg border border-border bg-background/40 p-3 transition-colors hover:border-brand/50"
+        className="focus-ring block rounded-lg border border-gold/40 bg-gold/[0.06] p-3 transition-colors hover:border-gold hover:bg-gold/[0.1]"
       >
-        <BookOpen className="mt-0.5 size-4 shrink-0 text-gold" />
-        <span className="min-w-0">
-          <span className="block text-[12.5px] font-semibold text-foreground">{GUIDE.label}</span>
-          <span className="mt-0.5 block text-[11.5px] leading-relaxed text-muted-foreground">
-            {GUIDE.note}
+        <span className="flex items-start gap-2.5">
+          <BookOpen className="mt-0.5 size-4 shrink-0 text-gold" />
+          <span className="min-w-0">
+            <span className="block text-[12.5px] font-semibold text-foreground">{GUIDE.label}</span>
+            <span className="mt-0.5 block text-[11.5px] leading-relaxed text-muted-foreground">
+              {GUIDE.note}
+            </span>
           </span>
+        </span>
+
+        {/* The link read as a footnote and was being scrolled straight past —
+            below it sit two large photographs, and the eye goes to those.
+
+            Under the title rather than opposite it. This panel is inside the
+            sheet's 1420px scroll box, so the right-hand end of the row is off
+            the screen on anything smaller than that and a crew would have to
+            scroll sideways to find the thing telling them to click. Here it
+            is in view on a phone without moving. */}
+        <span className="ml-[26px] mt-2.5 inline-flex items-center gap-2 rounded-lg bg-gold px-3 py-1.5 text-[12.5px] font-bold uppercase tracking-[0.1em] text-background">
+          Click to review
+          <ArrowRight className="size-4 motion-safe:animate-pulse" />
         </span>
       </a>
 
