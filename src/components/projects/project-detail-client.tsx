@@ -4,7 +4,17 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { upload as blobUpload } from "@vercel/blob/client";
-import { ImagePlus, Loader2, Map as MapIcon, Maximize2, Pencil, PenLine, Trash2, Upload } from "lucide-react";
+import {
+  Download,
+  ImagePlus,
+  Loader2,
+  Map as MapIcon,
+  Maximize2,
+  Pencil,
+  PenLine,
+  Trash2,
+  Upload,
+} from "lucide-react";
 
 import { deleteProject, saveProjectMapUrl, saveProjectPhotoUrl, uploadProjectMap } from "@/app/actions";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
@@ -97,11 +107,18 @@ export function ProjectHeaderActions({ projectId, photoUrl }: { projectId: strin
 export function ProjectMapPanel({
   projectId,
   initialMapUrl,
+  initialMapOriginalUrl,
   initialMarkups,
   canEdit,
 }: {
   projectId: string;
   initialMapUrl?: string | null;
+  /**
+   * The file as it was uploaded, before anything was done to it for display.
+   * This is what a download should hand over — a flattened copy has lost the
+   * text layer and, with it, every callout small enough to matter.
+   */
+  initialMapOriginalUrl?: string | null;
   initialMarkups?: unknown;
   /** Fortitude staff. A crew reads this map; it never redraws it. */
   canEdit: boolean;
@@ -152,6 +169,7 @@ export function ProjectMapPanel({
   }
 
   const isPdf = mapUrl ? isPdfUrl(mapUrl) : false;
+  const originalUrl = initialMapOriginalUrl ?? initialMapUrl ?? null;
   const markups = React.useMemo(() => parseShapes(initialMarkups), [initialMarkups]);
 
   return (
@@ -244,6 +262,13 @@ export function ProjectMapPanel({
           )}
         </PanelBody>
 
+        {/* Take it with you.
+            Deliberately not gated on canEdit: the crew standing in the ditch
+            is the one who needs the print on their phone, and until now the
+            only thing offered was a link that opened a tab. A crew can read
+            this map and download it; only the office can replace it. */}
+        {mapUrl ? <MapDownload projectId={projectId} original={originalUrl} /> : null}
+
         {/* Counting a print by eye is an afternoon, and the number somebody
             lands on is what the job gets scheduled and priced against. Only
             offered when there is a drawing to read. */}
@@ -263,5 +288,44 @@ export function ProjectMapPanel({
         />
       ) : null}
     </>
+  );
+}
+
+
+/**
+ * The print, as a file you can keep.
+ *
+ * It goes through our own route rather than linking the storage URL. Three
+ * reasons, and the first is the one that mattered: `download` on an anchor is
+ * ignored across origins, so a link to Blob storage opens a tab and leaves the
+ * crew to work out how to save what is in it. The route also names the file
+ * after the job instead of whatever the upload was called, and checks that the
+ * person asking is on this job before handing anything over.
+ *
+ * Two buttons only when they are two different files. A print that was
+ * flattened on the way in has a display copy that no longer matches the
+ * original, and which one you want depends on why you are downloading it — to
+ * read on a phone, or to print at full size and mark up.
+ */
+function MapDownload({ projectId, original }: { projectId: string; original: string | null }) {
+  const isPdf = original ? isPdfUrl(original) : false;
+  const kind = isPdf ? "PDF" : "image";
+
+  return (
+    <div className="flex flex-wrap items-center gap-2.5 border-t border-border/60 px-3 py-3">
+      <Download className="size-4 shrink-0 text-gold" />
+      <span className="text-[12.5px] font-semibold text-foreground">Download the print</span>
+      <span className="hidden text-[11.5px] text-muted-foreground sm:block">
+        Named after the job, so a folder of these still reads in a month.
+      </span>
+
+      <a
+        href={`/api/project-map/${projectId}`}
+        className="focus-ring ml-auto inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand px-3 text-[12px] font-semibold text-white hover:bg-brand-bright"
+      >
+        <Download className="size-3.5" />
+        {kind === "PDF" ? "Download PDF" : "Download map"}
+      </a>
+    </div>
   );
 }

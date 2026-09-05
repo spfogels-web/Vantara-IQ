@@ -161,6 +161,9 @@ const PROJECT_LIST_SELECT = {
 /** A row from either query: the list select, or a full single-project row. */
 type ProjectListRow = Prisma.ProjectGetPayload<{ select: typeof PROJECT_LIST_SELECT }> & {
   mapUrl?: string | null;
+  // Only present on the single-project read. A list never carries it: the
+  // original can be a 30 MB plot and a list draws thumbnails.
+  mapOriginalUrl?: string | null;
   markups?: unknown;
   hasMap?: boolean;
 };
@@ -211,6 +214,7 @@ function toProject(r: ProjectListRow): Project {
     // job the crew walked off weeks ago.
     ...(r.completedAt ? { pctComplete: 100, remainingFt: 0 } : null),
     mapUrl: r.mapUrl ?? null,
+    mapOriginalUrl: r.mapOriginalUrl ?? null,
     hasMap: r.hasMap ?? r.mapUrl != null,
     photoUrl: r.photoUrl,
     markups: r.markups,

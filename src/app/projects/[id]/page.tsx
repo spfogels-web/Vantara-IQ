@@ -170,6 +170,7 @@ export default async function ProjectDetailPage({
         <ProjectMapPanel
           projectId={project.id}
           initialMapUrl={project.mapUrl}
+          initialMapOriginalUrl={project.mapOriginalUrl}
           initialMarkups={project.markups}
           canEdit={staff}
         />

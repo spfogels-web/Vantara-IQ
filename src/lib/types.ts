@@ -57,6 +57,12 @@ export interface Project {
    * list draws thumbnails. Use `hasMap` to ask whether a plan exists.
    */
   mapUrl?: string | null;
+  /**
+   * The file as it was uploaded, before anything was done to it for display.
+   * What a download hands over: a copy flattened for the screen has lost the
+   * text layer and every callout small enough to need it.
+   */
+  mapOriginalUrl?: string | null;
   /** Whether a map has been uploaded — answerable without shipping the map. */
   hasMap?: boolean;
   /** Jobsite cover photo shown on the project card. */

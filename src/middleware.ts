@@ -52,6 +52,12 @@ const PUBLIC_PREFIXES = [
  * pressing the PDF button on their own sheet is bounced to the login page.
  * Reaching the route is not the same as being handed the sheet: it checks the
  * requester against the project's assignments before it renders anything.
+ *
+ * `/api/project-map` is the construction print for a job, for the same reason
+ * and with the same caveat — the route checks the crew is on that job before
+ * it hands the file over. Without this line the download button renders on a
+ * crew's project page and bounces them to the login screen, which is worse
+ * than not offering it.
  */
 const SUB_ALLOWED_PREFIXES = [
   "/dailies",
@@ -63,6 +69,7 @@ const SUB_ALLOWED_PREFIXES = [
   "/support",
   "/settings",
   "/api/daily-sheet",
+  "/api/project-map",
 ];
 
 /**
