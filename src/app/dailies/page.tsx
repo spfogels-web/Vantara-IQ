@@ -66,9 +66,16 @@ export default async function DailiesPage({
           office’s call, not a crew’s. */}
       {staff && projects.length > 0 ? (
         <div className="mb-4">
+          {/* Folded away while there is a queue. Reading somebody's emailed
+              sheet is the second job on this screen; deciding the days already
+              filed is the first, and the importer was sitting above them. */}
           <ImportDaily
             projects={projects.map((p) => ({ id: p.id, name: p.name, number: p.number }))}
             crews={crews.map((c) => ({ id: c.id, company: c.company }))}
+            startOpen={
+              dailies.filter((d) => d.status === "Submitted" || d.status === "In review")
+                .length === 0
+            }
           />
         </div>
       ) : null}

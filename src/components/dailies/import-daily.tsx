@@ -4,7 +4,14 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { upload as blobUpload } from "@vercel/blob/client";
-import { AlertTriangle, Check, FileUp, Loader2 } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  ChevronDown,
+  FileUp,
+  Loader2,
+  UploadCloud,
+} from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { importDailyFromFile } from "@/app/actions";
@@ -32,13 +39,24 @@ const ACCEPT = "application/pdf,image/png,image/jpeg,image/webp";
 export function ImportDaily({
   projects,
   crews,
+  startOpen = true,
 }: {
   projects: { id: string; name: string; number: string }[];
   /** Staff may file a read sheet on a crew's behalf, same as typing one. */
   crews: { id: string; company: string }[];
+  /**
+   * Whether the importer starts open.
+   *
+   * Closed when there is a queue waiting. This box is the second job on the
+   * screen — reading somebody's emailed sheet — and it was taking the top of
+   * the page every time, above thirty-one days needing a decision. The work in
+   * front of you should be what you see first.
+   */
+  startOpen?: boolean;
 }) {
   const router = useRouter();
   const t = useT();
+  const [open, setOpen] = React.useState(startOpen);
   const [projectId, setProjectId] = React.useState(projects[0]?.id ?? "");
   const [filedForId, setFiledForId] = React.useState("");
   const [busy, setBusy] = React.useState<string | null>(null);
@@ -76,6 +94,25 @@ export function ImportDaily({
     } finally {
       setBusy(null);
     }
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="focus-ring flex w-full items-center gap-2.5 rounded-2xl border border-dashed border-border bg-background px-4 py-2.5 text-left transition-colors hover:border-brand/50"
+      >
+        <UploadCloud className="size-4 shrink-0 text-brand-bright" />
+        <span className="text-[12.5px] font-medium text-foreground">
+          {t("Read a daily from a PDF or photo")}
+        </span>
+        <span className="hidden text-[11.5px] text-muted-foreground sm:block">
+          {t("It comes back as a draft for you to check")}
+        </span>
+        <ChevronDown className="ml-auto size-4 shrink-0 text-muted-foreground" />
+      </button>
+    );
   }
 
   return (

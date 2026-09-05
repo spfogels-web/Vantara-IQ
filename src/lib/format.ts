@@ -96,6 +96,25 @@ export function formatWhen(value: string) {
   return `${whenFmt.format(new Date(t))} ET`;
 }
 
+const dayFmt = new Intl.DateTimeFormat("en-CA", {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  timeZone: "America/New_York",
+});
+
+/**
+ * Today as "2026-09-05", in Eastern.
+ *
+ * Pinned for the same reason formatWhen is: the server runs UTC and the office
+ * runs Eastern, so between 8pm and midnight a plain new Date() disagrees with
+ * itself across the wire and React tears the page down over it. en-CA because
+ * it formats the way the work dates are stored.
+ */
+export function todayET(): string {
+  return dayFmt.format(new Date());
+}
+
 export function initials(name: string) {
   return name
     .split(" ")

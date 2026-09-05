@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
+  ArrowRight,
   Camera,
   Check,
   ClipboardList,
@@ -19,7 +20,8 @@ import {
 import { cn } from "@/lib/utils";
 import { toneStyles } from "@/lib/tone";
 import type { DailyReport, DailyStatus } from "@/lib/types";
-import { formatCurrency, formatFeet, formatNumber, formatWhen } from "@/lib/format";
+import { formatCurrency, formatFeet, formatNumber, formatWhen, todayET } from "@/lib/format";
+import { addDays } from "@/lib/billing";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { useT } from "@/components/layout/language-provider";
 import { StatusPill } from "@/components/common/status-pill";
@@ -33,6 +35,62 @@ const FILTERS: (DailyStatus | "All")[] = [
   "Approved",
   "Denied",
 ];
+
+const SORTS = {
+  newest: "Newest first",
+  oldest: "Oldest first",
+  value: "Highest value",
+  footage: "Most footage",
+} as const;
+type SortKey = keyof typeof SORTS;
+
+/**
+ * A day with something wrong with it.
+ *
+ * Deliberately broad. Every one of these is a reason the office ends up
+ * chasing a crew weeks later — a flagged quantity, a code the card has never
+ * heard of, a day with no footage and no explanation, or a day with nothing
+ * photographed behind the number. Gathering them behind one filter is the
+ * difference between reviewing a queue and remembering to look.
+ */
+function needsAttention(d: DailyReport): boolean {
+  return (
+    d.flags.length > 0 ||
+    d.unpricedCodes > 0 ||
+    d.totalFt === 0 ||
+    d.photos === 0 ||
+    !d.hasAsBuilt
+  );
+}
+
+/** Why it needs attention, in the order somebody would want to hear it. */
+function attentionReasons(d: DailyReport): string[] {
+  const out: string[] = [];
+  if (d.flags.length > 0) out.push(`${d.flags.length} flagged`);
+  if (d.unpricedCodes > 0) out.push(`${d.unpricedCodes} unpriced`);
+  if (d.totalFt === 0) out.push("no footage");
+  if (d.photos === 0) out.push("no photos");
+  if (!d.hasAsBuilt) out.push("no redline");
+  return out;
+}
+
+/**
+ * Which pile a day belongs in.
+ *
+ * By work date, not by when it was filed: the office asks "what did we build
+ * yesterday", and a sheet typed up on Monday for Friday's work belongs with
+ * Friday. ISO dates compare correctly as strings, so no parsing is needed.
+ */
+function bucketOf(workDate: string, today: string): string {
+  if (!workDate) return "No work date";
+  if (workDate === today) return "Today";
+  if (workDate === addDays(today, -1)) return "Yesterday";
+  if (workDate > addDays(today, -7)) return "This week";
+  if (workDate > addDays(today, -30)) return "Earlier this month";
+  return "Older";
+}
+
+const BUCKET_ORDER = ["Today", "Yesterday", "This week", "Earlier this month", "Older", "No work date"];
 
 export function DailiesView({
   dailies,
@@ -63,6 +121,9 @@ export function DailiesView({
 
   const [crew, setCrew] = React.useState("All crews");
   const [job, setJob] = React.useState("All projects");
+  const [sort, setSort] = React.useState<SortKey>("newest");
+  const [onlyAttention, setOnlyAttention] = React.useState(false);
+  const today = todayET();
 
   // Built from the dailies rather than the roster, so the list only ever
   // offers crews who have actually filed something — picking a name and
@@ -87,12 +148,48 @@ export function DailiesView({
     return [...seen].sort((a, b) => a.localeCompare(b));
   }, [items]);
 
-  const filtered = items.filter(
-    (d) =>
-      (filter === "All" || d.status === filter) &&
-      (crew === "All crews" || (d.subcontractor || d.crew || "").trim() === crew) &&
-      (job === "All projects" || (d.project || "").trim() === job),
-  );
+  const filtered = React.useMemo(() => {
+    const kept = items.filter(
+      (d) =>
+        (filter === "All" || d.status === filter) &&
+        (crew === "All crews" || (d.subcontractor || d.crew || "").trim() === crew) &&
+        (job === "All projects" || (d.project || "").trim() === job) &&
+        (!onlyAttention || needsAttention(d)),
+    );
+    const by: Record<SortKey, (a: DailyReport, b: DailyReport) => number> = {
+      // Work date first, then filing time, so two days built on the same date
+      // fall in the order they arrived rather than at random.
+      newest: (a, b) =>
+        b.workDate.localeCompare(a.workDate) || b.submittedAt.localeCompare(a.submittedAt),
+      oldest: (a, b) =>
+        a.workDate.localeCompare(b.workDate) || a.submittedAt.localeCompare(b.submittedAt),
+      value: (a, b) => b.billableAmount - a.billableAmount,
+      footage: (a, b) => b.totalFt - a.totalFt,
+    };
+    return [...kept].sort(by[sort]);
+  }, [items, filter, crew, job, onlyAttention, sort]);
+
+  /**
+   * The list as day-headed groups.
+   *
+   * Only while the list is in date order. Sorted by value, a "Today" heading
+   * over a row from three weeks ago is a lie about what is under it, so those
+   * sorts render one flat run instead.
+   */
+  const groups = React.useMemo(() => {
+    if (sort !== "newest" && sort !== "oldest") return [{ label: "", rows: filtered }];
+    const byLabel = new Map<string, DailyReport[]>();
+    for (const d of filtered) {
+      const label = bucketOf(d.workDate, today);
+      const held = byLabel.get(label);
+      if (held) held.push(d);
+      else byLabel.set(label, [d]);
+    }
+    const order = sort === "newest" ? BUCKET_ORDER : [...BUCKET_ORDER].reverse();
+    return order.filter((l) => byLabel.has(l)).map((label) => ({ label, rows: byLabel.get(label)! }));
+  }, [filtered, sort, today]);
+
+  const attentionCount = React.useMemo(() => items.filter(needsAttention).length, [items]);
   // Look in the filtered list first. Selecting J&P's sheet and then
   // filtering to Gulf used to leave J&P's day open on the right, which
   // reads as the filter having done nothing.
@@ -105,13 +202,31 @@ export function DailiesView({
 
   const pending = items.filter((d) => d.status === "In review" || d.status === "Submitted").length;
 
+  /**
+   * Today, across every crew.
+   *
+   * This screen could tell you a sheet had arrived and nothing about the day
+   * the company had just had. Footage and value were only reachable by opening
+   * rows and adding them up in your head.
+   */
+  const todays = items.filter((d) => d.workDate === today);
+  const stats = {
+    pending,
+    ft: todays.reduce((n, d) => n + d.totalFt, 0),
+    value: todays.reduce((n, d) => n + d.billableAmount, 0),
+    crews: new Set(todays.map((d) => (d.subcontractor || d.crew || "").trim()).filter(Boolean)).size,
+  };
+
   return (
-    <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">
+    <div className="flex flex-col gap-3">
+      <Overview stats={stats} total={items.length} t={t} />
+
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">
       <div className="lg:col-span-5 xl:col-span-4">
         <Panel>
           <PanelHeader
             title={t("Daily billing sheets")}
-            description={`${pending} ${t("awaiting review")}`}
+            description={`${pending} ${t("NEED REVIEW")} · ${items.length} ${t("filed")}`}
             count={filtered.length}
             icon={<ClipboardList className="size-3.5 text-gold" />}
           />
@@ -130,6 +245,26 @@ export function DailiesView({
                 {t(f)}
               </button>
             ))}
+
+            {/* Everything the office would otherwise have to remember to look
+                for, behind one switch: a flagged quantity, a code the card has
+                never heard of, a day with no footage, a day with nothing
+                photographed behind the number. */}
+            {attentionCount > 0 ? (
+              <button
+                onClick={() => setOnlyAttention((v) => !v)}
+                className={cn(
+                  "focus-ring inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] font-semibold transition-colors",
+                  onlyAttention
+                    ? "bg-warning text-black"
+                    : "bg-warning/15 text-warning hover:bg-warning/25",
+                )}
+              >
+                <AlertTriangle className="size-3" />
+                {t("Needs attention")}
+                <span className="num">{attentionCount}</span>
+              </button>
+            ) : null}
 
             {/* Whose day it is. A crew name is the thing you scan this list
                 for when a foreman rings about a sheet, and twenty-one rows
@@ -178,15 +313,55 @@ export function DailiesView({
             ) : null}
           </div>
 
+          <div className="flex items-center gap-2 border-b border-border/70 px-2.5 py-2">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+              {t("Sort")}
+            </span>
+            <select
+              value={sort}
+              onChange={(e) => setSort(e.target.value as SortKey)}
+              aria-label={t("Sort dailies")}
+              className="focus-ring h-[26px] cursor-pointer rounded-full bg-foreground/[0.05] px-2.5 text-[11.5px] font-medium text-foreground outline-none"
+            >
+              {Object.entries(SORTS).map(([k, label]) => (
+                <option key={k} value={k}>
+                  {t(label)}
+                </option>
+              ))}
+            </select>
+            <span className="ml-auto text-[11.5px] text-muted-foreground">
+              {filtered.length} {filtered.length === 1 ? t("daily") : t("dailies")}
+            </span>
+          </div>
+
           <ul className="max-h-[68vh] flex-1 overflow-y-auto p-1.5">
-            {filtered.map((d) => {
+            {groups.map((g) => (
+              <li key={g.label || "all"}>
+                {g.label ? (
+                  /* Sticky, because the whole point of a day heading is
+                     knowing which day you are looking at once you have
+                     scrolled past it. */
+                  <p className="sticky top-0 z-10 -mx-1.5 flex items-baseline gap-2 bg-card/95 px-4 py-1.5 backdrop-blur">
+                    <span className="text-[11.5px] font-bold uppercase tracking-[0.1em] text-foreground">
+                      {t(g.label)}
+                    </span>
+                    <span className="num text-[11px] text-muted-foreground">
+                      {g.rows.length}
+                    </span>
+                    <span className="num ml-auto gold-figure text-[11.5px] font-semibold">
+                      {formatFeet(g.rows.reduce((n, r) => n + r.totalFt, 0))}
+                    </span>
+                  </p>
+                ) : null}
+                <ul>
+            {g.rows.map((d) => {
               const active = selected?.id === d.id;
               return (
                 <li key={d.id}>
                   <button
                     onClick={() => setSelectedId(d.id)}
                     className={cn(
-                      "focus-ring w-full rounded-lg px-3 py-3 text-left transition-colors",
+                      "focus-ring group/row w-full rounded-lg px-3 py-3 text-left transition-colors",
                       active ? "gold-rail" : "hover:bg-foreground/[0.03]",
                     )}
                   >
@@ -199,70 +374,113 @@ export function DailiesView({
                       ) : null}
                       <StatusPill label={t(d.status)} tone={d.tone} className="shrink-0 text-[11px]" dot={false} />
                     </div>
-                    {/* Who did the work, the sheet number and when it landed
-                        used to sit at 10.5px and 70% of a muted grey — the
-                        row's own quiet supporting text. They are the three
-                        things the office reads to tell one day from another,
-                        so they are the row's content, not its footnotes. */}
-                    <div className="mt-1 flex items-center justify-between gap-2 text-[13px] text-foreground">
-                      {/* The crew in cyan, and only the crew.
-                          Gold is already money and footage on this row, blue
-                          is the status pill, and green, orange and red carry
-                          state everywhere in this app — cyan is the one accent
-                          nothing else has claimed, so it can mean one thing.
-                          The work-order number stays quiet beside it: it is
-                          how the name is qualified, not what is being looked
-                          for. */}
-                      <span className="min-w-0 truncate">
-                        <span className="font-semibold text-cyan">{d.subcontractor}</span>
-                        {d.crew ? <span className="text-foreground/60"> · {d.crew}</span> : null}
-                      </span>
-                      {/* Footage in gold, the same as money. It is the figure
-                          the day is billed on, and it was reading as grey
-                          supporting text beside the company name. */}
-                      <span className="num gold-figure shrink-0 text-[14px] font-semibold">
+                    {/* The crew in cyan, and only the crew. Gold is money and
+                        footage here, blue is the status pill, and green,
+                        orange and red carry state everywhere in this app.
+                        The work-order number is reference, not identity: it is
+                        how the name is qualified, never what anybody scans
+                        for, so it sits in a chip at the size of a footnote. */}
+                    <p className="mt-1 flex min-w-0 items-baseline gap-1.5 text-[13px]">
+                      <span className="truncate font-semibold text-cyan">{d.subcontractor}</span>
+                      {d.crew ? (
+                        <span className="num shrink-0 rounded bg-foreground/[0.06] px-1.5 py-px text-[10px] text-muted-foreground">
+                          {d.crew}
+                        </span>
+                      ) : null}
+                    </p>
+
+                    {/* Production and what it is worth, together and large.
+                        These are the two numbers a day is judged on, and they
+                        were 11px grey on separate lines — footage beside the
+                        company name, money below the sheet number, neither
+                        reading as the point of the row. */}
+                    <div className="mt-1.5 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+                      <span className="num gold-figure text-[20px] font-bold leading-none tracking-[-0.02em]">
                         {formatFeet(d.totalFt)}
                       </span>
-                    </div>
-                    {d.roads ? (
-                      <p className="mt-1 flex items-center gap-1.5 truncate text-[13px] font-semibold text-gold">
-                        <MapPin className="size-3.5 shrink-0" />
-                        {d.roads}
-                      </p>
-                    ) : null}
-                    <div className="mt-1 flex items-center justify-between gap-2 text-[12px] text-foreground/80">
-                      <span className="num">{d.sheetNumber}</span>
-                      <span className="shrink-0">{formatWhen(d.submittedAt)}</span>
-                    </div>
-                    {/* What this day is worth. Gross at our card; the margin
-                        only appears once the filing sub's card is loaded, so a
-                        missing rate reads as missing rather than as zero. */}
-                    {d.billableAmount > 0 || d.unpricedCodes > 0 ? (
-                      <div className="mt-2 flex items-center gap-2 border-t border-border/50 pt-2 text-[12.5px]">
-                        <span className="num gold-figure text-[13.5px] font-semibold">
+                      {d.billableAmount > 0 || d.unpricedCodes > 0 ? (
+                        <span className="num gold-figure text-[16px] font-semibold leading-none">
                           {formatCurrency(d.billableAmount)}
                         </span>
-                        {d.grossMargin !== null ? (
+                      ) : null}
+                      {d.grossMargin !== null ? (
+                        <span
+                          className={cn(
+                            "num text-[12px] leading-none",
+                            d.grossMargin > 0 ? "text-success" : "text-critical",
+                          )}
+                        >
+                          {formatCurrency(d.grossMargin)} {t("margin")}
+                        </span>
+                      ) : null}
+                    </div>
+
+                    {/* The road, on every row whether or not there is one.
+                        Present on some and absent on others reads as a layout
+                        quirk; an empty one named as empty reads as a gap in
+                        the record, which is what it is. */}
+                    <p
+                      className={cn(
+                        "mt-1.5 flex items-center gap-1.5 truncate text-[13px]",
+                        d.roads ? "font-semibold text-gold" : "text-muted-foreground/70",
+                      )}
+                    >
+                      <MapPin className="size-3.5 shrink-0" />
+                      {d.roads || t("No road recorded")}
+                    </p>
+
+                    <div className="mt-1.5 flex items-center justify-between gap-2 border-t border-border/50 pt-2 text-[12px] text-foreground/80">
+                      <span className="num truncate">{d.sheetNumber}</span>
+                      <span className="shrink-0">{formatWhen(d.submittedAt)}</span>
+                    </div>
+
+                    {/* Why this one is worth opening, said before it is opened.
+                        The reviewer's question is never "is there a daily", it
+                        is "which of these thirty-one is wrong". */}
+                    {attentionReasons(d).length > 0 ? (
+                      <p className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                        {attentionReasons(d).map((r) => (
                           <span
-                            className={cn(
-                              "num",
-                              d.grossMargin > 0 ? "text-success" : "text-critical",
-                            )}
+                            key={r}
+                            className="rounded bg-warning/15 px-1.5 py-0.5 text-[10.5px] font-medium text-warning"
                           >
-                            {formatCurrency(d.grossMargin)} {t("margin")}
+                            {r}
                           </span>
-                        ) : null}
-                        {d.unpricedCodes > 0 ? (
-                          <span className="ml-auto text-[11.5px] font-medium text-warning">
-                            {d.unpricedCodes} {t("unpriced")}
-                          </span>
-                        ) : null}
-                      </div>
-                    ) : null}
+                        ))}
+                      </p>
+                    ) : (
+                      <p className="mt-1.5 flex items-center gap-1.5 text-[11.5px] text-success">
+                        <Check className="size-3.5" />
+                        {t("AI check clear")}
+                      </p>
+                    )}
+
+                    {/* An explicit way in. The whole row has always been the
+                        button, but a row that opens something has to look like
+                        it does — nobody clicks a list item on the chance. */}
+                    <span
+                      className={cn(
+                        "mt-2 inline-flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[12px] font-semibold transition-colors",
+                        active
+                          ? "bg-brand text-white"
+                          : "border border-border text-foreground group-hover/row:border-brand/50",
+                      )}
+                    >
+                      {d.status === "Approved" || d.status === "Denied" ? t("View") : t("Review")}
+                      <ArrowRight className="size-3.5" />
+                    </span>
                   </button>
                 </li>
               );
             })}
+                </ul>
+              </li>
+            ))}
+            {filtered.length === 0 ? (
+              <li className="px-3 py-10 text-center text-[12.5px] text-muted-foreground">
+                {t("Nothing matches these filters.")}
+              </li>
+            ) : null}
           </ul>
         </Panel>
       </div>
@@ -282,6 +500,91 @@ export function DailiesView({
           </Panel>
         )}
       </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Today's numbers, above the queue.
+ *
+ * Four figures rather than a paragraph. The count of days waiting is the one
+ * that decides whether anybody opens this screen at all, so it leads and it is
+ * coloured by whether there is anything to do.
+ */
+function Overview({
+  stats,
+  total,
+  t,
+}: {
+  stats: { pending: number; ft: number; value: number; crews: number };
+  total: number;
+  t: (s: string) => string;
+}) {
+  return (
+    <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+      <Stat
+        value={String(stats.pending)}
+        label={t("Need review")}
+        note={`${t("out of")} ${total} ${t("filed")}`}
+        tone={stats.pending > 0 ? "brand" : "muted"}
+      />
+      {/* A bare zero beside "across every crew" reads as a broken figure.
+          Nothing filed yet is a normal state at 7am and it should say so. */}
+      <Stat
+        value={formatFeet(stats.ft)}
+        label={t("Production today")}
+        note={stats.crews === 0 ? t("nothing filed for today yet") : t("across every crew")}
+        tone="gold"
+      />
+      <Stat
+        value={formatCurrency(stats.value)}
+        label={t("Value today")}
+        note={stats.crews === 0 ? t("nothing filed for today yet") : t("gross at our card")}
+        tone="gold"
+      />
+      <Stat
+        value={String(stats.crews)}
+        label={t("Crews today")}
+        note={stats.crews === 0 ? t("nothing filed yet") : t("filed a day")}
+        tone="muted"
+      />
+    </div>
+  );
+}
+
+function Stat({
+  value,
+  label,
+  note,
+  tone,
+}: {
+  value: string;
+  label: string;
+  note: string;
+  tone: "brand" | "gold" | "muted";
+}) {
+  return (
+    <div
+      className={cn(
+        "rounded-xl border px-3.5 py-3",
+        tone === "brand" && "border-brand/40 bg-brand/[0.07]",
+        tone === "gold" && "border-gold/35 bg-gold/[0.06]",
+        tone === "muted" && "border-border bg-foreground/[0.02]",
+      )}
+    >
+      <p
+        className={cn(
+          "num text-[24px] font-bold leading-none tracking-[-0.02em]",
+          tone === "gold" ? "gold-figure" : "text-foreground",
+        )}
+      >
+        {value}
+      </p>
+      <p className="mt-1.5 text-[11px] font-bold uppercase tracking-[0.09em] text-foreground/85">
+        {label}
+      </p>
+      <p className="mt-0.5 text-[11px] text-muted-foreground">{note}</p>
     </div>
   );
 }
@@ -443,31 +746,64 @@ function DailyDetail({
       <Panel className={cn(d.flags.length > 0 && toneStyles[d.tone].glow)}>
         <PanelHeader
           title={t("AI review")}
-          description={d.flags.length === 0 ? t("No discrepancies detected") : `${d.flags.length} ${t("for your team to review")}`}
+          description={
+            d.flags.length === 0
+              ? t("No discrepancies detected")
+              : `${d.flags.length} ${t("for your team to review")}`
+          }
           icon={<Sparkles className="size-3.5 text-brand-bright" />}
         />
         <PanelBody className="flex flex-col gap-2">
-          {d.flags.length === 0 ? (
-            <div className="flex items-center gap-2 rounded-lg border border-success/25 bg-success/10 px-3 py-2.5 text-[12.5px] text-success">
-              <Check className="size-4" />
-              {t("Quantities, documentation and unit codes all reconcile. Cleared for billing.")}
-            </div>
-          ) : (
-            d.flags.map((f, i) => (
-              <div
-                key={i}
-                className={cn(
-                  "flex items-start gap-2.5 rounded-lg border px-3 py-2.5 text-[12.5px]",
-                  toneStyles[f.tone].bg,
-                  toneStyles[f.tone].border,
-                  toneStyles[f.tone].text,
-                )}
-              >
-                <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                <span>{f.message}</span>
-              </div>
-            ))
-          )}
+          {/* What the AI actually checked, line by line.
+              "No discrepancies detected" tells a reviewer the machine ran; it
+              does not tell them what it looked at, so they open the daily to
+              find out — which is the work the check was supposed to save. Four
+              named checks, each pass or fail, answers the question the reviewer
+              is really asking: is there a reason to open this one. */}
+          <ul className="flex flex-col gap-1.5">
+            <AiCheck
+              ok={d.unpricedCodes === 0}
+              label={t("Units matched the rate card")}
+              fail={`${d.unpricedCodes} ${t("code(s) the card has never heard of — those quantities bill nothing")}`}
+            />
+            <AiCheck
+              ok={d.totalFt > 0}
+              label={t("Footage reconciled")}
+              fail={t("No footage on this day — a zero day needs a note saying why")}
+            />
+            <AiCheck
+              ok={d.flags.length === 0}
+              label={t("Quantities verified")}
+              fail={`${d.flags.length} ${t("quantity flagged below")}`}
+            />
+            <AiCheck
+              ok={d.photos > 0 && d.hasAsBuilt}
+              label={t("Required documentation attached")}
+              fail={[
+                d.photos === 0 ? t("no field photos") : null,
+                !d.hasAsBuilt ? t("no redline or as-built") : null,
+              ]
+                .filter(Boolean)
+                .join(", ")}
+            />
+          </ul>
+
+          {d.flags.length > 0
+            ? d.flags.map((f, i) => (
+                <div
+                  key={i}
+                  className={cn(
+                    "flex items-start gap-2.5 rounded-lg border px-3 py-2.5 text-[12.5px]",
+                    toneStyles[f.tone].bg,
+                    toneStyles[f.tone].border,
+                    toneStyles[f.tone].text,
+                  )}
+                >
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+                  <span>{f.message}</span>
+                </div>
+              ))
+            : null}
           <p className="mt-1 text-[11px] text-muted-foreground">
             {t("Nothing is approved automatically — the AI prepares, your team decides.")}
           </p>
@@ -725,6 +1061,38 @@ function DailyDetail({
         </div>
       </Panel>
     </div>
+  );
+}
+
+/**
+ * One line of the AI check.
+ *
+ * A tick or a cross and the reason. The reason is the part that matters — a
+ * cross with nothing beside it sends the reviewer into the daily to find out
+ * what is wrong, which is the trip this panel exists to save.
+ */
+function AiCheck({ ok, label, fail }: { ok: boolean; label: string; fail: string }) {
+  return (
+    <li
+      className={cn(
+        "flex items-start gap-2 rounded-lg border px-2.5 py-1.5 text-[12.5px]",
+        ok
+          ? "border-success/25 bg-success/[0.07] text-success"
+          : "border-warning/35 bg-warning/[0.07] text-warning",
+      )}
+    >
+      {ok ? (
+        <Check className="mt-0.5 size-3.5 shrink-0" />
+      ) : (
+        <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
+      )}
+      <span className="min-w-0">
+        <span className={cn(ok ? "" : "font-semibold")}>{label}</span>
+        {!ok && fail ? (
+          <span className="block text-[11.5px] opacity-90">{fail}</span>
+        ) : null}
+      </span>
+    </li>
   );
 }
 
