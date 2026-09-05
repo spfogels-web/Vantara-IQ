@@ -186,39 +186,49 @@ export function DailiesView({
                   <button
                     onClick={() => setSelectedId(d.id)}
                     className={cn(
-                      "focus-ring w-full rounded-lg px-2.5 py-2.5 text-left transition-colors",
+                      "focus-ring w-full rounded-lg px-3 py-3 text-left transition-colors",
                       active ? "gold-rail" : "hover:bg-foreground/[0.03]",
                     )}
                   >
                     <div className="flex items-center gap-2">
-                      <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-foreground">
+                      <span className="min-w-0 flex-1 truncate text-[14.5px] font-semibold text-foreground">
                         {d.project}
                       </span>
                       {d.flags.length > 0 ? (
-                        <AlertTriangle className={cn("size-3.5 shrink-0", toneStyles[d.tone].text)} />
+                        <AlertTriangle className={cn("size-4 shrink-0", toneStyles[d.tone].text)} />
                       ) : null}
-                      <StatusPill label={t(d.status)} tone={d.tone} className="shrink-0 text-[10px]" dot={false} />
+                      <StatusPill label={t(d.status)} tone={d.tone} className="shrink-0 text-[11px]" dot={false} />
                     </div>
-                    <div className="mt-1 flex items-center justify-between text-[11px] text-muted-foreground">
+                    {/* Who did the work, the sheet number and when it landed
+                        used to sit at 10.5px and 70% of a muted grey — the
+                        row's own quiet supporting text. They are the three
+                        things the office reads to tell one day from another,
+                        so they are the row's content, not its footnotes. */}
+                    <div className="mt-1 flex items-center justify-between gap-2 text-[13px] text-foreground">
                       <span className="truncate">{[d.subcontractor, d.crew].filter(Boolean).join(" · ")}</span>
-                      <span className="num shrink-0">{formatFeet(d.totalFt)}</span>
+                      {/* Footage in gold, the same as money. It is the figure
+                          the day is billed on, and it was reading as grey
+                          supporting text beside the company name. */}
+                      <span className="num gold-figure shrink-0 text-[14px] font-semibold">
+                        {formatFeet(d.totalFt)}
+                      </span>
                     </div>
                     {d.roads ? (
-                      <p className="mt-0.5 flex items-center gap-1 truncate text-[11.5px] font-medium text-gold">
-                        <MapPin className="size-3 shrink-0" />
+                      <p className="mt-1 flex items-center gap-1.5 truncate text-[13px] font-semibold text-gold">
+                        <MapPin className="size-3.5 shrink-0" />
                         {d.roads}
                       </p>
                     ) : null}
-                    <div className="mt-0.5 flex items-center justify-between text-[10.5px] text-muted-foreground/70">
+                    <div className="mt-1 flex items-center justify-between gap-2 text-[12px] text-foreground/80">
                       <span className="num">{d.sheetNumber}</span>
-                      <span>{formatWhen(d.submittedAt)}</span>
+                      <span className="shrink-0">{formatWhen(d.submittedAt)}</span>
                     </div>
                     {/* What this day is worth. Gross at our card; the margin
                         only appears once the filing sub's card is loaded, so a
                         missing rate reads as missing rather than as zero. */}
                     {d.billableAmount > 0 || d.unpricedCodes > 0 ? (
-                      <div className="mt-1.5 flex items-center gap-2 border-t border-border/50 pt-1.5 text-[11px]">
-                        <span className="num gold-figure font-semibold">
+                      <div className="mt-2 flex items-center gap-2 border-t border-border/50 pt-2 text-[12.5px]">
+                        <span className="num gold-figure text-[13.5px] font-semibold">
                           {formatCurrency(d.billableAmount)}
                         </span>
                         {d.grossMargin !== null ? (
@@ -232,7 +242,7 @@ export function DailiesView({
                           </span>
                         ) : null}
                         {d.unpricedCodes > 0 ? (
-                          <span className="ml-auto text-[10px] text-warning">
+                          <span className="ml-auto text-[11.5px] font-medium text-warning">
                             {d.unpricedCodes} {t("unpriced")}
                           </span>
                         ) : null}
@@ -365,19 +375,19 @@ function DailyDetail({
           <div className="flex flex-wrap items-start gap-3">
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-[16px] font-semibold tracking-[-0.02em] text-foreground">{d.project}</h2>
+                <h2 className="text-[19px] font-semibold tracking-[-0.02em] text-foreground">{d.project}</h2>
                 <StatusPill label={t(d.status)} tone={d.tone} />
               </div>
-              <p className="mt-1 text-[12px] text-muted-foreground">
+              <p className="mt-1 text-[13.5px] text-foreground">
                 {[d.customer, d.subcontractor, d.crew].filter(Boolean).join(" · ")}
               </p>
-              <p className="mt-0.5 text-[11.5px] text-muted-foreground/80">
+              <p className="mt-1 text-[12.5px] text-foreground/80">
                 {t("Sheet")} <span className="num">{d.sheetNumber}</span> · {t("Work date")} {d.workDate} · {t("submitted")} {formatWhen(d.submittedAt)}
                 {d.roads ? (
                   <>
                     <br />
-                    <span className="inline-flex items-center gap-1 font-medium text-gold">
-                      <MapPin className="size-3" />
+                    <span className="mt-1 inline-flex items-center gap-1.5 text-[13.5px] font-semibold text-gold">
+                      <MapPin className="size-4" />
                       {d.roads}
                     </span>
                   </>
@@ -387,9 +397,9 @@ function DailyDetail({
                   Friday, so the Friday is the fact that matters here — it is
                   what payment terms are counted from. */}
               {d.billingWeekEnd ? (
-                <p className="mt-0.5 text-[11.5px]">
-                  <span className="text-muted-foreground/80">{t("Bills to week ending ")}</span>
-                  <span className={cn("num", d.billingWeekOverridden ? "font-semibold text-warning" : "text-muted-foreground/80")}>
+                <p className="mt-1 text-[12.5px]">
+                  <span className="text-foreground/80">{t("Bills to week ending ")}</span>
+                  <span className={cn("num", d.billingWeekOverridden ? "font-semibold text-warning" : "text-foreground/80")}>
                     {d.billingWeekEnd}
                   </span>
                   {d.billingWeekOverridden ? (
