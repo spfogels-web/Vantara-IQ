@@ -24,12 +24,42 @@ import { prisma } from "@/lib/prisma";
  * that was being reported.
  */
 
+/**
+ * Who the message is sent as.
+ *
+ * A Messaging Service if one is configured, the bare number otherwise.
+ *
+ * Under A2P 10DLC a number only sends because it sits in a Messaging Service
+ * tied to an approved campaign. Naming the service on the send says which
+ * campaign the traffic belongs to instead of leaving Twilio to work it out
+ * from the number, which is what keeps the attribution right when a second
+ * number joins the pool later — and a number sending from outside its
+ * campaign's service is refused with 30034 rather than delivered.
+ *
+ * The bare number stays as the fallback so a development account with no
+ * service configured still works.
+ */
+export function smsSender(): { MessagingServiceSid: string } | { From: string } | null {
+  const service = process.env.TWILIO_MESSAGING_SERVICE_SID?.trim();
+  if (service) return { MessagingServiceSid: service };
+  const from = process.env.TWILIO_FROM_NUMBER?.trim();
+  if (from) return { From: from };
+  return null;
+}
+
 export function smsReady(): boolean {
   return Boolean(
-    process.env.TWILIO_ACCOUNT_SID &&
-      process.env.TWILIO_AUTH_TOKEN &&
-      process.env.TWILIO_FROM_NUMBER,
+    process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && smsSender(),
   );
+}
+
+/** What the send is going out as, for the settings page to show. */
+export function smsSenderLabel(): string {
+  const s = smsSender();
+  if (!s) return "not configured";
+  return "MessagingServiceSid" in s
+    ? `Messaging Service ${s.MessagingServiceSid.slice(0, 8)}…`
+    : `the number ${s.From} directly`;
 }
 
 /**
@@ -65,9 +95,12 @@ function withOptOut(body: string): string {
  * form POST is not worth a dependency, and this keeps the bundle honest.
  */
 async function post(to: string, body: string): Promise<SmsResult> {
-  const sid = process.env.TWILIO_ACCOUNT_SID!;
-  const token = process.env.TWILIO_AUTH_TOKEN!;
-  const from = process.env.TWILIO_FROM_NUMBER!;
+  const sid = process.env.TWILIO_ACCOUNT_SID;
+  const token = process.env.TWILIO_AUTH_TOKEN;
+  const sender = smsSender();
+  if (!sid || !token || !sender) {
+    return { sent: false, reason: "Twilio isn't configured in this environment." };
+  }
 
   const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
     method: "POST",
@@ -75,7 +108,10 @@ async function post(to: string, body: string): Promise<SmsResult> {
       Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString("base64")}`,
       "Content-Type": "application/x-www-form-urlencoded",
     },
-    body: new URLSearchParams({ To: to, From: from, Body: withOptOut(body) }),
+    // Exactly one of MessagingServiceSid or From. Sending both is accepted but
+    // means two answers to the same question, and the one that wins is not
+    // written down anywhere a person reads.
+    body: new URLSearchParams({ To: to, Body: withOptOut(body), ...sender }),
   });
 
   if (!res.ok) {
@@ -85,7 +121,15 @@ async function post(to: string, body: string): Promise<SmsResult> {
     return { sent: false, reason: `Twilio ${res.status}: ${detail.slice(0, 300)}` };
   }
 
-  const json = (await res.json()) as { sid?: string };
+  const json = (await res.json()) as { sid?: string; status?: string; error_code?: number | null };
+
+  // Accepted is not delivered. 30034 is the one that matters here: the number
+  // is sending outside the Messaging Service its campaign is registered to,
+  // which is a configuration fault that looks exactly like silence.
+  if (json.error_code) {
+    return { sent: false, reason: `Twilio error ${json.error_code} (status ${json.status ?? "unknown"})` };
+  }
+
   return { sent: true, sid: json.sid ?? "" };
 }
 

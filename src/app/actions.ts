@@ -6638,6 +6638,31 @@ export async function setProjectMarket(projectId: string, market: string) {
  * no version of this that edits somebody else's number or agrees on their
  * behalf. Consent is personal and has to come from the handset's owner.
  */
+/**
+ * Send the signed-in person a real text.
+ *
+ * Deliberately a live send rather than a configuration check. Everything
+ * between here and a handset can be correct in this codebase and still fail at
+ * Twilio — a number outside its campaign's Messaging Service, a trial account
+ * that only texts verified numbers, a region not enabled — and every one of
+ * those looks identical from in here: silence. Twilio's own error, quoted
+ * back, is the thing that tells somebody what to go and fix.
+ *
+ * It goes through textUser like every other message, so it obeys the same
+ * consent and opt-out rules. A test that could bypass them would be testing
+ * something the product never does.
+ */
+export async function sendTestText() {
+  const me = await requireStaff();
+  const res = await textUser(
+    me.id,
+    "Vantara IQ test message. Texting is configured correctly. Reply STOP to opt out.",
+  );
+  return res.sent
+    ? { ok: true as const, sid: res.sid }
+    : { ok: false as const, error: res.reason };
+}
+
 export async function saveMyAlertSettings(input: { phone: string; consent: boolean }) {
   const me = await requireUser();
 

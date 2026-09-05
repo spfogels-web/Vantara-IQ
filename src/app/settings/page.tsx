@@ -8,9 +8,11 @@ import { StatusPill } from "@/components/common/status-pill";
 import { ProfileCard } from "@/components/settings/profile-card";
 import { OrgLogo } from "@/components/settings/org-logo";
 import { MyAlerts } from "@/components/settings/my-alerts";
+import { SmsStatus } from "@/components/settings/sms-status";
+import { smsReady, smsSenderLabel } from "@/lib/sms";
 import { getMyAlertSettings } from "@/app/actions";
 import { SMS_CONSENT_TEXT } from "@/lib/sms-consent";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, isStaff } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 const ROLE_LABEL: Record<string, string> = {
@@ -85,6 +87,8 @@ export default async function SettingsPage() {
     getMyAlertSettings(),
   ]);
 
+  const staff = !!me && isStaff(me.role);
+
   return (
     <PageShell eyebrow="Workspace" title="Settings" description="Organization, team and the integrations that keep billing and pay in sync.">
       {me ? (
@@ -107,6 +111,25 @@ export default async function SettingsPage() {
           />
           <MyAlerts initial={myAlerts} consentText={SMS_CONSENT_TEXT} />
         </Panel>
+
+        {/* Staff only, and only because it is diagnostics: it names environment
+            variables and sends live traffic. A crew has nothing to do with
+            either. */}
+        {staff ? (
+          <Panel className="lg:col-span-2">
+            <PanelHeader
+              title="Text messaging"
+              description="Whether messages can actually leave this environment, and what they are sent as."
+              icon={<Smartphone className="size-3.5 text-brand-bright" />}
+            />
+            <SmsStatus
+              ready={smsReady()}
+              sender={smsSenderLabel()}
+              webhook={process.env.SMS_WEBHOOK_URL ?? null}
+              hasNumber={Boolean(myAlerts.phone && myAlerts.consented)}
+            />
+          </Panel>
+        ) : null}
 
         <Panel>
           <PanelHeader title="Organization" icon={<Building2 className="size-3.5" />} />
