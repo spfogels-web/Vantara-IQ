@@ -30,6 +30,7 @@ import {
   type SheetPayload,
 } from "@/app/actions";
 import { SheetPhotos, parsePhotos, type SheetPhoto } from "@/components/dailies/sheet-photos";
+import { SheetScroller } from "@/components/dailies/sheet-scroller";
 import { isPdfUrl } from "@/components/projects/project-detail-client";
 import {
   MapMarkupEditor,
@@ -463,6 +464,8 @@ export function DailyBillingSheet({
   billableCodes?: BillableCode[];
 }) {
   const t = useT();
+  /** The horizontal scroller for Globe's form, driven by the strip above it. */
+  const sheetRef = React.useRef<HTMLDivElement>(null);
   const [filedForId, setFiledForId] = React.useState(initialFiledForId ?? "");
   const [roads, setRoads] = React.useState(initialRoads ?? "");
   const [header, setHeader] = React.useState<SheetHeader>(() =>
@@ -1037,7 +1040,13 @@ export function DailyBillingSheet({
           the screen edge below sm, where the extra 32px is 8% more of the
           sheet visible before anybody scrolls. The padding comes back at sm
           and up, where there is room to spare. */}
+      {/* Above the sheet rather than below it, because it is an instruction
+          as much as a control — it has to be read before the form is, not
+          found after somebody has already decided the columns are missing. */}
+      <SheetScroller targetRef={sheetRef} />
+
       <div
+        ref={sheetRef}
         className={cn(
           "sheet-page -mx-4 overflow-x-auto border-y border-border bg-background sm:mx-0 sm:rounded-xl sm:border-x print:mx-0 print:overflow-visible print:rounded-none print:border-0",
           locked && "select-text",
