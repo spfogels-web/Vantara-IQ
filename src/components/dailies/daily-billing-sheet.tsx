@@ -19,6 +19,7 @@ import {
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { QualityControl } from "@/components/dailies/quality-control";
 import { useT } from "@/components/layout/language-provider";
 import {
   deleteDailySheet,
@@ -1444,6 +1445,12 @@ export function DailyBillingSheet({
               </span>
             ))}
           </div>
+
+          {/* ── What has to be photographed ─────────────────────── */}
+          {/* Above the uploader, not beside it. This is what a crew needs to
+              read before they leave the hole — a daily that comes back for a
+              missing lid-off shot comes back after the ground has closed. */}
+          <QualityControl className="mt-4" />
 
           {/* ── Field photos ────────────────────────────────────── */}
           {/* Outside the lock on purpose. The numbers freeze the moment a sheet
