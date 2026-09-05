@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
  * The two rules are separate and both bite:
  *
  *   Footage bills ped to ped. A span is billable when everything between two
- *   structures is finished, not when the plough has been through it.
+ *   structures is finished, not when the plow has been through it.
  *
  *   Every structure needs two photographs — the outside with its stickers, and
  *   the inside with the lid off. One without the other is not evidence, and a
@@ -38,7 +38,7 @@ const OUTSIDE = [
 const REDLINE = [
   "Footage between each ped and the next, and each handhole",
   "The work performed marked in red",
-  "Peds coloured in",
+  "Peds colored in",
   "Photos of the print, or the PDF as-built — either is accepted",
 ];
 
@@ -49,7 +49,7 @@ const LID_OFF = [
   "Moisture barrier placed in the ped",
   "Fire ant killer",
   "Innerducts plugged or taped, trimmed 2–3 inches above the gravel",
-  "Cable secured and labelled, framing neat",
+  "Cable secured and labeled, framing neat",
 ];
 
 /** Windstream's own standard, if it has been dropped into public/qc. */
@@ -105,7 +105,7 @@ export function QualityControl({ className }: { className?: string }) {
               billable at all, before any question of photographs. */}
           <p className="rounded-lg border border-warning/40 bg-warning/[0.08] px-3 py-2.5 text-[12.5px] leading-relaxed text-foreground">
             <strong>Footage bills ped to ped.</strong> Every bit of work between one structure and
-            the next has to be finished before that span can go on a sheet — plough, bore,
+            the next has to be finished before that span can go on a sheet — plow, bore,
             restoration, the structures at both ends. A span that is half done is not billable
             footage, however many feet are in the ground.
           </p>

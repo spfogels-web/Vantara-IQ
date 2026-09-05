@@ -549,18 +549,18 @@ export function depthAdderDue(items: { code: string; quantity: number }[]): Adde
  * not in here. They are different work at different money.
  */
 export const RATE_FAMILIES: Record<string, string[]> = {
-  /** Plough main — placing buried fibre optic cable, any count. */
+  /** Plow main — placing buried fibre optic cable, any count. */
   "BFO-MAIN": ["BFO12", "BFO24", "BFO48", "BFO96", "BFO144"],
 
   /**
    * Microduct at 12.7mm, 12 inch depth — one way or two.
    *
-   * The plough makes one pass at one depth; whether one duct goes in the
+   * The plow makes one pass at one depth; whether one duct goes in the
    * ground or two is a difference in what is on the trailer, not in the work.
    *
    * The depth adder (D) is not in here. That is a separate line for a deeper
    * pass and is priced on its own, and folding it in would bill the adder at
-   * the full plough rate.
+   * the full plow rate.
    */
   "BFOV-12.7-12IN": ["BFOV(12.7)(1W)12IN DEPTH", "BFOV(12.7)(2W)12IN DEPTH"],
 };

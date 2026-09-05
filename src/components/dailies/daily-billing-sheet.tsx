@@ -264,7 +264,7 @@ function CodeSelect({
   );
 }
 
-/** A labelled box from the header block: micro caps label above a write-in line. */
+/** A labeled box from the header block: micro caps label above a write-in line. */
 function Field({
   label,
   value,
@@ -1422,7 +1422,7 @@ export function DailyBillingSheet({
           </fieldset>
 
           {/* What the colours mean, at the foot of the form.
-              A crew sees a coloured pill on their daily and has no way to
+              A crew sees a colored pill on their daily and has no way to
               learn what "Under review" is as distinct from "Submitted", or
               that Paid is a thing that happens after Approved. Screen only —
               Globe's form has no legend and does not want one. */}
@@ -1478,9 +1478,9 @@ export function DailyBillingSheet({
             photos={redlineFiles}
             onChange={setRedlineFiles}
             title="Redline print"
-            hint="Photos of the marked-up print, or a PDF as-built. It must show the footage between each ped and handhole, the work performed redlined, and the peds coloured in."
+            hint="Photos of the marked-up print, or a PDF as-built. It must show the footage between each ped and handhole, the work performed redlined, and the peds colored in."
             emptyTitle="No redline uploaded yet"
-            emptyHint="Photograph your marked-up print or upload the PDF as-built. Either way it has to carry the footage between structures, the work redlined, and the peds coloured. This is what proves a quantity six months after the ground has closed over it."
+            emptyHint="Photograph your marked-up print or upload the PDF as-built. Either way it has to carry the footage between structures, the work redlined, and the peds colored. This is what proves a quantity six months after the ground has closed over it."
             // A plotter or a scanner is a better source than a phone, and a
             // crew holding a proper PDF should not be made to photograph a
             // screen to get it onto the sheet.
