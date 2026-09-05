@@ -6,6 +6,7 @@ import { assertProjectAccess } from "@/lib/authz";
 import { buildRateSheetPdf } from "@/lib/rate-sheet-pdf";
 import { companyLogo } from "@/lib/rate-sheet-logo";
 import { normalizeCode, rateFamilyOf, RATE_FAMILIES } from "@/lib/unit-codes";
+import { marketLabel } from "@/lib/markets";
 
 export const runtime = "nodejs";
 
@@ -39,6 +40,7 @@ export async function GET(
       select: {
         name: true,
         number: true,
+        market: true,
         rates: {
           orderBy: { code: "asc" },
           select: { code: true, description: true, unit: true, rate: true },
@@ -184,7 +186,25 @@ export async function GET(
     // would have to be corrected by hand on every copy.
     subcontractorName: "",
     title: "Subcontractor rates",
-    subtitle: `${project.name.trim()}${project.number ? ` · ${project.number}` : ""} — rates below apply to approved daily production on this job.`,
+    /**
+     * The market and the job number, not the project name.
+     *
+     * These jobs are named after the people above us — "GA Windstream_Trawick"
+     * puts the end customer and the prime on a sheet we hand to a crew who is
+     * not party to either contract. The market is what a crew needs to know,
+     * because it is what the rates follow, and the number identifies the job
+     * without naming anybody.
+     *
+     * A job with no market falls back to its number alone rather than to the
+     * name, since the name is the thing being kept off the page.
+     */
+    subtitle: [
+      project.market ? marketLabel(project.market) : "",
+      project.number,
+    ]
+      .filter(Boolean)
+      .join(" · ")
+      .concat(" — rates below apply to approved daily production on this job."),
     terms: "NET 21 · Fast pay options available",
     lines,
     logo,
