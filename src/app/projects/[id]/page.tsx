@@ -77,7 +77,14 @@ export default async function ProjectDetailPage({
 
   return (
     <PageShell
-      eyebrow={`Project ${project.number}`}
+      eyebrow={
+        <span className="flex flex-wrap items-baseline gap-x-2">
+          <span className="eyebrow">Project</span>
+          <span className="num text-[17px] font-bold tracking-[-0.01em] text-foreground">
+            {project.number}
+          </span>
+        </span>
+      }
       title={project.name}
       description={`${project.client} · ${project.location}`}
     >

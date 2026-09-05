@@ -15,7 +15,7 @@ export function PageShell({
   actions,
   children,
 }: {
-  eyebrow?: string;
+  eyebrow?: React.ReactNode;
   title: string;
   description?: string;
   actions?: React.ReactNode;

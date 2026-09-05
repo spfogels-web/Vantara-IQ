@@ -138,7 +138,7 @@ export function ProjectCover({
         </span>
       </button>
 
-      <span className="num pointer-events-none absolute left-2 top-2 rounded bg-black/45 px-1.5 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm">
+      <span className="num pointer-events-none absolute left-2 top-2 rounded-md bg-black/65 px-2 py-1 text-[14px] font-bold tracking-[0.01em] text-white shadow-sm ring-1 ring-white/15 backdrop-blur-sm">
         {projectNumber}
       </span>
 

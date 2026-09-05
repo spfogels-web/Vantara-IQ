@@ -131,8 +131,11 @@ export default async function ProjectsPage({
                         ) : null}
                         <ChevronRight className="ml-auto size-4 shrink-0 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground" />
                       </div>
+                      <p className="num mt-1 truncate text-[15px] font-semibold tracking-[-0.01em] text-foreground">
+                        {p.number}
+                      </p>
                       <p className="mt-0.5 truncate text-[11.5px] text-muted-foreground">
-                        <span className="num text-muted-foreground/80">{p.number}</span> · {p.client} · {p.location}
+                        {[p.client, p.location].filter(Boolean).join(" · ")}
                       </p>
                     </div>
                     {staff ? <HealthRing score={p.health} size={44} stroke={3.5} /> : null}
