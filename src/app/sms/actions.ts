@@ -3,8 +3,8 @@
 import { headers } from "next/headers";
 
 import { prisma } from "@/lib/prisma";
-import { toE164 } from "@/lib/sms";
-import { SMS_CONSENT_TEXT } from "@/lib/sms-consent";
+import { textNewOptIn, toE164 } from "@/lib/sms";
+import { SMS_CONSENT_TEXT, WELCOME_MESSAGE } from "@/lib/sms-consent";
 
 /**
  * Record someone agreeing to be texted.
@@ -62,6 +62,10 @@ export async function recordSmsOptIn(input: {
     where: { phone },
     data: { smsConsentAt: new Date(), smsOptOutAt: null },
   });
+
+  // Best-effort. The consent is recorded either way — a text that fails to
+  // send is not a reason to lose the agreement it was confirming.
+  await textNewOptIn(phone, WELCOME_MESSAGE).catch(() => undefined);
 
   return { ok: true as const };
 }

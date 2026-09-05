@@ -8,8 +8,8 @@ import * as XLSX from "xlsx";
 
 import { prisma } from "@/lib/prisma";
 import { isMarketId, marketLabel } from "@/lib/markets";
-import { SMS_CONSENT_TEXT } from "@/lib/sms-consent";
-import { toE164 } from "@/lib/sms";
+import { SMS_CONSENT_TEXT, WELCOME_MESSAGE } from "@/lib/sms-consent";
+import { textCrew, textUser, toE164 } from "@/lib/sms";
 import { hashPassword, isStaff, setSessionCookie, signSession } from "@/lib/auth";
 import {
   extractDocument,
@@ -2142,6 +2142,10 @@ export async function reviewDaily(input: {
       category: "daily",
       tone: input.decision === "APPROVED" ? "success" : "critical",
       actor: input.reviewedBy,
+      // A sheet sent back has to be fixed before tomorrow's is filed, and an
+      // approval is the money landing. Both are worth a phone buzzing; almost
+      // nothing else a crew gets is.
+      sms: true,
     });
   }
 
@@ -2386,6 +2390,13 @@ export async function saveVendorPacket(subcontractorId: string, input: VendorPac
         })) as unknown as Prisma.InputJsonValue,
     },
   });
+
+  // A crew ticking the box for the first time gets the same confirmation as
+  // anybody else. Only on the first time — the packet autosaves, and a
+  // welcome text on every keystroke would be its own kind of spam.
+  if (input.smsConsent && !priorConsentAt) {
+    await textCrew(subcontractorId, WELCOME_MESSAGE).catch(() => undefined);
+  }
 
   revalidatePath("/subcontractors");
   revalidatePath("/settings");
@@ -4239,6 +4250,9 @@ export async function issueSubInvoice(id: string) {
     href: "/pay",
     category: "billing",
     tone: "warning",
+    // It needs checking and accepting before anyone gets paid, and a crew is
+    // not sitting at a desk watching for it.
+    sms: true,
   });
   revalidatePath("/subcontractors");
   revalidatePath("/pay");
@@ -6600,6 +6614,12 @@ export async function saveMyAlertSettings(input: { phone: string; consent: boole
       smsOptOutAt: input.consent ? null : undefined,
     },
   });
+
+  // Only when this is a fresh agreement. Saving the page again with the box
+  // already ticked is not a new consent and should not send anything.
+  if (input.consent && !prior?.smsConsentAt) {
+    await textUser(me.id, WELCOME_MESSAGE).catch(() => undefined);
+  }
 
   revalidatePath("/settings");
   return { ok: true as const };

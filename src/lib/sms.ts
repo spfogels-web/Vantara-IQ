@@ -124,6 +124,45 @@ export async function textCrew(
 }
 
 /**
+ * Send to a number we have just taken consent from.
+ *
+ * Every other send in this file looks up a record and checks consent on it.
+ * This one cannot: the public opt-in page takes a phone number from somebody
+ * who may not be in the system at all, and the whole point is to confirm to
+ * that handset that the box worked.
+ *
+ * That makes it the one send with no record behind it, so it carries its own
+ * guard. The page is unauthenticated — without a limit, anyone could post the
+ * form repeatedly and use us to text a number they do not own. One message per
+ * number per day is enough to confirm an opt-in and useless as a weapon.
+ */
+export async function textNewOptIn(phoneE164: string, body: string): Promise<SmsResult> {
+  try {
+    if (!smsReady()) return { sent: false, reason: "Twilio isn't configured in this environment." };
+
+    const to = toE164(phoneE164);
+    if (!to) return { sent: false, reason: "Not a usable number." };
+
+    // A STOP already on file outranks a fresh tick of a box. Somebody who told
+    // us to stop and then had their number typed into a public form has not
+    // changed their mind.
+    const day = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const [optedOut, recent] = await Promise.all([
+      prisma.smsOptIn.findFirst({ where: { phone: to, revokedAt: { not: null } }, select: { id: true } }),
+      prisma.smsOptIn.count({ where: { phone: to, consentedAt: { gte: day } } }),
+    ]);
+    if (optedOut) return { sent: false, reason: "That number has opted out." };
+    // The consent row for this very submission is already written, so one is
+    // expected. More than one means the form is being replayed.
+    if (recent > 1) return { sent: false, reason: "Already welcomed today." };
+
+    return await post(to, body);
+  } catch (e) {
+    return { sent: false, reason: e instanceof Error ? e.message : "Send failed." };
+  }
+}
+
+/**
  * Text one member of staff.
  *
  * The same three gates as a crew: consent given, no STOP on record, and a
