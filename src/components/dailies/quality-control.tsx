@@ -69,9 +69,20 @@ const GUIDE = {
  */
 const SPEC_PAGES = [
   { page: 25, label: "Pedestals", note: "grounding, labels, gravel, moisture barrier" },
-  { page: 26, label: "Flowerpots", note: "grade, gravel, ducts trimmed, lid level" },
-  { page: 28, label: "FDH pedestal", note: "ground rod to GBB, ty-wraps, FDH # and 811" },
   { page: 29, label: "Handholes", note: "innerducts, coiling, gravel, restoration" },
+];
+
+/**
+ * The two pages shown rather than linked.
+ *
+ * A flowerpot and an FDH pedestal are what this crew is building most days, so
+ * those go on the page as pictures — a crew standing over an open hole should
+ * not have to open a forty-five page PDF to check the gravel depth. The other
+ * sections stay as links.
+ */
+const SPEC_IMAGES = [
+  { src: "/qc/flowerpot.png", page: 26, label: "Flowerpot", note: "grade, gravel, ducts trimmed, lid level" },
+  { src: "/qc/fdh-pedestal.png", page: 28, label: "FDH pedestal", note: "ground rod to GBB, ty-wraps, FDH # and 811" },
 ];
 
 export function QualityControl({ className }: { className?: string }) {
@@ -222,10 +233,26 @@ function Guide() {
         </span>
       </a>
 
-      <p className="mt-2.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+      <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
         What a finished one looks like
       </p>
-      <div className="mt-1.5 grid grid-cols-1 gap-2 sm:grid-cols-2">
+
+      <div className="mt-1.5 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        {SPEC_IMAGES.map((s) => (
+          <figure key={s.src} className="overflow-hidden rounded-lg border border-border bg-white">
+            <a href={`${GUIDE.href}#page=${s.page}`} target="_blank" rel="noreferrer">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={s.src} alt={`${s.label} — ${s.note}`} loading="lazy" className="block w-full object-contain" />
+            </a>
+            <figcaption className="border-t border-border bg-background px-2.5 py-1.5">
+              <span className="text-[12px] font-medium text-foreground">{s.label}</span>
+              <span className="ml-1.5 text-[11px] text-muted-foreground">{s.note}</span>
+            </figcaption>
+          </figure>
+        ))}
+      </div>
+
+      <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
         {SPEC_PAGES.map((s) => (
           <a
             key={s.page}
