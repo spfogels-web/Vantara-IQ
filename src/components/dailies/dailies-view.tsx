@@ -403,13 +403,21 @@ export function DailiesView({
                           )}
                         />
 
-                        {/* Who and where. */}
+                        {/* Who and where.
+                            The crew carries the brand colour — the same
+                            periwinkle as Create, the active filter and the
+                            sidebar rail — so the screen reads as one thing.
+                            It was cyan, which was distinct but unrelated to
+                            anything else on the page.
+                            The work-order number is reference, not identity:
+                            how the name is qualified, never what anybody scans
+                            for, so it stays a chip at footnote size. */}
                         <span className="flex min-w-[200px] flex-1 flex-col gap-0.5">
                           <span className="truncate text-[14.5px] font-semibold text-foreground">
                             {d.project}
                           </span>
                           <span className="flex min-w-0 items-baseline gap-1.5 text-[13px]">
-                            <span className="truncate font-semibold text-cyan">
+                            <span className="truncate font-semibold text-brand">
                               {d.subcontractor}
                             </span>
                             {d.crew ? (
@@ -721,7 +729,7 @@ function DailyDetail({
                   so the eye lands on the crew in both places. */}
               <p className="mt-1 text-[13.5px] text-foreground">
                 {d.customer ? <span>{d.customer} · </span> : null}
-                <span className="font-semibold text-cyan">{d.subcontractor}</span>
+                <span className="font-semibold text-brand">{d.subcontractor}</span>
                 {d.crew ? <span className="text-foreground/60"> · {d.crew}</span> : null}
               </p>
               <p className="mt-1 text-[12.5px] text-foreground/80">
