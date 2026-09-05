@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { AlertTriangle, Camera, CheckCircle2, ChevronDown } from "lucide-react";
+import { AlertTriangle, BookOpen, Camera, CheckCircle2, ChevronDown } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -29,9 +29,17 @@ import { cn } from "@/lib/utils";
 
 const OUTSIDE = [
   "The whole structure, in place, with the ground around it",
-  "The 811 sticker, readable",
+  "Every sticker on it, readable — the 811 sticker and the red buried-cable warning sticker",
   "The structure number and route markers — 138 @2, 7400 SWTRA — readable",
   "Base even with grade, lid secure and level",
+];
+
+/** What the redline has to carry before a span can be billed. */
+const REDLINE = [
+  "Footage between each ped and the next, and each handhole",
+  "The work performed marked in red",
+  "Peds coloured in",
+  "Photos of the print, or the PDF as-built — either is accepted",
 ];
 
 const LID_OFF = [
@@ -43,6 +51,13 @@ const LID_OFF = [
   "Innerducts plugged or taped, trimmed 2–3 inches above the gravel",
   "Cable secured and labelled, framing neat",
 ];
+
+/** Windstream's own standard, if it has been dropped into public/qc. */
+const GUIDE = {
+  href: "/qc/quality-assurance-guide.pdf",
+  label: "Kinetic OSP Quality Assurance Guide",
+  note: "Windstream's own standard — pedestals, flowerpots, FDHs, handholes, depths, restoration",
+};
 
 /** Reference sheets, if they have been dropped into public/qc. */
 const SPECS = [
@@ -108,12 +123,20 @@ export function QualityControl({ className }: { className?: string }) {
             />
           </div>
 
+          {/* The redline is the other half of the evidence. A span with photos
+              and no marked print proves the structures were built but not how
+              far apart they are, which is the number being billed. */}
+          <div className="mt-3">
+            <Shot n={3} title="The redline print" items={REDLINE} />
+          </div>
+
           <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
             Two photographs of every ped, handhole and FDH — one of each. A grounded ped that
             nobody photographed looks exactly like one that was never grounded, and the person
             approving your sheet was not standing there.
           </p>
 
+          <GuideLink />
           <SpecSheets />
         </div>
       ) : null}
@@ -140,6 +163,54 @@ function Shot({ n, title, items }: { n: number; title: string; items: string[] }
         ))}
       </ul>
     </div>
+  );
+}
+
+/**
+ * A link to the full standard, shown only once the file is actually there.
+ *
+ * A link cannot report a 404 the way an image can, so this asks for the
+ * headers first. Sending a crew to a missing file is worse than not offering
+ * it — they stop trusting the other links on the page.
+ *
+ * A 200 is not enough on its own. An unknown path in this app is caught by the
+ * catch-all route and answered with a perfectly healthy placeholder page, and
+ * unauthenticated it redirects to the login screen — both of which look like
+ * success to fetch. So the content type has to say PDF as well.
+ */
+function GuideLink() {
+  const [there, setThere] = React.useState(false);
+
+  React.useEffect(() => {
+    let alive = true;
+    fetch(GUIDE.href, { method: "HEAD" })
+      .then((r) => {
+        const type = r.headers.get("content-type") ?? "";
+        if (alive && r.ok && type.toLowerCase().includes("pdf")) setThere(true);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  if (!there) return null;
+
+  return (
+    <a
+      href={GUIDE.href}
+      target="_blank"
+      rel="noreferrer"
+      className="focus-ring mt-3 flex items-start gap-2.5 rounded-lg border border-border bg-background/40 p-3 transition-colors hover:border-brand/50"
+    >
+      <BookOpen className="mt-0.5 size-4 shrink-0 text-gold" />
+      <span className="min-w-0">
+        <span className="block text-[12.5px] font-semibold text-foreground">{GUIDE.label}</span>
+        <span className="mt-0.5 block text-[11.5px] leading-relaxed text-muted-foreground">
+          {GUIDE.note}
+        </span>
+      </span>
+    </a>
   );
 }
 

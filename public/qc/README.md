@@ -1,19 +1,20 @@
-# Quality control reference sheets
+# Quality control reference material
 
-Two images the daily billing sheet shows crews above the photo uploader, so
-they can see what a finished structure is meant to look like before they leave
-the hole.
+What the daily billing sheet shows crews above the photo uploader, so they can
+see what a finished structure is meant to look like before they leave the hole.
 
-Drop the Windstream spec pages in here with exactly these names:
+Drop these in with exactly these names:
 
-| File | Page |
+| File | What it is |
 | --- | --- |
-| `fdh-pedestal.png` | "Pedestal Style — (FDH) Fiber Distribution Hub" |
-| `flowerpot.png` | "Flowerpots" |
+| `quality-assurance-guide.pdf` | Kinetic OSP Quality Assurance Guide (Windstream, v1.1) |
+| `fdh-pedestal.png` | The "Pedestal Style — (FDH) Fiber Distribution Hub" page |
+| `flowerpot.png` | The "Flowerpots" page |
 
-PNG or JPG both work; keep the extension `.png` in the filename either way, or
-change the paths in `src/components/dailies/quality-control.tsx`.
+The two PNGs are pages 28 and 26 of that guide. Exporting them from the PDF is
+enough — they are shown inline, where the guide itself is a link.
 
-Either file being absent is fine — that panel hides the missing one and the
-written checklist still shows. A broken image on a compliance panel reads as a
-broken app, so it is better to show nothing.
+Any of them being absent is fine. The panel checks before it offers: images
+hide themselves if they fail to load, and the guide link asks for the file's
+headers before it renders. Sending a crew to a missing file is worse than not
+offering it, because they stop trusting the other links on the page.

@@ -1478,9 +1478,13 @@ export function DailyBillingSheet({
             photos={redlineFiles}
             onChange={setRedlineFiles}
             title="Redline print"
-            hint="Mark the footage between each ped and the next — HH8 to 2033/@6, and how many feet — plus what was set on the way."
+            hint="Photos of the marked-up print, or a PDF as-built. It must show the footage between each ped and handhole, the work performed redlined, and the peds coloured in."
             emptyTitle="No redline uploaded yet"
-            emptyHint="Photograph or scan your marked-up print. This is the as-built record Globe asks for, and what proves a quantity six months after the ground has closed over it."
+            emptyHint="Photograph your marked-up print or upload the PDF as-built. Either way it has to carry the footage between structures, the work redlined, and the peds coloured. This is what proves a quantity six months after the ground has closed over it."
+            // A plotter or a scanner is a better source than a phone, and a
+            // crew holding a proper PDF should not be made to photograph a
+            // screen to get it onto the sheet.
+            accept="image/*,application/pdf"
           />
 
           <fieldset disabled={locked} className="contents">

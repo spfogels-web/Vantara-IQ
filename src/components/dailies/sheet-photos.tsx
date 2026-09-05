@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { upload as blobUpload } from "@vercel/blob/client";
-import { Camera, ImagePlus, Loader2, Trash2 } from "lucide-react";
+import { Camera, ImagePlus, Loader2, Trash2, FileText } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -61,6 +61,13 @@ function stamp(iso: string) {
   });
 }
 
+
+/** Whether an attachment is a PDF rather than a photograph. */
+function isPdf(url: string): boolean {
+  const clean = url.split("?")[0].toLowerCase();
+  return clean.endsWith(".pdf") || url.startsWith("data:application/pdf");
+}
+
 export function SheetPhotos({
   projectId,
   photos,
@@ -69,6 +76,7 @@ export function SheetPhotos({
   hint = "Peds, handholes and as-built evidence — stamped with the time and place they were taken.",
   emptyTitle = "No photos on this daily yet",
   emptyHint = "Photograph what you built — peds, handholes, bores, restoration. This is the evidence behind the footage you are billing, and a daily without it is the one that gets queried.",
+  accept = "image/*",
 }: {
   projectId: string;
   photos: SheetPhoto[];
@@ -80,6 +88,14 @@ export function SheetPhotos({
   hint?: string;
   emptyTitle?: string;
   emptyHint?: string;
+  /**
+   * What the file picker will take.
+   *
+   * Photos everywhere by default. The redline widens it to PDFs, because an
+   * as-built often comes off a plotter or a scanner rather than a phone, and a
+   * crew who has a proper PDF should not be made to photograph a screen.
+   */
+  accept?: string;
 }) {
   const pickRef = React.useRef<HTMLInputElement>(null);
   const shootRef = React.useRef<HTMLInputElement>(null);
@@ -163,7 +179,7 @@ export function SheetPhotos({
           <input
             ref={pickRef}
             type="file"
-            accept="image/*"
+            accept={accept}
             multiple
             className="hidden"
             onChange={(e) => {
@@ -226,8 +242,16 @@ export function SheetPhotos({
           {photos.map((p) => (
             <li key={p.id} className="group/photo overflow-hidden rounded-lg border border-border">
               <a href={p.url} target="_blank" rel="noopener noreferrer" className="block">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={p.url} alt={p.caption || p.structure} className="h-32 w-full object-cover" />
+                {isPdf(p.url) ? (
+                  <span className="flex h-32 w-full flex-col items-center justify-center gap-1.5 bg-foreground/[0.04] text-muted-foreground">
+                    <FileText className="size-7" />
+                    <span className="text-[11.5px] font-medium">PDF as-built</span>
+                    <span className="text-[10.5px]">Open</span>
+                  </span>
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={p.url} alt={p.caption || p.structure} className="h-32 w-full object-cover" />
+                )}
               </a>
               <div className="flex flex-col gap-1 p-2">
                 <div className="flex items-center gap-1.5">
