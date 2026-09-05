@@ -531,3 +531,39 @@ export function depthAdderDue(items: { code: string; quantity: number }[]): Adde
   if (base <= 0 || due <= 0) return null;
   return { code: DEPTH_ADDER_CODE, quantity: due };
 }
+
+/**
+ * Codes that are one price under several names.
+ *
+ * Placing buried fibre is the same work whatever the count in the sheath —
+ * the crew digs the same trench and pulls the same cable, so BFO12 and BFO144
+ * are billed and paid identically. The count only changes what is on the reel.
+ *
+ * They are separate codes because the customer's book lists them separately,
+ * not because they cost different amounts. Carrying one rate per family rather
+ * than one per code is what stops five numbers that are meant to be equal
+ * drifting apart, which is exactly what happened: BFO48 ended up at $1.18 on a
+ * job where its siblings were $1.50.
+ *
+ * In-duct (BFO..I), ribbon (BFO..RI) and microduct (BFOV..) are deliberately
+ * not in here. They are different work at different money.
+ */
+export const RATE_FAMILIES: Record<string, string[]> = {
+  /** Plough main — placing buried fibre optic cable, any count. */
+  "BFO-MAIN": ["BFO12", "BFO24", "BFO48", "BFO96", "BFO144"],
+};
+
+/** The family a code belongs to, or null when it prices on its own. */
+export function rateFamilyOf(code: string): string | null {
+  const c = normalizeCode(code);
+  for (const [family, members] of Object.entries(RATE_FAMILIES)) {
+    if (members.some((m) => normalizeCode(m) === c)) return family;
+  }
+  return null;
+}
+
+/** Every code that shares a price with this one, including itself. */
+export function rateSiblings(code: string): string[] {
+  const family = rateFamilyOf(code);
+  return family ? RATE_FAMILIES[family] : [code];
+}

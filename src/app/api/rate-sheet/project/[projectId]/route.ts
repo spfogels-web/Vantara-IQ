@@ -5,7 +5,7 @@ import { requireStaff } from "@/lib/authz";
 import { assertProjectAccess } from "@/lib/authz";
 import { buildRateSheetPdf } from "@/lib/rate-sheet-pdf";
 import { companyLogo } from "@/lib/rate-sheet-logo";
-import { normalizeCode } from "@/lib/unit-codes";
+import { normalizeCode, rateFamilyOf, RATE_FAMILIES } from "@/lib/unit-codes";
 
 export const runtime = "nodejs";
 
@@ -45,7 +45,9 @@ export async function GET(
         },
         // What the job actually builds. The pay card accumulates codes from
         // every sheet ever loaded onto it; this is the shorter, real list.
-        materials: { where: { inScope: true }, select: { code: true } },
+        // Planned quantity comes along because it decides which of two
+        // disagreeing siblings is the one somebody meant.
+        materials: { where: { inScope: true }, select: { code: true, planned: true } },
       },
     }),
     prisma.organization.findFirst({ select: { name: true, logoUrl: true } }),
@@ -120,6 +122,44 @@ export async function GET(
       continue;
     }
     if (exactOnJob.has(r.code.trim().toUpperCase())) byCode.set(key, r);
+  }
+
+  /**
+   * Codes that are one price under several names go on together.
+   *
+   * A job's material list might only call for BFO48, but placing buried fibre
+   * is the same work at the same money whatever the count in the sheath — so a
+   * crew quoting the job needs to see that BFO12 and BFO144 pay the same. Left
+   * off, the first sheet with a different count on it becomes a conversation
+   * about price on the day.
+   *
+   * The rate comes from the sibling this job actually builds, since that is
+   * the one somebody set deliberately.
+   */
+  const plannedOf = new Map(
+    project.materials.map((m) => [normalizeCode(m.code), m.planned] as const),
+  );
+
+  // One rate per family, then every member of it on the sheet.
+  //
+  // Where two siblings are both on the job at different money — which has
+  // happened, BFO48 at $1.18 beside BFO12 at $1.50 — the sheet cannot print
+  // both without inviting an argument on the day. The one the job builds most
+  // of wins, because that is the number somebody set with the work in front of
+  // them rather than the one that came along with a card.
+  const familyRate = new Map<string, { row: (typeof candidates)[number]; planned: number }>();
+  for (const row of byCode.values()) {
+    const family = rateFamilyOf(row.code);
+    if (!family) continue;
+    const planned = plannedOf.get(normalizeCode(row.code)) ?? 0;
+    const held = familyRate.get(family);
+    if (!held || planned > held.planned) familyRate.set(family, { row, planned });
+  }
+
+  for (const [family, { row }] of familyRate) {
+    for (const sibling of RATE_FAMILIES[family]) {
+      byCode.set(normalizeCode(sibling), { ...row, code: sibling });
+    }
   }
 
   const lines = [...byCode.values()].sort((a, b) => a.code.localeCompare(b.code));
