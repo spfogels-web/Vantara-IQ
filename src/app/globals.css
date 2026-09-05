@@ -133,6 +133,10 @@
      emphasis gold darkens here instead of lightening. */
   --vq-gold: #8a5d0a;
   --vq-gold-strong: #6b4405;
+  /* Who did the work. The dark theme's cyan is a light one — #22d3ee reads at
+     about 1.9:1 on a white card, which is not text, it is a watermark. This is
+     the same hue taken down until it carries at 13px. */
+  --vq-cyan: #0e7490;
 
   --background: #f5f7fa;
   --foreground: #0d151f;

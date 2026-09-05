@@ -205,7 +205,18 @@ export function DailiesView({
                         things the office reads to tell one day from another,
                         so they are the row's content, not its footnotes. */}
                     <div className="mt-1 flex items-center justify-between gap-2 text-[13px] text-foreground">
-                      <span className="truncate">{[d.subcontractor, d.crew].filter(Boolean).join(" · ")}</span>
+                      {/* The crew in cyan, and only the crew.
+                          Gold is already money and footage on this row, blue
+                          is the status pill, and green, orange and red carry
+                          state everywhere in this app — cyan is the one accent
+                          nothing else has claimed, so it can mean one thing.
+                          The work-order number stays quiet beside it: it is
+                          how the name is qualified, not what is being looked
+                          for. */}
+                      <span className="min-w-0 truncate">
+                        <span className="font-semibold text-cyan">{d.subcontractor}</span>
+                        {d.crew ? <span className="text-foreground/60"> · {d.crew}</span> : null}
+                      </span>
                       {/* Footage in gold, the same as money. It is the figure
                           the day is billed on, and it was reading as grey
                           supporting text beside the company name. */}
@@ -378,8 +389,12 @@ function DailyDetail({
                 <h2 className="text-[19px] font-semibold tracking-[-0.02em] text-foreground">{d.project}</h2>
                 <StatusPill label={t(d.status)} tone={d.tone} />
               </div>
+              {/* The same three colours as the list row it was opened from,
+                  so the eye lands on the crew in both places. */}
               <p className="mt-1 text-[13.5px] text-foreground">
-                {[d.customer, d.subcontractor, d.crew].filter(Boolean).join(" · ")}
+                {d.customer ? <span>{d.customer} · </span> : null}
+                <span className="font-semibold text-cyan">{d.subcontractor}</span>
+                {d.crew ? <span className="text-foreground/60"> · {d.crew}</span> : null}
               </p>
               <p className="mt-1 text-[12.5px] text-foreground/80">
                 {t("Sheet")} <span className="num">{d.sheetNumber}</span> · {t("Work date")} {d.workDate} · {t("submitted")} {formatWhen(d.submittedAt)}
