@@ -8,10 +8,12 @@ import {
   ArrowRight,
   Camera,
   Check,
+  ChevronDown,
   ClipboardList,
   FileText,
   MapPin,
   Ruler,
+  Search,
   Sparkles,
   Trash2,
   X,
@@ -115,14 +117,17 @@ export function DailiesView({
   const t = useT();
   const [items, setItems] = React.useState(dailies);
   const [filter, setFilter] = React.useState<(typeof FILTERS)[number]>("All");
-  const [selectedId, setSelectedId] = React.useState(
-    initialId && dailies.some((d) => d.id === initialId) ? initialId : dailies[0]?.id ?? null,
+  // Which day is open, or null for none. A row toggles rather than only
+  // selecting, so a day you have finished with can be shut again.
+  const [selectedId, setSelectedId] = React.useState<string | null>(
+    initialId && dailies.some((d) => d.id === initialId) ? initialId : null,
   );
 
   const [crew, setCrew] = React.useState("All crews");
   const [job, setJob] = React.useState("All projects");
   const [sort, setSort] = React.useState<SortKey>("newest");
   const [onlyAttention, setOnlyAttention] = React.useState(false);
+  const [query, setQuery] = React.useState("");
   const today = todayET();
 
   // Built from the dailies rather than the roster, so the list only ever
@@ -149,12 +154,18 @@ export function DailiesView({
   }, [items]);
 
   const filtered = React.useMemo(() => {
+    const q = query.trim().toLowerCase();
     const kept = items.filter(
       (d) =>
         (filter === "All" || d.status === filter) &&
         (crew === "All crews" || (d.subcontractor || d.crew || "").trim() === crew) &&
         (job === "All projects" || (d.project || "").trim() === job) &&
-        (!onlyAttention || needsAttention(d)),
+        (!onlyAttention || needsAttention(d)) &&
+        (q === "" ||
+          [d.project, d.subcontractor, d.crew, d.roads, d.sheetNumber, d.customer]
+            .join(" ")
+            .toLowerCase()
+            .includes(q)),
     );
     const by: Record<SortKey, (a: DailyReport, b: DailyReport) => number> = {
       // Work date first, then filing time, so two days built on the same date
@@ -167,7 +178,7 @@ export function DailiesView({
       footage: (a, b) => b.totalFt - a.totalFt,
     };
     return [...kept].sort(by[sort]);
-  }, [items, filter, crew, job, onlyAttention, sort]);
+  }, [items, filter, crew, job, onlyAttention, sort, query]);
 
   /**
    * The list as day-headed groups.
@@ -190,11 +201,10 @@ export function DailiesView({
   }, [filtered, sort, today]);
 
   const attentionCount = React.useMemo(() => items.filter(needsAttention).length, [items]);
-  // Look in the filtered list first. Selecting J&P's sheet and then
-  // filtering to Gulf used to leave J&P's day open on the right, which
-  // reads as the filter having done nothing.
-  const selected =
-    filtered.find((d) => d.id === selectedId) ?? filtered[0] ?? null;
+  // A day filtered out of the list closes with it. Selecting J&P's sheet
+  // and then filtering to Gulf used to leave J&P's day open, which reads as
+  // the filter having done nothing.
+  const openId = filtered.some((d) => d.id === selectedId) ? selectedId : null;
 
   function setStatus(id: string, status: DailyStatus, tone: DailyReport["tone"]) {
     setItems((prev) => prev.map((d) => (d.id === id ? { ...d, status, tone } : d)));
@@ -221,61 +231,58 @@ export function DailiesView({
     <div className="flex flex-col gap-3">
       <Overview stats={stats} total={items.length} t={t} />
 
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">
-      <div className="lg:col-span-5 xl:col-span-4">
-        <Panel>
-          <PanelHeader
-            title={t("Daily billing sheets")}
-            description={`${pending} ${t("NEED REVIEW")} · ${items.length} ${t("filed")}`}
-            count={filtered.length}
-            icon={<ClipboardList className="size-3.5 text-gold" />}
-          />
-          <div className="flex flex-wrap gap-1.5 border-b border-border/70 p-2.5">
-            {FILTERS.map((f) => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={cn(
-                  "focus-ring rounded-full px-2.5 py-1 text-[11.5px] font-medium transition-colors",
-                  filter === f
-                    ? "bg-brand text-white"
-                    : "bg-foreground/[0.04] text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {t(f)}
-              </button>
-            ))}
+      <Panel>
+        <PanelHeader
+          title={t("Daily billing sheets")}
+          description={`${pending} ${t("NEED REVIEW")} · ${items.length} ${t("filed")}`}
+          count={filtered.length}
+          icon={<ClipboardList className="size-3.5 text-gold" />}
+        />
 
-            {/* Everything the office would otherwise have to remember to look
-                for, behind one switch: a flagged quantity, a code the card has
-                never heard of, a day with no footage, a day with nothing
-                photographed behind the number. */}
-            {attentionCount > 0 ? (
-              <button
-                onClick={() => setOnlyAttention((v) => !v)}
-                className={cn(
-                  "focus-ring inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] font-semibold transition-colors",
-                  onlyAttention
-                    ? "bg-warning text-black"
-                    : "bg-warning/15 text-warning hover:bg-warning/25",
-                )}
-              >
-                <AlertTriangle className="size-3" />
-                {t("Needs attention")}
-                <span className="num">{attentionCount}</span>
-              </button>
-            ) : null}
+        <div className="flex flex-wrap items-center gap-1.5 border-b border-border/70 p-2.5">
+          {FILTERS.map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={cn(
+                "focus-ring rounded-full px-2.5 py-1 text-[12px] font-medium transition-colors",
+                filter === f
+                  ? "bg-brand text-white"
+                  : "bg-foreground/[0.04] text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {t(f)}
+            </button>
+          ))}
 
-            {/* Whose day it is. A crew name is the thing you scan this list
-                for when a foreman rings about a sheet, and twenty-one rows
-                is already past what anyone reads down. */}
+          {/* Everything the office would otherwise have to remember to look
+              for, behind one switch: a flagged quantity, a code the card has
+              never heard of, a day with no footage, a day with nothing
+              photographed behind the number. */}
+          {attentionCount > 0 ? (
+            <button
+              onClick={() => setOnlyAttention((v) => !v)}
+              className={cn(
+                "focus-ring inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold transition-colors",
+                onlyAttention
+                  ? "bg-warning text-black"
+                  : "bg-warning/15 text-warning hover:bg-warning/25",
+              )}
+            >
+              <AlertTriangle className="size-3" />
+              {t("Needs attention")}
+              <span className="num">{attentionCount}</span>
+            </button>
+          ) : null}
+
+          <div className="ml-auto flex flex-wrap items-center gap-1.5">
             {jobs.length > 1 ? (
               <select
                 value={job}
                 onChange={(e) => setJob(e.target.value)}
                 aria-label={t("Filter by project")}
                 className={cn(
-                  "focus-ring ml-auto h-[26px] max-w-[190px] cursor-pointer rounded-full px-2.5 text-[11.5px] font-medium outline-none transition-colors",
+                  "focus-ring h-[28px] max-w-[190px] cursor-pointer rounded-full px-2.5 text-[12px] font-medium outline-none transition-colors",
                   job === "All projects"
                     ? "bg-foreground/[0.04] text-muted-foreground hover:text-foreground"
                     : "bg-brand text-white",
@@ -296,8 +303,7 @@ export function DailiesView({
                 onChange={(e) => setCrew(e.target.value)}
                 aria-label={t("Filter by crew")}
                 className={cn(
-                  "focus-ring h-[26px] max-w-[190px] cursor-pointer rounded-full px-2.5 text-[11.5px] font-medium outline-none transition-colors",
-                  jobs.length > 1 ? "" : "ml-auto",
+                  "focus-ring h-[28px] max-w-[190px] cursor-pointer rounded-full px-2.5 text-[12px] font-medium outline-none transition-colors",
                   crew === "All crews"
                     ? "bg-foreground/[0.04] text-muted-foreground hover:text-foreground"
                     : "bg-brand text-white",
@@ -311,17 +317,12 @@ export function DailiesView({
                 ))}
               </select>
             ) : null}
-          </div>
 
-          <div className="flex items-center gap-2 border-b border-border/70 px-2.5 py-2">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-              {t("Sort")}
-            </span>
             <select
               value={sort}
               onChange={(e) => setSort(e.target.value as SortKey)}
               aria-label={t("Sort dailies")}
-              className="focus-ring h-[26px] cursor-pointer rounded-full bg-foreground/[0.05] px-2.5 text-[11.5px] font-medium text-foreground outline-none"
+              className="focus-ring h-[28px] cursor-pointer rounded-full bg-foreground/[0.05] px-2.5 text-[12px] font-medium text-foreground outline-none"
             >
               {Object.entries(SORTS).map(([k, label]) => (
                 <option key={k} value={k}>
@@ -329,178 +330,202 @@ export function DailiesView({
                 </option>
               ))}
             </select>
-            <span className="ml-auto text-[11.5px] text-muted-foreground">
-              {filtered.length} {filtered.length === 1 ? t("daily") : t("dailies")}
-            </span>
+
+            {/* A crew name, a road, a sheet number. Twenty-one rows is already
+                past what anyone reads down, and the filters above only narrow
+                by things the office thought to make a filter for. */}
+            <label className="relative">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={t("Search dailies…")}
+                aria-label={t("Search dailies")}
+                className="focus-ring h-[28px] w-[180px] rounded-full bg-foreground/[0.05] pl-7 pr-2.5 text-[12px] text-foreground outline-none placeholder:text-muted-foreground/70"
+              />
+            </label>
           </div>
+        </div>
 
-          <ul className="max-h-[68vh] flex-1 overflow-y-auto p-1.5">
-            {groups.map((g) => (
-              <li key={g.label || "all"}>
-                {g.label ? (
-                  /* Sticky, because the whole point of a day heading is
-                     knowing which day you are looking at once you have
-                     scrolled past it. */
-                  <p className="sticky top-0 z-10 -mx-1.5 flex items-baseline gap-2 bg-card/95 px-4 py-1.5 backdrop-blur">
-                    <span className="text-[11.5px] font-bold uppercase tracking-[0.1em] text-foreground">
-                      {t(g.label)}
-                    </span>
-                    <span className="num text-[11px] text-muted-foreground">
-                      {g.rows.length}
-                    </span>
-                    <span className="num ml-auto gold-figure text-[11.5px] font-semibold">
-                      {formatFeet(g.rows.reduce((n, r) => n + r.totalFt, 0))}
-                    </span>
-                  </p>
-                ) : null}
-                <ul>
-            {g.rows.map((d) => {
-              const active = selected?.id === d.id;
-              return (
-                <li key={d.id}>
-                  <button
-                    onClick={() => setSelectedId(d.id)}
-                    className={cn(
-                      "focus-ring group/row w-full rounded-lg px-3 py-3 text-left transition-colors",
-                      active ? "gold-rail" : "hover:bg-foreground/[0.03]",
-                    )}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="min-w-0 flex-1 truncate text-[14.5px] font-semibold text-foreground">
-                        {d.project}
-                      </span>
-                      {d.flags.length > 0 ? (
-                        <AlertTriangle className={cn("size-4 shrink-0", toneStyles[d.tone].text)} />
-                      ) : null}
-                      <StatusPill label={t(d.status)} tone={d.tone} className="shrink-0 text-[11px]" dot={false} />
-                    </div>
-                    {/* The crew in cyan, and only the crew. Gold is money and
-                        footage here, blue is the status pill, and green,
-                        orange and red carry state everywhere in this app.
-                        The work-order number is reference, not identity: it is
-                        how the name is qualified, never what anybody scans
-                        for, so it sits in a chip at the size of a footnote. */}
-                    <p className="mt-1 flex min-w-0 items-baseline gap-1.5 text-[13px]">
-                      <span className="truncate font-semibold text-cyan">{d.subcontractor}</span>
-                      {d.crew ? (
-                        <span className="num shrink-0 rounded bg-foreground/[0.06] px-1.5 py-px text-[10px] text-muted-foreground">
-                          {d.crew}
-                        </span>
-                      ) : null}
-                    </p>
+        {/* The queue itself, full width.
+            It used to be a narrow column beside a permanent detail panel, so
+            every row was squeezed into a third of the screen while most of the
+            screen showed one day. Reviewing is scanning first — the list gets
+            the width, and the day being decided opens underneath its own row
+            rather than across the page from it. */}
+        <ul className="flex flex-col">
+          {groups.map((g) => (
+            <li key={g.label || "all"}>
+              {g.label ? (
+                <p className="sticky top-0 z-20 flex items-baseline gap-2 border-b border-border/60 bg-card/95 px-3 py-2 backdrop-blur">
+                  <span className="text-[12px] font-bold uppercase tracking-[0.1em] text-foreground">
+                    {t(g.label)}
+                  </span>
+                  <span className="num text-[11.5px] text-muted-foreground">
+                    {g.rows.length} {g.rows.length === 1 ? t("daily") : t("dailies")}
+                  </span>
+                  <span className="num ml-auto gold-figure text-[12px] font-semibold">
+                    {formatFeet(g.rows.reduce((n, r) => n + r.totalFt, 0))}
+                  </span>
+                  <span className="num gold-figure text-[12px] font-semibold">
+                    {formatCurrency(g.rows.reduce((n, r) => n + r.billableAmount, 0))}
+                  </span>
+                </p>
+              ) : null}
 
-                    {/* Production and what it is worth, together and large.
-                        These are the two numbers a day is judged on, and they
-                        were 11px grey on separate lines — footage beside the
-                        company name, money below the sheet number, neither
-                        reading as the point of the row. */}
-                    <div className="mt-1.5 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                      <span className="num gold-figure text-[20px] font-bold leading-none tracking-[-0.02em]">
-                        {formatFeet(d.totalFt)}
-                      </span>
-                      {d.billableAmount > 0 || d.unpricedCodes > 0 ? (
-                        <span className="num gold-figure text-[16px] font-semibold leading-none">
-                          {formatCurrency(d.billableAmount)}
+              <ul>
+                {g.rows.map((d) => {
+                  const open = openId === d.id;
+                  const reasons = attentionReasons(d);
+                  return (
+                    <li
+                      key={d.id}
+                      className={cn(
+                        "border-b border-border/50 last:border-0",
+                        open && "bg-foreground/[0.02]",
+                      )}
+                    >
+                      <button
+                        // Toggling rather than only selecting: a row that
+                        // opens and cannot be shut leaves the reviewer
+                        // scrolling past a day they have finished with.
+                        onClick={() => setSelectedId(open ? null : d.id)}
+                        aria-expanded={open}
+                        className={cn(
+                          "focus-ring group/row flex w-full flex-wrap items-center gap-x-4 gap-y-2 px-3 py-3 text-left transition-colors",
+                          open ? "gold-rail" : "hover:bg-foreground/[0.03]",
+                        )}
+                      >
+                        <FileText
+                          className={cn(
+                            "hidden size-8 shrink-0 rounded-lg bg-foreground/[0.05] p-1.5 sm:block",
+                            open ? "text-gold" : "text-muted-foreground",
+                          )}
+                        />
+
+                        {/* Who and where. */}
+                        <span className="flex min-w-[200px] flex-1 flex-col gap-0.5">
+                          <span className="truncate text-[14.5px] font-semibold text-foreground">
+                            {d.project}
+                          </span>
+                          <span className="flex min-w-0 items-baseline gap-1.5 text-[13px]">
+                            <span className="truncate font-semibold text-cyan">
+                              {d.subcontractor}
+                            </span>
+                            {d.crew ? (
+                              <span className="num shrink-0 rounded bg-foreground/[0.06] px-1.5 py-px text-[10px] text-muted-foreground">
+                                {d.crew}
+                              </span>
+                            ) : null}
+                          </span>
+                          <span
+                            className={cn(
+                              "flex items-center gap-1.5 truncate text-[12.5px]",
+                              d.roads ? "font-medium text-gold" : "text-muted-foreground/70",
+                            )}
+                          >
+                            <MapPin className="size-3.5 shrink-0" />
+                            {d.roads || t("No road recorded")}
+                          </span>
                         </span>
-                      ) : null}
-                      {d.grossMargin !== null ? (
+
+                        {/* The two numbers the day is judged on. */}
+                        <span className="flex w-[104px] shrink-0 flex-col">
+                          <span className="num gold-figure text-[19px] font-bold leading-none tracking-[-0.02em]">
+                            {formatFeet(d.totalFt)}
+                          </span>
+                          <span className="mt-1 text-[9.5px] font-bold uppercase tracking-[0.09em] text-muted-foreground">
+                            {t("Production")}
+                          </span>
+                        </span>
+
+                        <span className="flex w-[104px] shrink-0 flex-col">
+                          <span className="num gold-figure text-[17px] font-semibold leading-none">
+                            {formatCurrency(d.billableAmount)}
+                          </span>
+                          <span className="mt-1 text-[9.5px] font-bold uppercase tracking-[0.09em] text-muted-foreground">
+                            {t("Est. value")}
+                          </span>
+                        </span>
+
+                        <span className="hidden w-[150px] shrink-0 flex-col lg:flex">
+                          <span className="text-[12.5px] text-foreground/85">
+                            {formatWhen(d.submittedAt)}
+                          </span>
+                          <span className="num mt-1 text-[11px] text-muted-foreground">
+                            {d.sheetNumber}
+                          </span>
+                        </span>
+
+                        {/* Status, and why this one is worth opening. */}
+                        <span className="flex w-[186px] shrink-0 flex-col gap-1">
+                          <StatusPill
+                            label={t(d.status)}
+                            tone={d.tone}
+                            className="w-fit text-[11px]"
+                            dot={false}
+                          />
+                          {reasons.length > 0 ? (
+                            <span className="flex items-start gap-1.5 text-[11px] font-medium text-warning">
+                              <AlertTriangle className="mt-px size-3 shrink-0" />
+                              <span className="min-w-0">{reasons.join(" · ")}</span>
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1.5 text-[11px] text-success">
+                              <Check className="size-3 shrink-0" />
+                              {t("AI check complete")}
+                            </span>
+                          )}
+                        </span>
+
                         <span
                           className={cn(
-                            "num text-[12px] leading-none",
-                            d.grossMargin > 0 ? "text-success" : "text-critical",
+                            "ml-auto inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-semibold transition-colors",
+                            open
+                              ? "bg-brand text-white"
+                              : "border border-border text-foreground group-hover/row:border-brand/60",
                           )}
                         >
-                          {formatCurrency(d.grossMargin)} {t("margin")}
+                          {d.status === "Approved" || d.status === "Denied"
+                            ? t("View")
+                            : t("Review")}
+                          <ChevronDown
+                            className={cn("size-3.5 transition-transform", open && "rotate-180")}
+                          />
                         </span>
+                      </button>
+
+                      {/* Everything about the day, under the day.
+                          Its own row is the context — which is what a detail
+                          panel across the page from a narrow list never had,
+                          and why people lost track of which one they had
+                          opened. */}
+                      {open ? (
+                        <div className="border-t border-border/60 bg-background/40 px-3 py-3">
+                          <DailyDetail
+                            daily={d}
+                            onSetStatus={setStatus}
+                            sheet={sheetByDaily?.[d.id]}
+                            reviewerName={reviewerName}
+                            canReview={canReview}
+                          />
+                        </div>
                       ) : null}
-                    </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </li>
+          ))}
 
-                    {/* The road, on every row whether or not there is one.
-                        Present on some and absent on others reads as a layout
-                        quirk; an empty one named as empty reads as a gap in
-                        the record, which is what it is. */}
-                    <p
-                      className={cn(
-                        "mt-1.5 flex items-center gap-1.5 truncate text-[13px]",
-                        d.roads ? "font-semibold text-gold" : "text-muted-foreground/70",
-                      )}
-                    >
-                      <MapPin className="size-3.5 shrink-0" />
-                      {d.roads || t("No road recorded")}
-                    </p>
-
-                    <div className="mt-1.5 flex items-center justify-between gap-2 border-t border-border/50 pt-2 text-[12px] text-foreground/80">
-                      <span className="num truncate">{d.sheetNumber}</span>
-                      <span className="shrink-0">{formatWhen(d.submittedAt)}</span>
-                    </div>
-
-                    {/* Why this one is worth opening, said before it is opened.
-                        The reviewer's question is never "is there a daily", it
-                        is "which of these thirty-one is wrong". */}
-                    {attentionReasons(d).length > 0 ? (
-                      <p className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                        {attentionReasons(d).map((r) => (
-                          <span
-                            key={r}
-                            className="rounded bg-warning/15 px-1.5 py-0.5 text-[10.5px] font-medium text-warning"
-                          >
-                            {r}
-                          </span>
-                        ))}
-                      </p>
-                    ) : (
-                      <p className="mt-1.5 flex items-center gap-1.5 text-[11.5px] text-success">
-                        <Check className="size-3.5" />
-                        {t("AI check clear")}
-                      </p>
-                    )}
-
-                    {/* An explicit way in. The whole row has always been the
-                        button, but a row that opens something has to look like
-                        it does — nobody clicks a list item on the chance. */}
-                    <span
-                      className={cn(
-                        "mt-2 inline-flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[12px] font-semibold transition-colors",
-                        active
-                          ? "bg-brand text-white"
-                          : "border border-border text-foreground group-hover/row:border-brand/50",
-                      )}
-                    >
-                      {d.status === "Approved" || d.status === "Denied" ? t("View") : t("Review")}
-                      <ArrowRight className="size-3.5" />
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-                </ul>
-              </li>
-            ))}
-            {filtered.length === 0 ? (
-              <li className="px-3 py-10 text-center text-[12.5px] text-muted-foreground">
-                {t("Nothing matches these filters.")}
-              </li>
-            ) : null}
-          </ul>
-        </Panel>
-      </div>
-
-      <div className="lg:col-span-7 xl:col-span-8">
-        {selected ? (
-          <DailyDetail
-            daily={selected}
-            onSetStatus={setStatus}
-            sheet={sheetByDaily?.[selected.id]}
-            reviewerName={reviewerName}
-            canReview={canReview}
-          />
-        ) : (
-          <Panel className="items-center justify-center py-24 text-center text-[13px] text-muted-foreground">
-            No daily selected
-          </Panel>
-        )}
-      </div>
-      </div>
+          {filtered.length === 0 ? (
+            <li className="px-3 py-14 text-center text-[13px] text-muted-foreground">
+              <ClipboardList className="mx-auto mb-2 size-7 opacity-40" />
+              {t("Nothing matches these filters.")}
+            </li>
+          ) : null}
+        </ul>
+      </Panel>
     </div>
   );
 }

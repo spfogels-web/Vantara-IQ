@@ -13,18 +13,22 @@
 :root {
   /* Brand */
   --vq-black: #0b0f14;
-  --vq-blue: #2f80ff;
-  --vq-blue-bright: #5b9cff;
-  --vq-green: #2fd07a;
-  --vq-orange: #ffa23a;
-  --vq-red: #ff5a52;
+  /* Periwinkle rather than the old electric blue. Softer against a charcoal
+     surface at the size most of this app uses it — 12px pills, thin icons and
+     one-line buttons, where a saturated blue vibrates against the background
+     instead of sitting on it. */
+  --vq-blue: #818cf8;
+  --vq-blue-bright: #6366f1;
+  --vq-green: #34d399;
+  --vq-orange: #f59e0b;
+  --vq-red: #f87171;
   --vq-violet: #a78bfa;
   --vq-cyan: #22d3ee;
   --vq-indigo: #6d5cf5;
   /* Vantara gold, from the mark. Brass rather than yellow, so it sits beside
      the blue without shouting. Deliberately duller than --vq-orange: orange
      means warning here, and money must not read as a problem. */
-  --vq-gold: #d9a441;
+  --vq-gold: #e5b94b;
   /* The high-emphasis gold, for figures. "Strong" rather than "bright"
      deliberately: on the dark theme emphasis means lifting off the surface, on
      the light theme it means sinking into it, so this goes the other way when
@@ -33,59 +37,59 @@
 
   /* Signature gradient — electric blue → indigo → violet. Used on brand,
      active nav, primary CTA and hero accents (sparingly, for premium feel). */
-  --grad-brand: linear-gradient(135deg, #2f80ff 0%, #6d5cf5 52%, #a78bfa 100%);
-  --grad-brand-vivid: linear-gradient(135deg, #2f80ff 0%, #6d5cf5 60%, #b79bff 100%);
+  --grad-brand: linear-gradient(135deg, #818cf8 0%, #6366f1 52%, #a78bfa 100%);
+  --grad-brand-vivid: linear-gradient(135deg, #818cf8 0%, #6366f1 60%, #b79bff 100%);
 
   /* Core shadcn contract */
   --background: #0b0f14;
-  --foreground: #e7ecf3;
+  --foreground: #f1f5f9;
   --card: #0e131a;
-  --card-foreground: #e7ecf3;
+  --card-foreground: #f1f5f9;
   --popover: #10161e;
-  --popover-foreground: #e7ecf3;
-  --primary: #2f80ff;
+  --popover-foreground: #f1f5f9;
+  --primary: #818cf8;
   --primary-foreground: #ffffff;
   --secondary: #161d26;
-  --secondary-foreground: #e7ecf3;
+  --secondary-foreground: #f1f5f9;
   --muted: #141a22;
-  --muted-foreground: #7e8a9c;
+  --muted-foreground: #94a3b8;
   --accent: #18212c;
   --accent-foreground: #ffffff;
-  --destructive: #ff5a52;
+  --destructive: #f87171;
   --destructive-foreground: #ffffff;
-  --border: oklch(1 0 0 / 7%);
-  --input: oklch(1 0 0 / 11%);
-  --ring: #2f80ff;
+  --border: color-mix(in oklab, #94a3b8 16%, transparent);
+  --input: color-mix(in oklab, #94a3b8 24%, transparent);
+  --ring: #818cf8;
   --radius: 0.75rem;
 
   /* Semantic status */
-  --success: #2fd07a;
-  --success-muted: #143024;
-  --warning: #ffa23a;
-  --warning-muted: #33240f;
-  --critical: #ff5a52;
-  --critical-muted: #351817;
-  --info: #2f80ff;
-  --info-muted: #101f38;
+  --success: #34d399;
+  --success-muted: #10291f;
+  --warning: #f59e0b;
+  --warning-muted: #2f2210;
+  --critical: #f87171;
+  --critical-muted: #331c1c;
+  --info: #818cf8;
+  --info-muted: #1a1b34;
   --neutral: #8b97a8;
   --neutral-muted: #1a212b;
 
   /* Charts */
-  --chart-1: #2f80ff;
-  --chart-2: #2fd07a;
+  --chart-1: #818cf8;
+  --chart-2: #34d399;
   --chart-3: #a78bfa;
-  --chart-4: #ffa23a;
+  --chart-4: #f59e0b;
   --chart-5: #22d3ee;
 
   /* Sidebar */
   --sidebar: #0a0e13;
   --sidebar-foreground: #aeb8c6;
-  --sidebar-primary: #2f80ff;
+  --sidebar-primary: #818cf8;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: oklch(1 0 0 / 6%);
   --sidebar-accent-foreground: #ffffff;
   --sidebar-border: oklch(1 0 0 / 6%);
-  --sidebar-ring: #2f80ff;
+  --sidebar-ring: #818cf8;
 
   /* Elevation — inset hairline on top, layered diffuse drop below. Deeper and
      softer than a single shadow so cards feel lifted, not stickered on. */
@@ -125,8 +129,14 @@
 .light {
   color-scheme: light;
 
-  /* Accent links/icons need to darken so they read on white surfaces. */
-  --vq-blue-bright: #1c64d8;
+  /* Accent links/icons need to darken so they read on white surfaces.
+     Periwinkle at #818cf8 measures 2.9:1 on a white card — the same hue has
+     to sink rather than lift here. */
+  --vq-blue: #4f46e5;
+  --vq-blue-bright: #4338ca;
+  --vq-green: #047857;
+  --vq-orange: #b45309;
+  --vq-red: #dc2626;
   /* Gold washes out to beige on white — down to an antique brass that still
      passes as gold and still reads at 11px. The bright end of the dark theme
      measured 3.97:1 on a white card, under the 4.5 small text needs, so the
@@ -144,7 +154,7 @@
   --card-foreground: #0d151f;
   --popover: #ffffff;
   --popover-foreground: #0d151f;
-  --primary: #2f80ff;
+  --primary: #4f46e5;
   --primary-foreground: #ffffff;
   --secondary: #eaeef4;
   --secondary-foreground: #0d151f;
@@ -154,29 +164,29 @@
   --accent-foreground: #0d151f;
   --destructive: #e5484d;
   --destructive-foreground: #ffffff;
-  --border: oklch(0 0 0 / 10%);
-  --input: oklch(0 0 0 / 14%);
-  --ring: #2f80ff;
+  --border: color-mix(in oklab, #475569 22%, transparent);
+  --input: color-mix(in oklab, #475569 30%, transparent);
+  --ring: #4f46e5;
 
-  --success: #1a9d5a;
-  --success-muted: #d6f0e1;
-  --warning: #c9760a;
+  --success: #047857;
+  --success-muted: #d3f2e5;
+  --warning: #b45309;
   --warning-muted: #fbeacb;
-  --critical: #e5484d;
+  --critical: #dc2626;
   --critical-muted: #fbdedf;
-  --info: #2f80ff;
-  --info-muted: #dce9ff;
+  --info: #4f46e5;
+  --info-muted: #e0e2fd;
   --neutral: #64707e;
   --neutral-muted: #e5e9ef;
 
   --sidebar: #ffffff;
   --sidebar-foreground: #46515f;
-  --sidebar-primary: #2f80ff;
+  --sidebar-primary: #4f46e5;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: oklch(0 0 0 / 5%);
   --sidebar-accent-foreground: #0d151f;
   --sidebar-border: oklch(0 0 0 / 8%);
-  --sidebar-ring: #2f80ff;
+  --sidebar-ring: #4f46e5;
 
   --elev-1: inset 0 1px 0 0 oklch(1 0 0 / 60%), 0 1px 2px 0 rgb(15 23 42 / 6%);
   --elev-2: 0 1px 2px 0 rgb(15 23 42 / 5%), 0 10px 26px -14px rgb(15 23 42 / 20%);
