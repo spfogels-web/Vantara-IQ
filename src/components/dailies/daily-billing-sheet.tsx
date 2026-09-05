@@ -850,7 +850,13 @@ export function DailyBillingSheet({
         >
           <ArrowLeft className="size-3.5" /> {project ? "Change job" : "All dailies"}
         </Link>
-        <div className="flex items-center gap-2">
+        {/* Wrapping matters more than it looks.
+            This row could not wrap, so on a phone it ran 485px wide inside a
+            430px screen and took the document with it — and once the page
+            scrolls sideways, the sticky header stops covering it. That is the
+            strip of dead background down the right-hand edge: not a header
+            that failed to stretch, a page 71px wider than the phone. */}
+        <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
           <Button
             type="button"
             size="sm"
@@ -919,7 +925,11 @@ export function DailyBillingSheet({
               portrait overrides it and quietly crops the right-hand unit code
               columns — which reads as "the codes are missing" rather than as a
               paper setting. Say so where the button is. */}
-          <span className="text-[11px] text-muted-foreground">
+          {/* Its own line until there is real room for it. On an iPad this
+              sentence is what pushes Submit onto a second row and leaves a
+              gap across the middle of the toolbar; below lg the buttons fit
+              one row without it. */}
+          <span className="order-last w-full text-[11px] text-muted-foreground lg:order-none lg:w-auto">
             Print needs landscape · PDF is always landscape
           </span>
           {locked ? (
@@ -1020,9 +1030,16 @@ export function DailyBillingSheet({
       {/* A filed daily is read-only. `inert` blocks focus, typing and clicks on
           everything inside in one stroke, so no individual field has to
           remember to disable itself. */}
+      {/* Edge to edge on a phone.
+          The page shell pads 16px each side, which is right for reading text
+          and wrong for a 1420px form: it spends 32px of a 430px screen on
+          margin around something that already does not fit. Pulled back out to
+          the screen edge below sm, where the extra 32px is 8% more of the
+          sheet visible before anybody scrolls. The padding comes back at sm
+          and up, where there is room to spare. */}
       <div
         className={cn(
-          "sheet-page overflow-x-auto rounded-xl border border-border bg-background print:overflow-visible print:rounded-none print:border-0",
+          "sheet-page -mx-4 overflow-x-auto border-y border-border bg-background sm:mx-0 sm:rounded-xl sm:border-x print:mx-0 print:overflow-visible print:rounded-none print:border-0",
           locked && "select-text",
         )}
       >
