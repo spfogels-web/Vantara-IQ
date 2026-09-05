@@ -70,6 +70,8 @@ const ES: Record<string, string> = {
   "South Georgia": "Sur de Georgia",
   Alabama: "Alabama",
   Unassigned: "Sin asignar",
+  Current: "En curso",
+  Completed: "Terminado",
   "My work": "Mi trabajo",
   Network: "Red",
   Financials: "Finanzas",

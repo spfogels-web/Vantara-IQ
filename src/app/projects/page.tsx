@@ -30,7 +30,7 @@ export const metadata = { title: "Projects · Vantara IQ" };
 export default async function ProjectsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ market?: string }>;
+  searchParams: Promise<{ market?: string; stage?: string }>;
 }) {
   const [me, all, sp] = await Promise.all([getCurrentUser(), getProjects(), searchParams]);
   const staff = !!me && isStaff(me.role);
@@ -42,16 +42,34 @@ export default async function ProjectsPage({
   );
   const unassigned = all.filter((p) => !isMarketId(p.market)).length;
 
+
+  /**
+   * Running work, finished work, or both.
+   *
+   * Current is the default and stays out of the URL, because a finished job on
+   * the active list drags every number with it — it counts toward projects,
+   * toward average health, and toward feet remaining, all of which are meant
+   * to describe what is still in front of the crews.
+   */
+  const stage: "current" | "completed" | "all" =
+    sp.stage === "completed" || sp.stage === "all" ? sp.stage : "current";
+  const stageCounts = {
+    current: all.filter((p) => !p.completedAt).length,
+    completed: all.filter((p) => p.completedAt).length,
+  };
+  const atStage =
+    stage === "all" ? all : all.filter((p) => (stage === "completed" ? p.completedAt : !p.completedAt));
+
   const choice = sp.market;
   const selected =
     choice === "unassigned" || isMarketId(choice) ? choice : ("all" as const);
 
   const projects =
     selected === "all"
-      ? all
+      ? atStage
       : selected === "unassigned"
-        ? all.filter((p) => !isMarketId(p.market))
-        : all.filter((p) => p.market === selected);
+        ? atStage.filter((p) => !isMarketId(p.market))
+        : atStage.filter((p) => p.market === selected);
 
   // The strip describes what is on screen. Leaving it on the full book while
   // the grid showed three jobs made the two disagree, and the number in
@@ -88,7 +106,13 @@ export default async function ProjectsPage({
             number under it means. Staff only — a crew sees its own jobs and
             has no book to narrow. */}
         {staff ? (
-          <MarketFilter counts={counts} unassigned={unassigned} value={selected} />
+          <MarketFilter
+            counts={counts}
+            unassigned={unassigned}
+            value={selected}
+            stage={stage}
+            stageCounts={stageCounts}
+          />
         ) : null}
 
         {staff ? (
@@ -126,7 +150,11 @@ export default async function ProjectsPage({
                         <h3 className="truncate text-[14px] font-semibold text-foreground group-hover:text-white">
                           {p.name}
                         </h3>
-                        {p.tone === "critical" ? (
+                        {p.completedAt ? (
+                          <span className="shrink-0 rounded-full border border-success/45 bg-success/[0.12] px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.06em] text-success">
+                            Done
+                          </span>
+                        ) : p.tone === "critical" ? (
                           <AlertTriangle className="size-3.5 shrink-0 text-critical" />
                         ) : null}
                         <ChevronRight className="ml-auto size-4 shrink-0 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground" />

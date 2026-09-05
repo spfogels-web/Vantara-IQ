@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { MapPin } from "lucide-react";
+import { CheckCircle2, MapPin } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { MARKETS, type MarketId } from "@/lib/markets";
@@ -32,15 +32,28 @@ export function MarketFilter({
   counts,
   value,
   unassigned,
+  stage,
+  stageCounts,
 }: {
   counts: MarketCounts;
   value: Choice;
   /** Jobs nobody has placed yet. */
   unassigned: number;
+  /** Whether the list is showing running work, finished work, or both. */
+  stage: "current" | "completed" | "all";
+  stageCounts: { current: number; completed: number };
 }) {
   const t = useT();
   const router = useRouter();
   const params = useSearchParams();
+
+  function setParam(key: string, next: string, fallback: string) {
+    const q = new URLSearchParams(params.toString());
+    if (next === fallback) q.delete(key);
+    else q.set(key, next);
+    const qs = q.toString();
+    router.push(qs ? `/projects?${qs}` : "/projects", { scroll: false });
+  }
 
   function onChange(next: Choice) {
     const q = new URLSearchParams(params.toString());
@@ -73,6 +86,35 @@ export function MarketFilter({
           count={counts[m.id] ?? 0}
         />
       ))}
+
+      {/* Running work or finished work.
+          Separated from the market chips by a divider because it answers a
+          different question: markets are where, this is whether the job is
+          still going. Current leads because that is the list somebody opens
+          this page to see. */}
+      <span aria-hidden className="mx-1 hidden h-5 w-px bg-border sm:block" />
+      <span className="mr-0.5 inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+        <CheckCircle2 className="size-3.5 text-gold" />
+        Stage
+      </span>
+      <Chip
+        active={stage === "current"}
+        onClick={() => setParam("stage", "current", "current")}
+        label={t("Current")}
+        count={stageCounts.current}
+      />
+      <Chip
+        active={stage === "completed"}
+        onClick={() => setParam("stage", "completed", "current")}
+        label={t("Completed")}
+        count={stageCounts.completed}
+      />
+      <Chip
+        active={stage === "all"}
+        onClick={() => setParam("stage", "all", "current")}
+        label={t("All")}
+        count={stageCounts.current + stageCounts.completed}
+      />
 
       {/* Only when there is something to fix. A permanent "Unassigned 0" is
           noise; one that appears the day a job arrives without a market is a

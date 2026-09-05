@@ -163,6 +163,17 @@ model Project {
   /// computed from this against a five-day production week — a required pace
   /// worked out on calendar days is quietly 30% too low.
   deadline         String            @default("")
+
+  /// When the job was called finished, by a person.
+  ///
+  /// Percent complete is otherwise derived from placed footage over planned
+  /// route, and a real job does not end on that ratio reaching 100 — the
+  /// material list overestimates, punch work lands outside the plan, and a
+  /// crew walks off a finished job at 94%. Somebody has to say it is done.
+  ///
+  /// Null means still running. Set means complete: the derivation stops and
+  /// the job reads 100% with nothing left.
+  completedAt      DateTime?
   updatedAt        String            @default("")
   /// Which market this job sits in — see src/lib/markets.ts.
   ///

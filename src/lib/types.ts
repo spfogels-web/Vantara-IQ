@@ -38,6 +38,8 @@ export interface Project {
   tone: Tone;
   /** Which market the job sits in. Empty until somebody sets it. */
   market: string;
+  /** ISO date the job was called finished, or null while it is still running. */
+  completedAt: string | null;
   /** Linear feet still to install. */
   remainingFt: number;
   requiredFtPerDay: number;

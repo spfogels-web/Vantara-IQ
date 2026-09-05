@@ -6639,3 +6639,52 @@ export async function getMyAlertSettings() {
     optedOut: Boolean(row?.smsOptOutAt),
   };
 }
+
+/**
+ * Call a job finished, or put it back.
+ *
+ * Its own field rather than another status, because "complete" is not a
+ * schedule state — a job is on schedule or behind it right up until the day it
+ * is done, and then none of that applies any more. The date matters too: it is
+ * what closeout, final billing and retainage release are counted from.
+ *
+ * Marking it complete stops the footage derivation. A finished job reading 94%
+ * because the material list overestimated is telling the office there is work
+ * left when the crew has already walked off.
+ */
+export async function setProjectComplete(projectId: string, complete: boolean) {
+  await requireStaff();
+  await assertProjectAccess(projectId);
+
+  const prior = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { completedAt: true, name: true },
+  });
+  if (!prior) return { ok: false as const, error: "Project not found." };
+
+  await prisma.project.update({
+    where: { id: projectId },
+    data: {
+      // Marking a job complete twice does not move the date. The first time is
+      // when it finished, and that is the date everything downstream counts
+      // from.
+      completedAt: complete ? (prior.completedAt ?? new Date()) : null,
+    },
+  });
+
+  await notifyStaff({
+    title: complete
+      ? `${prior.name.trim()} marked complete`
+      : `${prior.name.trim()} reopened`,
+    detail: complete
+      ? "It no longer counts toward active work, pace or feet remaining."
+      : "It is back on the active list and being measured against its plan again.",
+    category: "system",
+    tone: complete ? "success" : "warning",
+  });
+
+  revalidatePath(`/projects/${projectId}`);
+  revalidatePath("/projects");
+  revalidatePath("/");
+  return { ok: true as const, complete };
+}

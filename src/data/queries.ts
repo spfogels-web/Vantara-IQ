@@ -140,6 +140,7 @@ const PROJECT_LIST_SELECT = {
   status: true,
   tone: true,
   market: true,
+  completedAt: true,
   remainingFt: true,
   requiredFtPerDay: true,
   actualFtPerDay: true,
@@ -195,6 +196,7 @@ function toProject(r: ProjectListRow): Project {
     status: r.status as Project["status"],
     tone: r.tone as Tone,
     market: r.market ?? "",
+    completedAt: r.completedAt ? r.completedAt.toISOString() : null,
     remainingFt: r.remainingFt,
     requiredFtPerDay: r.requiredFtPerDay,
     actualFtPerDay: r.actualFtPerDay,
@@ -204,6 +206,10 @@ function toProject(r: ProjectListRow): Project {
     pctComplete: r.pctComplete,
     crew: r.crew,
     updatedAt: r.updatedAt,
+    // A finished job is finished. Percent complete is otherwise a footage
+    // ratio, and it reads whatever the dailies happen to add up to — 34% on a
+    // job the crew walked off weeks ago.
+    ...(r.completedAt ? { pctComplete: 100, remainingFt: 0 } : null),
     mapUrl: r.mapUrl ?? null,
     hasMap: r.hasMap ?? r.mapUrl != null,
     photoUrl: r.photoUrl,
@@ -1128,8 +1134,13 @@ export async function getProjects(): Promise<Project[]> {
     // plan for the job. The form field is only the fallback for a job whose
     // list has not been loaded yet.
     const planned = routes.get(r.id) || r.remainingFt;
-    const left = planned > 0 ? Math.max(0, planned - b.total) : 0;
-    const pct = planned > 0 ? Math.min(100, Math.round((b.total / planned) * 100)) : p.pctComplete;
+    // A job somebody has called finished stops being measured against its
+    // plan. The footage ratio is a progress estimate, and a finished job that
+    // reads 94% because the material list overestimated is telling the office
+    // there is work left when there is not.
+    const done = Boolean(r.completedAt);
+    const left = done ? 0 : planned > 0 ? Math.max(0, planned - b.total) : 0;
+    const pct = done ? 100 : planned > 0 ? Math.min(100, Math.round((b.total / planned) * 100)) : p.pctComplete;
 
     // Required pace only means something with footage left and a date to hit.
     const daysLeft = daysUntil(r.deadline);
@@ -1138,7 +1149,7 @@ export async function getProjects(): Promise<Project[]> {
 
     return {
       ...p,
-      remainingFt: planned > 0 ? left : p.remainingFt,
+      remainingFt: done ? 0 : planned > 0 ? left : p.remainingFt,
       pctComplete: pct,
       actualFtPerDay: perDay,
       requiredFtPerDay: required,
@@ -3573,6 +3584,7 @@ export async function getProjectSchedule(projectId: string): Promise<ProjectSche
     where: { id: projectId },
     select: {
       deadline: true,
+      completedAt: true,
       materials: {
         where: { inScope: true },
         select: { code: true, planned: true },
@@ -3628,7 +3640,11 @@ export async function getProjectSchedule(projectId: string): Promise<ProjectSche
   return {
     ...schedulePosition({
       plannedFt,
-      completedFt,
+      // A finished job counts as its whole route built, whatever the dailies
+      // add up to. Left as the filed footage, a completed job shows a health
+      // ring at 0%, feet remaining against a plan nobody is working to, and a
+      // required pace to finish work that is already finished.
+      completedFt: project.completedAt ? plannedFt : completedFt,
       deadline: project.deadline || null,
       workDates: [...workDates],
     }),

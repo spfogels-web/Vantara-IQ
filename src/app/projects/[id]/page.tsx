@@ -30,6 +30,7 @@ import { ProjectHeaderActions, ProjectMapPanel } from "@/components/projects/pro
 import { ProjectMaterials } from "@/components/projects/project-materials";
 import { ProjectPhotos } from "@/components/projects/project-photos";
 import { listCustomerRateCards } from "@/app/actions";
+import { CompleteToggle } from "@/components/projects/complete-toggle";
 import { ProjectRatesPanel } from "@/components/projects/project-rates";
 import { ProjectScheduleStrip } from "@/components/projects/project-schedule";
 
@@ -83,6 +84,11 @@ export default async function ProjectDetailPage({
           <span className="num text-[17px] font-bold tracking-[-0.01em] text-foreground">
             {project.number}
           </span>
+          {project.completedAt ? (
+            <span className="inline-flex items-center gap-1 rounded-full border border-success/45 bg-success/[0.12] px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-success">
+              Completed
+            </span>
+          ) : null}
         </span>
       }
       title={project.name}
@@ -95,7 +101,14 @@ export default async function ProjectDetailPage({
         >
           <ArrowLeft className="size-3.5" /> All projects
         </Link>
-        <ProjectHeaderActions projectId={project.id} photoUrl={project.photoUrl} />
+        <div className="flex flex-wrap items-center gap-2">
+          <CompleteToggle
+            projectId={project.id}
+            completedAt={project.completedAt}
+            canEdit={staff}
+          />
+          <ProjectHeaderActions projectId={project.id} photoUrl={project.photoUrl} />
+        </div>
       </div>
 
       {staff ? (
