@@ -65,6 +65,7 @@ export default async function ProjectDailySheetPage({
         canReview={canReview}
         crews={crews.map((c) => ({ id: c.id, company: c.company }))}
         initialFiledForId={saved?.filedForId ?? null}
+        initialRoads={saved?.roads ?? null}
         billableCodes={billableCodes}
       />
     </PageShell>

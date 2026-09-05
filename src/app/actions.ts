@@ -1812,6 +1812,8 @@ export type SheetPayload = {
   projectName: string;
   workDate: string;
   crewNumber: string;
+  /** The road or roads worked. Fortitude's own field, never on Globe's form. */
+  roads?: string;
   header: unknown;
   laborCodes: unknown;
   laborRows: unknown;
@@ -1890,6 +1892,7 @@ export async function saveDailySheet(input: SheetPayload) {
     projectName: input.projectName,
     workDate: input.workDate,
     crewNumber: input.crewNumber,
+    roads: (input.roads ?? "").trim().slice(0, 200),
     header: asJson(input.header),
     laborCodes: asJson(input.laborCodes),
     laborRows: asJson(input.laborRows),
@@ -1996,6 +1999,7 @@ export async function submitDailySheet(input: SheetPayload) {
     subcontractor: filedBy,
     customer: str("customer"),
     crew: sheet.crewNumber,
+    roads: sheet.roads ?? "",
     workDate: sheet.workDate,
     submittedAt: new Date().toISOString(),
     status: "Submitted",

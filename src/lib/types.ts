@@ -369,6 +369,8 @@ export interface DailyReport {
   customer: string;
   subcontractor: string;
   crew: string;
+  /** The road or roads the work was on. Empty on older dailies. */
+  roads: string;
   workDate: string;
   /** The Friday this bills to. Saturday-to-Friday unless the office moved it. */
   billingWeekEnd: string;

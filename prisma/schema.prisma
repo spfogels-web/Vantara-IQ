@@ -219,6 +219,12 @@ model DailySheet {
   projectName String   @default("")
   workDate    String   @default("")
   crewNumber  String   @default("")
+  /// The road or roads this day's work was on.
+  ///
+  /// Its own column rather than a key in the header blob, because that blob
+  /// is Globe's form and this is not on Globe's form — it sits above it, in
+  /// Fortitude's own strip, and never prints.
+  roads       String   @default("")
 
   /// Which crew this sheet is being filed for, when the office fills it in on
   /// their behalf. A crew filing their own leaves this null and is identified
@@ -847,6 +853,15 @@ model Daily {
   customer      String   @default("")
   subcontractor String   @default("")
   crew          String   @default("")
+
+  /// The road or roads the day's work was on — "Keener Rd", "Hwy 17 to
+  /// Pierce Creek".
+  ///
+  /// Free text, because a day's work runs along a road rather than sitting
+  /// at a point, and the crew already say it that way on the phone. It is
+  /// the fastest way to tell two of the same job's dailies apart in a list
+  /// where every row says the same project, crew and work order.
+  roads            String            @default("")
   workDate      String   @default("")
 
   /// Administration override for which billing week this daily falls in, as

@@ -14,6 +14,7 @@ import {
   Printer,
   RotateCcw,
   Save,
+  MapPin,
   Trash2,
 } from "lucide-react";
 
@@ -430,6 +431,7 @@ export function DailyBillingSheet({
   canReview = false,
   crews,
   initialFiledForId,
+  initialRoads,
   billableCodes = [],
 }: {
   project?: SheetProject;
@@ -443,6 +445,8 @@ export function DailyBillingSheet({
    *  them while they are still learning the system. */
   crews?: { id: string; company: string }[];
   initialFiledForId?: string | null;
+  /** The road or roads already saved on this draft. */
+  initialRoads?: string | null;
   /**
    * The codes on this customer’s card. Offered as you type so what goes in
    * the box is a code that exists — a hand-typed near-miss prices at nothing,
@@ -450,7 +454,9 @@ export function DailyBillingSheet({
    */
   billableCodes?: BillableCode[];
 }) {
+  const t = useT();
   const [filedForId, setFiledForId] = React.useState(initialFiledForId ?? "");
+  const [roads, setRoads] = React.useState(initialRoads ?? "");
   const [header, setHeader] = React.useState<SheetHeader>(() =>
     asHeader(saved?.header, project),
   );
@@ -558,6 +564,7 @@ export function DailyBillingSheet({
       projectName: project?.name ?? header.jobName,
       workDate: header.dateWorked,
       crewNumber: header.crewNumber,
+      roads,
       filedForId: filedForId || null,
       header,
       laborCodes,
@@ -572,7 +579,9 @@ export function DailyBillingSheet({
     // filedForId belongs here: without it an autosave keeps the crew that was
     // selected when this closure was made, and quietly files the day against
     // whoever was picked first.
-    [sheetId, project, header, laborCodes, labor, matCodes, mat, redlines, notes, photos, redlineFiles, filedForId],
+    // roads for the same reason — it is read above, so leaving it out sends
+    // whatever road was in the box when this closure was made.
+    [sheetId, project, header, laborCodes, labor, matCodes, mat, redlines, notes, photos, redlineFiles, filedForId, roads],
   );
 
   async function save() {
@@ -652,7 +661,7 @@ export function DailyBillingSheet({
     if (submitting || !header.dateWorked.trim()) return;
     const t = window.setTimeout(() => void autosave.current(), 1200);
     return () => window.clearTimeout(t);
-  }, [header, labor, mat, laborCodes, matCodes, redlines, notes, filedForId, submitting]);
+  }, [header, labor, mat, laborCodes, matCodes, redlines, notes, filedForId, roads, submitting]);
 
   const set = <K extends keyof SheetHeader>(key: K, value: SheetHeader[K]) =>
     setHeader((h) => ({ ...h, [key]: value }));
@@ -739,6 +748,27 @@ export function DailyBillingSheet({
           </span>
         </div>
       ) : null}
+
+      {/* Which road the day was on.
+          Above the form and never on it: Globe's sheet has no such field, and
+          adding one to a document they pay against is not ours to do. It earns
+          its place here anyway — a list of one job's dailies is otherwise the
+          same project, crew and work order on every row, and the road is the
+          one thing that tells them apart. */}
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/70 bg-foreground/[0.02] px-3 py-2.5 print:hidden">
+        <MapPin className="size-4 shrink-0 text-gold" />
+        <span className="text-[12px] font-medium text-foreground">{t("Road(s) worked")}</span>
+        <input
+          value={roads}
+          onChange={(e) => setRoads(e.target.value)}
+          disabled={locked}
+          placeholder={t("Keener Rd — or Hwy 17 to Pierce Creek")}
+          className="focus-ring h-8 min-w-0 flex-1 rounded-lg border border-border bg-foreground/[0.03] px-2.5 text-[12.5px] text-foreground placeholder:text-muted-foreground/60 disabled:opacity-60 sm:max-w-md"
+        />
+        <span className="text-[11px] text-muted-foreground">
+          {t("Shows on the daily so this day can be told from the others on the job.")}
+        </span>
+      </div>
 
       {/* Toolbar — screen only */}
       <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">

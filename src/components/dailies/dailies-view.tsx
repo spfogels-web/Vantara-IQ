@@ -203,6 +203,12 @@ export function DailiesView({
                       <span className="truncate">{[d.subcontractor, d.crew].filter(Boolean).join(" · ")}</span>
                       <span className="num shrink-0">{formatFeet(d.totalFt)}</span>
                     </div>
+                    {d.roads ? (
+                      <p className="mt-0.5 flex items-center gap-1 truncate text-[11.5px] font-medium text-gold">
+                        <MapPin className="size-3 shrink-0" />
+                        {d.roads}
+                      </p>
+                    ) : null}
                     <div className="mt-0.5 flex items-center justify-between text-[10.5px] text-muted-foreground/70">
                       <span className="num">{d.sheetNumber}</span>
                       <span>{formatWhen(d.submittedAt)}</span>
@@ -367,6 +373,15 @@ function DailyDetail({
               </p>
               <p className="mt-0.5 text-[11.5px] text-muted-foreground/80">
                 {t("Sheet")} <span className="num">{d.sheetNumber}</span> · {t("Work date")} {d.workDate} · {t("submitted")} {formatWhen(d.submittedAt)}
+                {d.roads ? (
+                  <>
+                    <br />
+                    <span className="inline-flex items-center gap-1 font-medium text-gold">
+                      <MapPin className="size-3" />
+                      {d.roads}
+                    </span>
+                  </>
+                ) : null}
               </p>
               {/* Which week this money lands in. Billing runs Saturday to
                   Friday, so the Friday is the fact that matters here — it is

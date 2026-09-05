@@ -373,6 +373,7 @@ function toDaily(
     customer: r.customer,
     subcontractor: r.subcontractor,
     crew: r.crew,
+    roads: r.roads ?? "",
     workDate: r.workDate,
     billingWeekEnd: billingWeekFor(r)?.end ?? "",
     billingWeekOverridden: billingWeekFor(r)?.overridden ?? false,
@@ -1941,6 +1942,8 @@ export interface SavedDailySheet {
   dailyId: string | null;
   /** The crew the office typed this up for, if it was not filed by them. */
   filedForId: string | null;
+  /** The road or roads worked. Ours, not Globe's — it is not on their form. */
+  roads: string;
   header: unknown;
   laborCodes: unknown;
   laborRows: unknown;
@@ -1960,6 +1963,7 @@ function toSavedSheet(r: {
   status: string;
   dailyId: string | null;
   filedForId: string | null;
+  roads: string;
   header: unknown;
   laborCodes: unknown;
   laborRows: unknown;
