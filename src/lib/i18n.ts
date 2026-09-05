@@ -120,6 +120,7 @@ const ES: Record<string, string> = {
   unpriced: "sin precio",
   "Work date": "Fecha de trabajo",
   "Road(s) worked": "Calle(s) trabajada(s)",
+  REQUIRED: "OBLIGATORIO",
   "Keener Rd — or Hwy 17 to Pierce Creek": "Keener Rd — o Hwy 17 hasta Pierce Creek",
   "Shows on the daily so this day can be told from the others on the job.":
     "Aparece en el parte diario para distinguir este día de los demás del trabajo.",

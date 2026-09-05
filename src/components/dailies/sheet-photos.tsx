@@ -97,6 +97,11 @@ export function SheetPhotos({
    */
   accept?: string;
 }) {
+  // Whether this uploader takes a document as well as a photograph. Read off
+  // the accept list rather than passed separately, so the button offered and
+  // the file types allowed cannot drift apart.
+  const takesPdf = accept.includes("pdf");
+
   const pickRef = React.useRef<HTMLInputElement>(null);
   const shootRef = React.useRef<HTMLInputElement>(null);
   const [busy, setBusy] = React.useState(0);
@@ -205,7 +210,7 @@ export function SheetPhotos({
             className="focus-ring inline-flex h-8 items-center gap-1.5 rounded-lg border border-border px-2.5 text-[12px] font-medium text-foreground hover:bg-foreground/[0.05] disabled:opacity-50"
           >
             {busy > 0 ? <Loader2 className="size-3.5 animate-spin" /> : <ImagePlus className="size-3.5" />}
-            {busy > 0 ? `Uploading ${busy}…` : "Add photos"}
+            {busy > 0 ? `Uploading ${busy}…` : takesPdf ? "Add photos or PDF" : "Add photos"}
           </button>
           <button
             type="button"
@@ -221,11 +226,7 @@ export function SheetPhotos({
       {error ? <p className="px-3 py-2 text-[11.5px] text-critical print:hidden">{error}</p> : null}
 
       {photos.length === 0 ? (
-        <button
-          type="button"
-          onClick={() => shootRef.current?.click()}
-          className="focus-ring flex w-full flex-col items-center gap-2 border-b border-dashed border-warning/40 bg-warning/[0.03] px-3 py-8 text-center transition hover:bg-warning/[0.07] print:hidden"
-        >
+        <div className="flex w-full flex-col items-center gap-2 border-b border-dashed border-warning/40 bg-warning/[0.03] px-3 py-8 text-center print:hidden">
           <Camera className="size-7 text-warning" />
           <span className="text-[14px] font-semibold text-foreground">
             {emptyTitle}
@@ -233,10 +234,31 @@ export function SheetPhotos({
           <span className="max-w-sm text-[12px] text-muted-foreground">
             {emptyHint}
           </span>
-          <span className="mt-1 inline-flex h-9 items-center gap-1.5 rounded-lg bg-warning px-3.5 text-[12.5px] font-semibold text-black">
-            <Camera className="size-3.5" /> Take a photo now
-          </span>
-        </button>
+          <div className="mt-1 flex flex-wrap items-center justify-center gap-2">
+            <button
+              type="button"
+              disabled={busy > 0}
+              onClick={() => shootRef.current?.click()}
+              className="focus-ring inline-flex h-9 items-center gap-1.5 rounded-lg bg-warning px-3.5 text-[12.5px] font-semibold text-black hover:brightness-105 disabled:opacity-50"
+            >
+              <Camera className="size-3.5" /> Take a photo now
+            </button>
+            {/* The empty panel offered the camera and nothing else, so the one
+                crew member holding a proper PDF as-built had no way in from
+                the place that was asking them for it — the file picker was up
+                in the header, labelled "Add photos". */}
+            {takesPdf ? (
+              <button
+                type="button"
+                disabled={busy > 0}
+                onClick={() => pickRef.current?.click()}
+                className="focus-ring inline-flex h-9 items-center gap-1.5 rounded-lg border border-warning/50 px-3.5 text-[12.5px] font-semibold text-foreground hover:bg-warning/[0.1] disabled:opacity-50"
+              >
+                <FileText className="size-3.5" /> Upload PDF as-built
+              </button>
+            ) : null}
+          </div>
+        </div>
       ) : (
         <ul className="grid grid-cols-2 gap-3 p-3 sm:grid-cols-3 lg:grid-cols-4 print:grid-cols-3">
           {photos.map((p) => (

@@ -1968,6 +1968,52 @@ export async function submitDailySheet(input: SheetPayload) {
     };
   }
 
+  /**
+   * The road, the photographs and the redline, checked again here.
+   *
+   * The form is where a crew meets these rules; it is not what enforces them.
+   * A submission is a server action and can arrive without the form ever
+   * having rendered — an old tab, a replayed request, a stale client that
+   * predates this rule. So the gate lives where the write happens.
+   *
+   * All three are the same problem: a footage figure nobody can stand behind
+   * once the ground has closed. The road says which day this was, the photos
+   * say the structure was really built and grounded, and the redline says how
+   * far apart the two ends are. Without them the quantity is an assertion.
+   */
+  const filed = {
+    photos: Array.isArray(sheet.photos) ? sheet.photos : [],
+    redlines: Array.isArray(sheet.redlineFiles) ? sheet.redlineFiles : [],
+  };
+  const missing: string[] = [];
+  // A day already on the board is exempt.
+  //
+  // Thirty-one days were filed before this rule existed and thirty of them
+  // carry no road, twenty-four no photograph. Applying the gate to them would
+  // not put the evidence on file — the ground closed over it months ago — it
+  // would only make a wrong footage figure impossible to correct, which is
+  // worse than the gap it was meant to close.
+  //
+  // This is not a way around the rule for new work: a sheet cannot acquire a
+  // daily without passing through here first.
+  if (!sheet.dailyId) {
+    if (!(sheet.roads ?? "").trim()) missing.push("the road(s) worked");
+    if (filed.photos.length === 0) missing.push("a photo of the peds or handholes placed");
+    if (filed.redlines.length === 0) {
+      missing.push("the redline print — photos of it, or the PDF as-built");
+    }
+  }
+  if (missing.length > 0) {
+    const said =
+      missing.length === 1
+        ? missing[0]
+        : `${missing.slice(0, -1).join(", ")} and ${missing[missing.length - 1]}`;
+    return {
+      ok: false as const,
+      error: `This day can't be filed yet. It still needs ${said}.`,
+    };
+  }
+
   const header = (sheet.header ?? {}) as Record<string, unknown>;
   const str = (k: string) => (typeof header[k] === "string" ? (header[k] as string) : "");
 

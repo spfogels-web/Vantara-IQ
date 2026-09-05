@@ -52,6 +52,12 @@ const MAT_ROWS = 10;
 const CREW_SLOTS = 5;
 
 type LaborRow = { print: string; location: string; cells: string[]; remarks: string };
+
+/** "a, b and c" — a sentence, not a comma-separated dump. */
+function list(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? "";
+  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
 type MatRow = {
   print: string;
   start: string;
@@ -354,6 +360,8 @@ export type SavedSheet = {
   redlines: unknown;
   redlineFiles?: unknown;
   status: string;
+  /** Set once this sheet has become a day on the board. */
+  dailyId?: string | null;
   notes?: string;
   photos?: unknown;
 };
@@ -614,15 +622,65 @@ export function DailyBillingSheet({
     return need.filter(([, v]) => !v.trim()).map(([label]) => label);
   }, [header]);
 
+  /** Whether any quantity was entered against a code the sheet actually names. */
+  const hasProduction = React.useMemo(
+    () =>
+      labor.some((r) =>
+        r.cells.some((c, col) => {
+          if (!(laborCodes[col] ?? "").trim()) return false;
+          const q = Number.parseFloat(c);
+          return Number.isFinite(q) && q !== 0;
+        }),
+      ),
+    [labor, laborCodes],
+  );
+
+  /**
+   * Everything a day needs before it can be filed.
+   *
+   * The first three are Globe's and a sheet comes back without them. The rest
+   * are ours, and they are here because the answer to a query six months on
+   * is either on the sheet or it is gone — the ground has closed, the crew has
+   * moved to another market, and nobody can say which road it was or whether
+   * the ped was grounded.
+   *
+   * A zero-production day is still a real day: rain, locates, a rock. That is
+   * why production is satisfied by notes as well as by quantities — refusing
+   * it outright would leave inventing footage as the only way to file.
+   */
+  const missingToSubmit = React.useMemo(() => {
+    // Days filed before this rule are corrected, not re-evidenced — the same
+    // exemption the server makes, kept in step with it so the form never
+    // refuses something the server would have taken.
+    const isCorrection = Boolean(saved?.dailyId);
+    const need: [string, boolean][] = [
+      ...missingHeader.map((label) => [label, true] as [string, boolean]),
+      ["the road(s) worked", !isCorrection && !roads.trim()],
+      ["the day's production, or notes saying why it was a zero day", !hasProduction && !notes.trim()],
+      ["a photo of the peds or handholes placed", !isCorrection && photos.length === 0],
+      [
+        "the redline print — photos of it, or the PDF as-built",
+        !isCorrection && redlineFiles.length === 0,
+      ],
+    ];
+    return need.filter(([, bad]) => bad).map(([label]) => label);
+  }, [missingHeader, roads, hasProduction, notes, photos, redlineFiles, saved?.dailyId]);
+
   async function submit() {
     if (saving || submitting) return;
 
-    if (missingHeader.length > 0) {
+    if (missingToSubmit.length > 0) {
       setSaveError(
-        `Fill these in before submitting: ${missingHeader.join(", ")}. They're highlighted at the top of the sheet.`,
+        `This day can't be filed yet. It still needs ${list(missingToSubmit)}.`,
       );
-      // Take them to it rather than leaving them to hunt.
-      window.scrollTo({ top: 0, behavior: "smooth" });
+      // Take them to whichever end of the sheet the problem is at, rather
+      // than always to the top — the photos and the redline are at the bottom
+      // and scrolling away from them is scrolling away from the fix.
+      if (missingHeader.length > 0 || !roads.trim()) {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } else {
+        window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+      }
       return;
     }
     setSubmitting(true);
@@ -755,9 +813,23 @@ export function DailyBillingSheet({
           its place here anyway — a list of one job's dailies is otherwise the
           same project, crew and work order on every row, and the road is the
           one thing that tells them apart. */}
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/70 bg-foreground/[0.02] px-3 py-2.5 print:hidden">
-        <MapPin className="size-4 shrink-0 text-gold" />
+      <div
+        className={cn(
+          "flex flex-wrap items-center gap-2 rounded-xl border px-3 py-2.5 print:hidden",
+          // Amber while it is empty, quiet once it is answered — the same way
+          // the photo and redline panels behave, so a crew learns one signal.
+          roads.trim()
+            ? "border-border/70 bg-foreground/[0.02]"
+            : "border-warning/40 bg-warning/[0.06]",
+        )}
+      >
+        <MapPin className={cn("size-4 shrink-0", roads.trim() ? "text-gold" : "text-warning")} />
         <span className="text-[12px] font-medium text-foreground">{t("Road(s) worked")}</span>
+        {roads.trim() ? null : (
+          <span className="rounded bg-warning/20 px-1.5 py-0.5 text-[9.5px] font-bold text-warning">
+            {t("REQUIRED")}
+          </span>
+        )}
         <input
           value={roads}
           onChange={(e) => setRoads(e.target.value)}
@@ -1483,10 +1555,12 @@ export function DailyBillingSheet({
           <QualityControl className="mt-4" />
 
           {/* ── Field photos ────────────────────────────────────── */}
-          {/* Outside the lock on purpose. The numbers freeze the moment a sheet
-              is filed — that is what makes it a submission — but a crew can
-              still photograph what they built afterwards, and must, because
-              Fortitude cannot approve a daily with no evidence behind it. */}
+          {/* Outside the lock on purpose. The numbers freeze the moment a
+              sheet is filed — that is what makes it a submission — but the
+              evidence stays editable afterwards, so a blurred shot can be
+              replaced without reopening the day.
+              Editable afterwards, not optional beforehand: a sheet cannot be
+              filed with none. */}
           {project ? (
             <SheetPhotos
               projectId={project.id}
