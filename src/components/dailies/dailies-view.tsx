@@ -753,7 +753,14 @@ function DailyDetail({
                   <span className={cn("num", d.billingWeekOverridden ? "font-semibold text-warning" : "text-foreground/80")}>
                     {d.billingWeekEnd}
                   </span>
-                  {d.billingWeekOverridden ? (
+                  {/* Two different reasons this is not the week you would
+                      expect, and a crew is owed the difference between them. */}
+                  {d.billingWeekLate ? (
+                    <span className="text-warning">
+                      {" "}
+                      · {t("filed after the Friday cutoff, so it bills next week")}
+                    </span>
+                  ) : d.billingWeekOverridden ? (
                     <span className="text-warning"> · {t("moved by the office")}</span>
                   ) : null}
                 </p>

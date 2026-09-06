@@ -906,6 +906,10 @@ model Daily {
   /// office sometimes has to hold a day back or pull one forward, and doing
   /// that by editing the work date would falsify when the work happened.
   billingWeekEnd String   @default("")
+  /// Set when that Friday came from missing the cutoff rather than from the
+  /// office moving the day. Two different reasons a daily is not on the week
+  /// you would expect, and a crew is owed the difference between them.
+  billingWeekLate Boolean @default(false)
   submittedAt    String   @default("")
   status         String   @default("Submitted")
   tone           String   @default("info")

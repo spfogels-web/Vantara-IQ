@@ -15,6 +15,7 @@ import {
   RotateCcw,
   Save,
   MapPin,
+  Clock,
   Trash2,
 } from "lucide-react";
 
@@ -31,6 +32,7 @@ import {
 } from "@/app/actions";
 import { SheetPhotos, parsePhotos, type SheetPhoto } from "@/components/dailies/sheet-photos";
 import { SheetScroller } from "@/components/dailies/sheet-scroller";
+import { CUTOFF_LABEL } from "@/lib/billing";
 import { isPdfUrl } from "@/components/projects/project-detail-client";
 import {
   MapMarkupEditor,
@@ -809,6 +811,21 @@ export function DailyBillingSheet({
           </span>
         </div>
       ) : null}
+
+      {/* The deadline, where the person filling the sheet in will see it.
+          A rule a crew is held to has to be written where they are, at the
+          moment it applies — not in an email they were sent in March. */}
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-warning/40 bg-warning/[0.06] px-3 py-2.5 print:hidden">
+        <Clock className="size-4 shrink-0 text-warning" />
+        <span className="text-[12.5px] font-semibold text-foreground">
+          {t("Weekly cutoff")}: {t(CUTOFF_LABEL)}
+        </span>
+        <span className="text-[12px] text-muted-foreground">
+          {t(
+            "Anything filed after that bills on the following week's invoice, which delays your pay by a week.",
+          )}
+        </span>
+      </div>
 
       {/* Which road the day was on.
           Above the form and never on it: Globe's sheet has no such field, and

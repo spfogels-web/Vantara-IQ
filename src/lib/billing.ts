@@ -76,6 +76,71 @@ export function billingWeekFor(daily: {
   return week ? { ...week, overridden: false } : null;
 }
 
+/**
+ * The moment a billing week closes, in words.
+ *
+ * One constant so the crew's sheet, the job picker and the office all quote
+ * the same deadline. A rule the crews are held to has to be written where they
+ * can read it, in the same words everywhere.
+ */
+export const CUTOFF_LABEL = "11:59 PM ET Friday";
+export const CUTOFF_RULE =
+  "Dailies for the week must be in by 11:59 PM ET Friday. Anything filed after that bills on the following week's invoice.";
+
+/**
+ * The Eastern calendar date an instant falls on.
+ *
+ * Eastern because that is where the office is and what the whole app already
+ * pins to. The server runs UTC, so between 8pm and midnight a plain date would
+ * read as tomorrow and roll a daily filed at 9pm Friday into next week —
+ * penalising a crew who made the deadline.
+ */
+const etDay = new Intl.DateTimeFormat("en-CA", {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  timeZone: "America/New_York",
+});
+export function easternDate(when: Date | string): string | null {
+  const d = when instanceof Date ? when : new Date(when);
+  return Number.isNaN(d.getTime()) ? null : etDay.format(d);
+}
+
+/**
+ * Which Friday a daily bills to, given when it was actually filed.
+ *
+ * The week is the work date's, Saturday through Friday. The exception is
+ * lateness: a sheet handed in after 11:59 PM Eastern on the Friday that closes
+ * its week bills on the following week instead.
+ *
+ * That is a business rule rather than a technical one, and it is the whole
+ * reason the deadline gets met — an invoice goes to the customer on the
+ * Friday, and production that arrives after it has been raised cannot be on
+ * it. Rolling the day forward is what makes that consequence visible to the
+ * crew rather than a surprise argument three weeks later.
+ *
+ * Comparing calendar dates rather than timestamps is deliberate: "after
+ * 11:59:59 PM Friday Eastern" and "the Eastern date is past that Friday" are
+ * the same statement, and the second needs no offset arithmetic to get right
+ * across daylight saving.
+ */
+export function billingWeekForFiling(
+  workDate: string,
+  filedAt: Date | string,
+): { end: string; late: boolean } | null {
+  const week = weekOf(workDate);
+  if (!week) return null;
+  const filedOn = easternDate(filedAt);
+  if (!filedOn) return { end: week.end, late: false };
+  if (filedOn <= week.end) return { end: week.end, late: false };
+  // Every Friday after the one it missed rolls it one week, so a sheet handed
+  // in a fortnight late lands on the week it actually arrived in rather than
+  // on one already invoiced.
+  let end = week.end;
+  while (filedOn > end) end = addDays(end, 7);
+  return { end, late: true };
+}
+
 /** Add days to a YYYY-MM-DD date, staying in UTC. */
 export function addDays(date: string, days: number): string {
   const d = new Date(`${date}T00:00:00Z`);

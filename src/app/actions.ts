@@ -45,7 +45,7 @@ import {
   fastPayQuote,
   statementMoney,
 } from "@/lib/fast-pay";
-import { balanceOf } from "@/lib/billing";
+import { balanceOf, billingWeekForFiling } from "@/lib/billing";
 import { badgeReadiness } from "@/lib/badge";
 import {
   canStoreBankDetails,
@@ -2037,6 +2037,16 @@ export async function submitDailySheet(input: SheetPayload) {
     filedBy = filedFor?.company ?? "Fortitude Self-Perform";
   }
 
+  // A sheet that has been filed before updates the day it made rather than
+  // filing a second one — looked up here because the billing week below
+  // depends on whether this is a first filing.
+  const existing = sheet.dailyId
+    ? await prisma.daily.findUnique({ where: { id: sheet.dailyId }, select: { id: true } })
+    : null;
+
+  const filedAt = new Date();
+  const filing = billingWeekForFiling(sheet.workDate, filedAt);
+
   // Everything this day is worth, in one object, so filing it and refiling
   // it cannot drift apart.
   const figures = {
@@ -2048,7 +2058,23 @@ export async function submitDailySheet(input: SheetPayload) {
     crew: sheet.crewNumber,
     roads: sheet.roads ?? "",
     workDate: sheet.workDate,
-    submittedAt: new Date().toISOString(),
+    submittedAt: filedAt.toISOString(),
+    // Which Friday this bills to, decided the moment it is handed in.
+    //
+    // A daily filed after 11:59 PM Eastern on the Friday that closes its week
+    // bills on the following week. The invoice for that week goes to the
+    // customer on the Friday, and production arriving after it has been raised
+    // cannot be on it — rolling the day forward is what makes that a rule the
+    // crew can see rather than an argument three weeks later.
+    //
+    // Only on a first filing. Correcting a daily weeks later must not push it
+    // forward again every time somebody presses submit.
+    ...(existing
+      ? {}
+      : {
+          billingWeekEnd: filing?.late ? filing.end : "",
+          billingWeekLate: Boolean(filing?.late),
+        }),
     status: "Submitted",
     tone: "info",
     // Feet are feet. A pedestal, a ground rod and an ant-control unit are
@@ -2064,16 +2090,10 @@ export async function submitDailySheet(input: SheetPayload) {
     lineItems: lineItems as unknown as Prisma.InputJsonValue,
   };
 
-  // A sheet that has been filed before updates the day it made rather than
-  // filing a second one.
-  //
+  // Refiling updates the day it already made rather than adding a second.
   // It used to create unconditionally, so correcting a daily and submitting
-  // it again left the original sitting there and added a duplicate beside
-  // it. One Charles Hart day ended up on the board five times, all 1,372 ft,
-  // and the only way to tell which was current was the timestamp.
-  const existing = sheet.dailyId
-    ? await prisma.daily.findUnique({ where: { id: sheet.dailyId }, select: { id: true } })
-    : null;
+  // it again left the original sitting there and a duplicate beside it. One
+  // Charles Hart day ended up on the board five times, all 1,372 ft.
 
   const daily = existing
     ? await prisma.daily.update({ where: { id: existing.id }, data: figures })

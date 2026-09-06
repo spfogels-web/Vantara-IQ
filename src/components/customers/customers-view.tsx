@@ -27,6 +27,7 @@ import {
   formatPercent,
   initials,
 } from "@/lib/format";
+import { CUTOFF_LABEL } from "@/lib/billing";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { CustomerValueTiles } from "@/components/customers/customer-value";
 import { StatusPill } from "@/components/common/status-pill";
@@ -266,13 +267,26 @@ function CustomerDetail({ customer: c, onEdit }: { customer: Customer; onEdit: (
 
         {/* Billing rules */}
         <Panel>
-          <PanelHeader title="Billing rules" icon={<Receipt className="size-3.5" />} />
+          <PanelHeader title="Billing rules" icon={<Receipt className="size-3.5" />}>
+            {/* The form behind this has always existed; the only way in was a
+                pencil at the top of the card, and nobody connects a control up
+                there with the payment terms down here. */}
+            <button
+              type="button"
+              onClick={onEdit}
+              className="focus-ring inline-flex h-7 items-center gap-1.5 rounded-lg border border-border px-2.5 text-[11.5px] font-medium text-foreground hover:border-brand/60"
+            >
+              <Pencil className="size-3" /> Edit
+            </button>
+          </PanelHeader>
           <PanelBody className="flex flex-col gap-2.5">
             <RuleRow label="AP / billing email" value={c.billingEmail} mono />
             <RuleRow label="Payment terms" value={c.paymentTerms} />
             <RuleRow label="Retainage" value={formatPercent(c.retainagePct)} />
             <RuleRow label="Invoice minimum" value={c.invoiceMinimum > 0 ? formatCurrency(c.invoiceMinimum) : "—"} />
             <RuleRow label="Active projects" value={String(c.activeProjects)} />
+            {/* The same rule that decides which invoice a day lands on. */}
+            <RuleRow label="Weekly cutoff" value={CUTOFF_LABEL} />
             {c.notes ? (
               <div className="mt-1 rounded-lg border border-border/60 bg-foreground/[0.02] p-3">
                 <p className="eyebrow mb-1">Notes</p>
@@ -425,7 +439,9 @@ function AddCustomerForm({
             <div className="grid grid-cols-3 gap-3">
               <Field label="Payment terms">
                 <Select value={form.paymentTerms} onChange={set("paymentTerms")}>
+                  <option>Net 10</option>
                   <option>Net 15</option>
+                  <option>Net 21</option>
                   <option>Net 30</option>
                   <option>Net 45</option>
                   <option>Net 60</option>

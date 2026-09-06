@@ -382,6 +382,7 @@ function toDaily(
     workDate: r.workDate,
     billingWeekEnd: billingWeekFor(r)?.end ?? "",
     billingWeekOverridden: billingWeekFor(r)?.overridden ?? false,
+    billingWeekLate: r.billingWeekLate ?? false,
     submittedAt: r.submittedAt,
     status: r.status as DailyReport["status"],
     tone: r.tone as Tone,

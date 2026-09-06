@@ -1,7 +1,8 @@
 import Link from "next/link";
-import { ChevronRight, FileText, Map as MapIcon, Users } from "lucide-react";
+import { ChevronRight, Clock, FileText, Map as MapIcon, Users } from "lucide-react";
 
 import { getProjects } from "@/data/queries";
+import { CUTOFF_LABEL } from "@/lib/billing";
 import { toneStyles } from "@/lib/tone";
 import { projectImageSrc as cover } from "@/lib/project-image";
 import { PageShell } from "@/components/common/page-shell";
@@ -46,6 +47,20 @@ export default async function DailyBillingSheetPage({
         </Link>
       }
     >
+      {/* The deadline, before they pick anything.
+          Transparency is the point: a crew held to a cutoff they were told
+          about once, months ago, in an email, has not really been told. */}
+      <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-warning/40 bg-warning/[0.06] px-3 py-2.5">
+        <Clock className="size-4 shrink-0 text-warning" />
+        <span className="text-[12.5px] font-semibold text-foreground">
+          Weekly cutoff — {CUTOFF_LABEL}
+        </span>
+        <span className="text-[12px] text-muted-foreground">
+          Get the week&rsquo;s dailies in by then. Anything after bills on the following
+          week&rsquo;s invoice, which puts your pay back a week.
+        </span>
+      </div>
+
       {projects.length === 0 ? (
         <div className="surface grid place-items-center px-6 py-14 text-center">
           <p className="text-[13px] text-muted-foreground">

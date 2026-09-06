@@ -382,6 +382,8 @@ export interface DailyReport {
   billingWeekEnd: string;
   /** Whether that Friday came from an override rather than the work date. */
   billingWeekOverridden: boolean;
+  /** …and whether the reason was missing the Friday cutoff, not the office. */
+  billingWeekLate: boolean;
   submittedAt: string;
   status: DailyStatus;
   tone: Tone;
