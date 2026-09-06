@@ -4964,6 +4964,7 @@ export async function createTask(input: {
   title: string;
   detail?: string;
   priority?: string;
+  category?: string;
   dueDate?: string;
   assigneeUserId?: string | null;
   assigneeSubId?: string | null;
@@ -4989,6 +4990,13 @@ export async function createTask(input: {
       priority: (["LOW", "NORMAL", "HIGH", "URGENT"].includes(input.priority ?? "")
         ? input.priority
         : "NORMAL") as never,
+      // Anything unrecognised falls to GENERAL rather than being guessed at.
+      // A wrong category is worse than none: it is what somebody filters on.
+      category: (["COMPLIANCE", "FIELD_ISSUE", "MATERIALS", "SAFETY", "ADMIN", "GENERAL"].includes(
+        input.category ?? "",
+      )
+        ? input.category
+        : "GENERAL") as never,
       dueDate: input.dueDate ?? "",
       assigneeUserId: input.assigneeUserId || null,
       assigneeSubId: input.assigneeSubId || null,

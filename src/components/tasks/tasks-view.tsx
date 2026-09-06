@@ -12,6 +12,7 @@ import {
   MapPin,
   MessageSquare,
   Plus,
+  Search,
   Trash2,
   TriangleAlert,
   User,
@@ -78,22 +79,67 @@ export function TasksView({
 }) {
   const router = useRouter();
   const [adding, setAdding] = React.useState(false);
-  const [filter, setFilter] = React.useState<"OPEN" | "ALL" | "MINE">("OPEN");
+  const [query, setQuery] = React.useState("");
+  const [status, setStatus] = React.useState("OPEN");
+  const [priority, setPriority] = React.useState("ALL");
+  const [project, setProject] = React.useState("ALL");
+  const [assignee, setAssignee] = React.useState("ALL");
 
   const live = tasks.filter((t) => t.status !== "DONE" && t.status !== "CANCELLED");
-  const shown =
-    filter === "ALL" ? tasks : filter === "MINE" ? live : live;
 
-  const overdue = live.filter((t) => t.overdue).length;
-  const blocked = live.filter((t) => t.status === "BLOCKED").length;
+  /** The five figures worth knowing before reading a single row. */
+  const counts = {
+    open: live.length,
+    dueToday: live.filter((t) => t.dueToday).length,
+    overdue: live.filter((t) => t.overdue).length,
+    high: live.filter((t) => t.priority === "HIGH" || t.priority === "URGENT").length,
+    blocked: live.filter((t) => t.status === "BLOCKED").length,
+  };
+
+  /** Only offer a filter value something actually has. */
+  const projects = React.useMemo(
+    () => [...new Set(tasks.map((t) => t.projectName).filter(Boolean))].sort(),
+    [tasks],
+  );
+  const people = React.useMemo(
+    () => [...new Set(tasks.map((t) => t.assigneeName).filter(Boolean))].sort(),
+    [tasks],
+  );
+
+  const shown = React.useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const kept = tasks.filter((t) => {
+      const isLive = t.status !== "DONE" && t.status !== "CANCELLED";
+      if (status === "OPEN" && !isLive) return false;
+      if (status === "OVERDUE" && !t.overdue) return false;
+      if (status === "DUE_TODAY" && !t.dueToday) return false;
+      if (status === "BLOCKED" && t.status !== "BLOCKED") return false;
+      if (status === "DONE" && t.status !== "DONE") return false;
+      if (priority !== "ALL" && t.priority !== priority) return false;
+      if (project !== "ALL" && t.projectName !== project) return false;
+      if (assignee !== "ALL" && t.assigneeName !== assignee) return false;
+      if (q && ![t.title, t.detail, t.assigneeName, t.projectName, t.category]
+        .join(" ").toLowerCase().includes(q)) return false;
+      return true;
+    });
+    // Worst first: how late it is, then priority, then the date itself. The
+    // office opens this screen to find what is on fire, not to read a diary.
+    const rank = (t: TaskRow) =>
+      (t.overdue ? 0 : t.dueToday ? 1 : t.dueDate ? 2 : 3) * 100 -
+      (t.priority === "URGENT" ? 20 : t.priority === "HIGH" ? 10 : 0);
+    return [...kept].sort(
+      (a, b) => rank(a) - rank(b) || b.overdueDays - a.overdueDays || (a.dueDate || "9").localeCompare(b.dueDate || "9"),
+    );
+  }, [tasks, query, status, priority, project, assignee]);
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat label="Open" value={live.length} hint="not finished" />
-        <Stat label="Overdue" value={overdue} hint={overdue ? "past the date" : "none late"} tone={overdue ? "text-critical" : undefined} />
-        <Stat label="Blocked" value={blocked} hint={blocked ? "waiting on something" : "nothing stuck"} tone={blocked ? "text-warning" : undefined} />
-        <Stat label="Done" value={tasks.filter((t) => t.status === "DONE").length} hint="closed out" />
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
+        <Chip label="Open" value={counts.open} hint="not finished" active={status === "OPEN"} onClick={() => setStatus("OPEN")} />
+        <Chip label="Due today" value={counts.dueToday} hint="on the date" tone="warning" active={status === "DUE_TODAY"} onClick={() => setStatus("DUE_TODAY")} />
+        <Chip label="Overdue" value={counts.overdue} hint="past the date" tone="critical" active={status === "OVERDUE"} onClick={() => setStatus("OVERDUE")} />
+        <Chip label="High" value={counts.high} hint="high or urgent" tone="warning" active={priority === "HIGH"} onClick={() => setPriority(priority === "HIGH" ? "ALL" : "HIGH")} />
+        <Chip label="Blocked" value={counts.blocked} hint="waiting on something" tone="critical" active={status === "BLOCKED"} onClick={() => setStatus("BLOCKED")} />
       </div>
 
       <Panel>
@@ -107,21 +153,33 @@ export function TasksView({
           count={shown.length}
           icon={<ClipboardList className="size-3.5" />}
         >
-          <div className="flex rounded-lg border border-border p-0.5">
-            {(["OPEN", "ALL"] as const).map((f) => (
-              <button
-                key={f}
-                type="button"
-                onClick={() => setFilter(f)}
-                className={cn(
-                  "focus-ring rounded-md px-2 py-1 text-[11.5px] font-medium transition",
-                  filter === f ? "bg-foreground/[0.08] text-foreground" : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {f === "OPEN" ? `Open ${live.length}` : `All ${tasks.length}`}
-              </button>
-            ))}
-          </div>
+          {/* Four ways to narrow, because "everything that needs attention"
+              is only useful if you can get to the part that is yours. */}
+          <label className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search tasks…"
+              aria-label="Search tasks"
+              className="focus-ring h-8 w-[170px] rounded-lg bg-foreground/[0.05] pl-7 pr-2.5 text-[12px] text-foreground outline-none placeholder:text-muted-foreground/70"
+            />
+          </label>
+          <Picker value={status} onChange={setStatus} label="Status" options={[
+            ["OPEN", `Open ${counts.open}`], ["DUE_TODAY", "Due today"], ["OVERDUE", "Overdue"],
+            ["BLOCKED", "Blocked"], ["DONE", "Done"], ["ALL", `All ${tasks.length}`],
+          ]} />
+          <Picker value={priority} onChange={setPriority} label="Priority" options={[
+            ["ALL", "Any priority"], ["URGENT", "Urgent"], ["HIGH", "High"], ["NORMAL", "Normal"], ["LOW", "Low"],
+          ]} />
+          {projects.length > 1 ? (
+            <Picker value={project} onChange={setProject} label="Project"
+              options={[["ALL", "Any project"], ...projects.map((p) => [p, p] as [string, string])]} />
+          ) : null}
+          {people.length > 1 ? (
+            <Picker value={assignee} onChange={setAssignee} label="Assignee"
+              options={[["ALL", "Anyone"], ...people.map((p) => [p, p] as [string, string])]} />
+          ) : null}
           {canManage ? (
             <button
               type="button"
@@ -152,7 +210,7 @@ export function TasksView({
                 ? canManage
                   ? "Nothing assigned yet. A task can be anything that needs chasing — a COI, a damaged ped, a truck that needs moving."
                   : "Nothing assigned to your crew."
-                : "Nothing open. Switch to All to see what's been closed."}
+                : "Nothing matches these filters."}
             </p>
           </PanelBody>
         ) : (
@@ -167,15 +225,83 @@ export function TasksView({
   );
 }
 
-function Stat({ label, value, hint, tone }: { label: string; value: number; hint?: string; tone?: string }) {
+/**
+ * One of the five figures across the top — and the filter for it.
+ *
+ * A count that tells you four tasks are overdue and then makes you go and find
+ * them is half a feature. Pressing it shows exactly those four.
+ */
+function Chip({
+  label,
+  value,
+  hint,
+  tone,
+  active,
+  onClick,
+}: {
+  label: string;
+  value: number;
+  hint?: string;
+  tone?: "warning" | "critical";
+  active?: boolean;
+  onClick: () => void;
+}) {
+  const hot = value > 0 && tone;
   return (
-    <div className="rounded-xl border border-border/70 bg-foreground/[0.02] px-3 py-2.5">
-      <p className="text-[10.5px] uppercase tracking-wider text-muted-foreground">{label}</p>
-      <p className={cn("num mt-0.5 text-[19px] font-semibold tracking-[-0.02em] text-foreground", tone)}>
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "focus-ring rounded-xl border px-3 py-2.5 text-left transition-colors",
+        active
+          ? "border-brand/60 bg-brand/[0.1]"
+          : "border-border/70 bg-foreground/[0.02] hover:border-brand/40",
+      )}
+    >
+      <p className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {label}
+      </p>
+      <p
+        className={cn(
+          "num mt-0.5 text-[21px] font-bold tracking-[-0.02em]",
+          hot === "critical" ? "text-critical" : hot === "warning" ? "text-warning" : "text-foreground",
+        )}
+      >
         {value}
       </p>
       {hint ? <p className="text-[11px] text-muted-foreground">{hint}</p> : null}
-    </div>
+    </button>
+  );
+}
+
+function Picker({
+  value,
+  onChange,
+  label,
+  options,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  label: string;
+  options: [string, string][];
+}) {
+  const on = value !== "ALL" && value !== "OPEN";
+  return (
+    <select
+      value={value}
+      aria-label={label}
+      onChange={(e) => onChange(e.target.value)}
+      className={cn(
+        "focus-ring h-8 max-w-[150px] cursor-pointer rounded-lg px-2 text-[12px] font-medium outline-none transition-colors",
+        on ? "bg-brand text-white" : "bg-foreground/[0.05] text-foreground",
+      )}
+    >
+      {options.map(([v, l]) => (
+        <option key={v} value={v}>
+          {l}
+        </option>
+      ))}
+    </select>
   );
 }
 
@@ -184,6 +310,51 @@ function Stat({ label, value, hint, tone }: { label: string; value: number; hint
  * ------------------------------------------------------------------ */
 
 type Detail = Awaited<ReturnType<typeof getTaskDetail>>;
+
+/** What a category is called in front of a person. */
+const CATEGORY: Record<string, string> = {
+  COMPLIANCE: "Compliance",
+  FIELD_ISSUE: "Field issue",
+  MATERIALS: "Materials",
+  SAFETY: "Safety",
+  ADMIN: "Admin",
+  GENERAL: "General",
+};
+
+function RowAction({
+  label,
+  onClick,
+  tone,
+  busy,
+}: {
+  label: string;
+  onClick: () => void;
+  tone?: "success" | "warning";
+  busy?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={(e) => {
+        // The whole row is a toggle; an action inside it must not also open it.
+        e.stopPropagation();
+        onClick();
+      }}
+      className={cn(
+        "focus-ring inline-flex h-7 items-center gap-1 rounded-lg border px-2.5 text-[11.5px] font-medium transition-colors disabled:opacity-40",
+        tone === "success"
+          ? "border-success/40 text-success hover:bg-success/[0.1]"
+          : tone === "warning"
+            ? "border-warning/40 text-warning hover:bg-warning/[0.1]"
+            : "border-border text-foreground hover:bg-foreground/[0.05]",
+      )}
+    >
+      {busy ? <Loader2 className="size-3 animate-spin" /> : null}
+      {label}
+    </button>
+  );
+}
 
 function TaskRowItem({ task: t, canManage }: { task: TaskRow; canManage: boolean }) {
   const router = useRouter();
@@ -222,6 +393,27 @@ function TaskRowItem({ task: t, canManage }: { task: TaskRow; canManage: boolean
 
   return (
     <li className={cn("p-3", t.overdue && "bg-critical/[0.02]")}>
+      {/* Lateness and kind, before the title.
+          "Overdue" told you a task was past its date; it did not tell you
+          whether that was yesterday or a month ago, and those are different
+          jobs. The category says whether this is paperwork or a hole in the
+          ground without having to read the sentence. */}
+      <div className="mb-1.5 flex flex-wrap items-center gap-2">
+        {t.overdue ? (
+          <span className="inline-flex items-center gap-1.5 rounded bg-critical/15 px-1.5 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.08em] text-critical">
+            <TriangleAlert className="size-3" />
+            Overdue {t.overdueDays} {t.overdueDays === 1 ? "day" : "days"}
+          </span>
+        ) : t.dueToday ? (
+          <span className="rounded bg-warning/15 px-1.5 py-0.5 text-[10.5px] font-bold uppercase tracking-[0.08em] text-warning">
+            Due today
+          </span>
+        ) : null}
+        <span className="text-[10.5px] font-bold uppercase tracking-[0.09em] text-muted-foreground">
+          {CATEGORY[t.category] ?? t.category}
+        </span>
+      </div>
+
       <div className="flex items-start gap-3">
         {/* The photograph, in the list. Recognising a task by the thing itself
             is faster than reading a title, and it is the reason the photo was
@@ -294,14 +486,65 @@ function TaskRowItem({ task: t, canManage }: { task: TaskRow; canManage: boolean
             {t.dueDate ? (
               <span className={cn("num", t.overdue && "font-medium text-critical")}>
                 due {t.dueDate}
-                {t.overdue ? " · overdue" : ""}
               </span>
             ) : null}
             {t.completedAt ? (
               <span className="text-success">done {t.completedAt} by {t.completedBy}</span>
             ) : null}
           </span>
+
+          {/* What evidence is on it, without opening it.
+              The two photo kinds answer different questions — "is there a
+              picture of what is wrong" and "is there a picture proving it was
+              fixed" — and a single count answered neither. */}
+          <span className="mt-1.5 flex flex-wrap items-center gap-3 text-[11px]">
+            <span
+              className={cn(
+                "inline-flex items-center gap-1",
+                t.problemPhotos > 0 ? "text-foreground/80" : "text-muted-foreground/60",
+              )}
+            >
+              <Camera className="size-3" /> Issue {t.problemPhotos}
+            </span>
+            <span
+              className={cn(
+                "inline-flex items-center gap-1",
+                t.resolutionPhotos > 0 ? "text-success" : "text-muted-foreground/60",
+              )}
+            >
+              <Camera className="size-3" /> Resolution {t.resolutionPhotos}
+            </span>
+            <span
+              className={cn(
+                "inline-flex items-center gap-1",
+                t.commentCount > 0 ? "text-foreground/80" : "text-muted-foreground/60",
+              )}
+            >
+              <MessageSquare className="size-3" /> {t.commentCount}
+            </span>
+          </span>
         </button>
+
+        {/* The three moves that get made ninety times out of a hundred, on the
+            row. Opening a task to press Start is a click spent on nothing. */}
+        {canManage && t.status !== "DONE" && t.status !== "CANCELLED" ? (
+          <span className="hidden shrink-0 items-center gap-1.5 lg:flex">
+            {t.status === "OPEN" ? (
+              <RowAction label="Start" onClick={() => void move("IN_PROGRESS")} busy={busy === "IN_PROGRESS"} />
+            ) : null}
+            {t.status !== "BLOCKED" ? (
+              <RowAction
+                label="Blocked"
+                tone="warning"
+                onClick={() => {
+                  setOpen(true);
+                  setNoteFor("BLOCKED");
+                }}
+              />
+            ) : null}
+            <RowAction label="Complete" tone="success" onClick={() => void move("DONE")} busy={busy === "DONE"} />
+          </span>
+        ) : null}
 
         <ChevronDown
           className={cn("mt-1 size-4 shrink-0 text-muted-foreground transition", open && "rotate-180")}
@@ -883,6 +1126,7 @@ function NewTaskForm({
   const [title, setTitle] = React.useState("");
   const [detail, setDetail] = React.useState("");
   const [priority, setPriority] = React.useState("NORMAL");
+  const [category, setCategory] = React.useState("GENERAL");
   const [dueDate, setDueDate] = React.useState("");
   const [projectId, setProjectId] = React.useState("");
   // One control, two kinds of assignee — "u:<id>" or "c:<id>" — because a task
@@ -900,6 +1144,7 @@ function NewTaskForm({
       title,
       detail,
       priority,
+      category,
       dueDate,
       projectId: projectId || null,
       assigneeUserId: assignee.startsWith("u:") ? assignee.slice(2) : null,
@@ -954,6 +1199,19 @@ function NewTaskForm({
             {assignees.projects.map((p) => (
               <option key={p.id} value={p.id}>{p.name.trim()}</option>
             ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1">
+          {/* What kind of thing this is — the label somebody scans the list by
+              before they read a single title. */}
+          <span className="text-[11px] font-medium text-muted-foreground">Kind</span>
+          <select value={category} onChange={(e) => setCategory(e.target.value)} className={cn(field, "appearance-none")}>
+            <option value="GENERAL">General</option>
+            <option value="COMPLIANCE">Compliance</option>
+            <option value="FIELD_ISSUE">Field issue</option>
+            <option value="MATERIALS">Materials</option>
+            <option value="SAFETY">Safety</option>
+            <option value="ADMIN">Admin</option>
           </select>
         </label>
         <label className="flex flex-col gap-1">

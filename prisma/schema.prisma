@@ -628,6 +628,27 @@ enum TaskStatus {
   CANCELLED
 }
 
+/// What kind of thing a task is.
+///
+/// Not a label for tidiness — it is what tells somebody scanning the list
+/// whether this is paperwork or a hole in the ground before they read the
+/// title. A lapsed COI and a damaged flowerpot need different people and
+/// different urgency, and they read identically without this.
+enum TaskCategory {
+  /// Insurance, licences, packets — paperwork that blocks work.
+  COMPLIANCE
+  /// Something wrong on the ground: damage, a rework, a miss.
+  FIELD_ISSUE
+  /// Material to move, order, return or count.
+  MATERIALS
+  /// Somebody could get hurt.
+  SAFETY
+  /// Billing, invoicing, the office.
+  ADMIN
+  /// Everything that is none of the above rather than a wrong guess.
+  GENERAL
+}
+
 enum TaskPriority {
   LOW
   NORMAL
@@ -650,6 +671,7 @@ model Task {
   detail   String       @default("")
   status   TaskStatus   @default(OPEN)
   priority TaskPriority @default(NORMAL)
+  category TaskCategory @default(GENERAL)
   /// YYYY-MM-DD. Blank means no date, which is different from overdue.
   dueDate  String       @default("")
 

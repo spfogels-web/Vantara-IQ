@@ -17,7 +17,7 @@ import { statementMoney } from "@/lib/fast-pay";
 import { packetStatus } from "@/lib/vendor-packet";
 import { badgeReadiness } from "@/lib/badge";
 import { isStaff } from "@/lib/auth";
-import { addDays, balanceOf, billingWeekFor, isPastDue, weekOf } from "@/lib/billing";
+import { addDays, balanceOf, billingWeekFor, easternDate, isPastDue, weekOf } from "@/lib/billing";
 import { canElectFastPay, dueDateFromCutoff } from "@/lib/fast-pay";
 import { schedulePosition, type SchedulePosition } from "@/lib/schedule";
 import {
@@ -3976,11 +3976,28 @@ export interface TaskRow {
   previewUrl: string | null;
   photoCount: number;
   hasResolution: boolean;
+  /** Paperwork, a hole in the ground, or something somebody could get hurt by. */
+  category: string;
+  /**
+   * How late, in days.
+   *
+   * "Overdue 10 days" and "overdue" are different sentences to whoever decides
+   * what to chase first, and the second is all the list said about a task
+   * three weeks past its date.
+   */
+  overdueDays: number;
+  /** Due today and not yet done — the other thing worth surfacing. */
+  dueToday: boolean;
+  /** Counted apart, because they answer different questions. */
+  problemPhotos: number;
+  resolutionPhotos: number;
+  commentCount: number;
 }
 
 const TASK_SELECT = {
   id: true, title: true, detail: true, status: true, priority: true,
   dueDate: true, statusNote: true, assigneeUserId: true, assigneeSubId: true,
+  category: true,
   projectId: true, createdByEmail: true, completedAt: true, completedBy: true,
   createdAt: true,
   assigneeUser: { select: { name: true, email: true } },
@@ -3988,20 +4005,27 @@ const TASK_SELECT = {
   project: { select: { name: true } },
   // Just the URL and kind — the list needs one image, not every record.
   photos: { select: { url: true, kind: true }, orderBy: { createdAt: "asc" as const } },
+  // A count, not the thread. The list says whether there is a conversation;
+  // reading it is what opening the task is for.
+  _count: { select: { comments: true } },
 };
 
 function toTaskRow(t: {
   id: string; title: string; detail: string; status: string; priority: string;
-  dueDate: string; statusNote: string; assigneeUserId: string | null;
+  dueDate: string; statusNote: string; assigneeUserId: string | null; category: string;
   assigneeSubId: string | null; projectId: string | null; createdByEmail: string;
   completedAt: Date | null; completedBy: string; createdAt: Date;
   assigneeUser: { name: string; email: string } | null;
   assigneeSub: { company: string } | null;
   project: { name: string } | null;
   photos: { url: string; kind: string }[];
+  _count: { comments: number };
 }): TaskRow {
-  const today = new Date().toISOString().slice(0, 10);
+  // Eastern, like everything else here that compares a date to "now". The
+  // server runs UTC, and after 8pm it would call a task due tomorrow overdue.
+  const today = easternDate(new Date()) ?? new Date().toISOString().slice(0, 10);
   const done = t.status === "DONE" || t.status === "CANCELLED";
+  const late = Boolean(t.dueDate) && !done && t.dueDate < today;
   return {
     id: t.id,
     title: t.title,
@@ -4022,13 +4046,27 @@ function toTaskRow(t: {
     completedBy: t.completedBy,
     createdAt: t.createdAt.toISOString().slice(0, 10),
     // A blank due date is not overdue; it simply has no date.
-    overdue: Boolean(t.dueDate) && !done && t.dueDate < today,
+    overdue: late,
+    category: t.category,
+    overdueDays: late ? daysBetween(t.dueDate, today) : 0,
+    dueToday: Boolean(t.dueDate) && !done && t.dueDate === today,
     // The fault leads; only fall back to a resolution shot when there is no
     // photo of the problem, which usually means it was found and fixed at once.
     previewUrl: t.photos.find((p) => p.kind === "PROBLEM")?.url ?? t.photos[0]?.url ?? null,
     photoCount: t.photos.length,
     hasResolution: t.photos.some((p) => p.kind === "RESOLUTION"),
+    problemPhotos: t.photos.filter((p) => p.kind === "PROBLEM").length,
+    resolutionPhotos: t.photos.filter((p) => p.kind === "RESOLUTION").length,
+    commentCount: t._count.comments,
   };
+}
+
+/** Whole days between two YYYY-MM-DD dates. */
+function daysBetween(from: string, to: string): number {
+  const a = Date.parse(`${from}T00:00:00Z`);
+  const b = Date.parse(`${to}T00:00:00Z`);
+  if (Number.isNaN(a) || Number.isNaN(b)) return 0;
+  return Math.max(0, Math.round((b - a) / 86_400_000));
 }
 
 /**
