@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { MessageButton } from "@/components/messages/message-button";
 import { toneStyles } from "@/lib/tone";
 import type { ComplianceStatus, Project, Subcontractor } from "@/lib/types";
 import { formatNumber, formatPercent, initials } from "@/lib/format";
@@ -279,8 +280,9 @@ export function SubcontractorsView({
                     </span>
                   </span>
 
-                  <span className="shrink-0">
+                  <span className="flex shrink-0 items-center gap-1.5">
                     <PacketChip sub={s} />
+                    <MessageButton subcontractorId={s.id} title={s.company} label="Message" />
                   </span>
 
                   <span

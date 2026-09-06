@@ -70,6 +70,7 @@ import {
 } from "@/lib/sub-pay";
 import { describeFileRejection } from "@/lib/document-storage";
 import { getCrewBadges, getCustomerRollup, getSubInvoices, getVendorPacket } from "@/data/queries";
+import { getTaskCommunication } from "@/data/messages";
 import {
   assertOwnSubcontractor,
   assertProjectAccess,
@@ -5207,7 +5208,12 @@ export async function getTaskDetail(id: string) {
   });
   if (!task) return null;
 
+  // The last few things said about this task, and a way into the thread.
+  // Never the whole conversation — the task page is not a second inbox.
+  const comms = await getTaskCommunication(id).catch(() => null);
+
   return {
+    comms,
     photos: task.photos.map((p) => ({
       id: p.id,
       url: p.url,

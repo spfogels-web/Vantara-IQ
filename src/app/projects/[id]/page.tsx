@@ -24,6 +24,7 @@ import { ProjectCrews } from "@/components/projects/project-crews";
 import { ProjectValue } from "@/components/projects/project-value";
 import { getCurrentUser, isStaff } from "@/lib/auth";
 import { PageShell } from "@/components/common/page-shell";
+import { MessageButton } from "@/components/messages/message-button";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { StatusPill } from "@/components/common/status-pill";
 import { ProjectHeaderActions, ProjectMapPanel } from "@/components/projects/project-detail-client";
@@ -107,6 +108,15 @@ export default async function ProjectDetailPage({
             completedAt={project.completedAt}
             canEdit={staff}
           />
+          {/* One thread per job, for everybody on it. */}
+          {staff ? (
+            <MessageButton
+              projectId={project.id}
+              title={project.name}
+              label="Message project team"
+              variant="solid"
+            />
+          ) : null}
           <ProjectHeaderActions projectId={project.id} photoUrl={project.photoUrl} />
         </div>
       </div>

@@ -17,6 +17,7 @@ export const navSections: NavSection[] = [
       { label: "Customers", href: "/customers", icon: "customers" },
       { label: "Materials", href: "/materials", icon: "materials" },
       { label: "Tasks", href: "/tasks", icon: "clipboard" },
+      { label: "Messages", href: "/messages", icon: "message" },
       { label: "Documents", href: "/documents", icon: "document" },
     ],
   },
@@ -68,6 +69,7 @@ export const subNavSections: NavSection[] = [
       { label: "Company profile", href: "/company", icon: "users" },
       { label: "Yard badges", href: "/badges", icon: "idCard" },
       { label: "Tasks", href: "/tasks", icon: "clipboard" },
+      { label: "Messages", href: "/messages", icon: "message" },
     ],
   },
 ];

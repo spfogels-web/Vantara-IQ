@@ -21,6 +21,8 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { MessageButton } from "@/components/messages/message-button";
+import { TaskCommunication } from "@/components/messages/task-communication";
 import { formatCoords } from "@/lib/exif";
 import type { TaskRow } from "@/data/queries";
 import {
@@ -543,6 +545,10 @@ function TaskRowItem({ task: t, canManage }: { task: TaskRow; canManage: boolean
               />
             ) : null}
             <RowAction label="Complete" tone="success" onClick={() => void move("DONE")} busy={busy === "DONE"} />
+            {/* Straight into the thread for whoever this task is on. The
+                conversation is picked from the assignment rather than chosen,
+                and it stays linked to the task afterwards. */}
+            <MessageButton taskId={t.id} label="Message" />
           </span>
         ) : null}
 
@@ -636,6 +642,11 @@ function TaskRowItem({ task: t, canManage }: { task: TaskRow; canManage: boolean
           ) : null}
 
           <TaskPhotos taskId={t.id} detail={detail} onChanged={() => { setDetail(null); void load(); }} />
+          {/* What has actually been sent to the crew about this, and a way
+              into the thread. Distinct from the internal note thread below:
+              one is us talking to ourselves, the other is us talking to them. */}
+          <TaskCommunication taskId={t.id} comms={detail?.comms ?? null} />
+
           <TaskThread taskId={t.id} detail={detail} onChanged={() => { setDetail(null); void load(); }} />
         </div>
       ) : null}

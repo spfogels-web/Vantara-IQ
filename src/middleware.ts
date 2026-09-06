@@ -66,6 +66,7 @@ const SUB_ALLOWED_PREFIXES = [
   "/badges",
   "/pay",
   "/tasks",
+  "/messages",
   "/support",
   "/settings",
   "/api/daily-sheet",

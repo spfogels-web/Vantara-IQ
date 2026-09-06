@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import { applyOptOut } from "@/lib/sms";
 import { HELP_REPLY } from "@/lib/sms-consent";
 import { notifyStaff } from "@/lib/notify";
+import { handleInboundSms } from "@/lib/sms-inbound";
 
 export const runtime = "nodejs";
 
@@ -98,14 +99,31 @@ export async function POST(request: Request) {
     );
   }
 
-  // A real reply from a real person. It goes to the office rather than nowhere.
+  // A real reply from a real person.
+  //
+  // It used to become a notification and nothing else — a line in a list, with
+  // no way to answer it and nothing tying it to the job it was about. Now it
+  // lands in the conversation that person is in, and the notification is the
+  // pointer to it rather than the only copy.
   if (body) {
-    await notifyStaff({
-      title: `Text reply from ${from}`,
-      detail: body.slice(0, 500),
-      category: "crew",
-      tone: "info",
-    });
+    const filed = await handleInboundSms({
+      from,
+      body,
+      providerMessageId: params.MessageSid ?? params.SmsSid ?? "",
+    }).catch(() => null);
+
+    // A retry of a webhook we already handled is not news. Twilio resends
+    // anything it did not get a 200 from, and notifying twice on one text is
+    // how an office learns to ignore notifications.
+    if (!filed?.duplicate) {
+      await notifyStaff({
+        title: `New message from ${filed?.senderName ?? from}`,
+        detail: body.slice(0, 500),
+        category: "crew",
+        tone: "info",
+        ...(filed?.conversationId ? { href: `/messages?c=${filed.conversationId}` } : {}),
+      });
+    }
   }
   return empty();
 }

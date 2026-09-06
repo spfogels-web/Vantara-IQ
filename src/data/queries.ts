@@ -17,6 +17,7 @@ import { statementMoney } from "@/lib/fast-pay";
 import { packetStatus } from "@/lib/vendor-packet";
 import { badgeReadiness } from "@/lib/badge";
 import { isStaff } from "@/lib/auth";
+import { getUnreadMessageCount } from "@/data/messages";
 import { addDays, balanceOf, billingWeekFor, easternDate, isPastDue, weekOf } from "@/lib/billing";
 import { canElectFastPay, dueDateFromCutoff } from "@/lib/fast-pay";
 import { schedulePosition, type SchedulePosition } from "@/lib/schedule";
@@ -2210,6 +2211,8 @@ export async function getNavBadges(): Promise<Record<string, number>> {
     if (mine > 0) badges["/dailies"] = mine;
     if (anyBadges === 0) badges["/badges"] = 1;
     else if (badgesOutstanding > 0) badges["/badges"] = badgesOutstanding;
+    const unread = await getUnreadMessageCount();
+    if (unread > 0) badges["/messages"] = unread;
     return badges;
   }
 
@@ -2224,6 +2227,9 @@ export async function getNavBadges(): Promise<Record<string, number>> {
   if (atRisk > 0) badges["/projects"] = atRisk;
   if (awaiting > 0) badges["/dailies"] = awaiting;
   if (subsPending + badgesToReview > 0) badges["/subcontractors"] = subsPending + badgesToReview;
+  // Unread conversations, counted against this person's own read marks.
+  const unread = await getUnreadMessageCount();
+  if (unread > 0) badges["/messages"] = unread;
   return badges;
 }
 

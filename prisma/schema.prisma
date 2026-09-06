@@ -87,6 +87,9 @@ model User {
   /// onboarded the company. Only invited users get anything else.
   subUserRole     SubUserRole    @default(OWNER)
   tasks           Task[]         @relation("TaskAssignee")
+  conversationSeat ConversationParticipant[] @relation("ConversationMember")
+  messagesSent     Message[]                 @relation("MessageAuthor")
+  messagesTo       MessageDelivery[]         @relation("MessageRecipient")
   createdAt       DateTime       @default(now())
 }
 
@@ -168,6 +171,7 @@ model CustomerRate {
 }
 
 model Project {
+  conversations    Conversation[]
   id               String            @id @default(cuid())
   number           String            @default("")
   name             String
@@ -402,6 +406,9 @@ model Subcontractor {
   /// a certificate.
   showOwnerDetailsToCrew Boolean @default(false)
   userInvites            SubUserInvite[]
+  conversations          Conversation[]
+  conversationSeat       ConversationParticipant[] @relation("ConversationCrew")
+  messageContacts        MessageContact[]
   smsConsentAt   DateTime?
   /// Set the moment they reply STOP. Kept forever rather than cleared, so a
   /// re-onboarding can never quietly resubscribe someone who opted out.
@@ -666,6 +673,7 @@ enum TaskPriority {
 /// Deliberately not a project requirement: half of what needs chasing (a COI, a
 /// rate card, a truck) belongs to no job at all.
 model Task {
+  conversations Conversation[]
   id       String       @id @default(cuid())
   title    String
   detail   String       @default("")
@@ -1981,3 +1989,291 @@ model SubUserInvite {
 
   @@index([subcontractorId])
 }
+
+/* ------------------------------------------------------------------ *
+ * Messaging.
+ *
+ * A conversation is attached to the work it is about. That is the whole
+ * point of it living here rather than in anybody's phone: a foreman's text
+ * about a damaged ped is the only record of why a daily was short, and it
+ * currently lives in a thread nobody else can read.
+ *
+ * Built so SMS can be switched on later without moving anything. A message is
+ * stored once; how it reached somebody is a separate row per recipient per
+ * channel, because "sent" and "sent to Jose's phone and failed on Marlon's"
+ * are different facts.
+ * ------------------------------------------------------------------ */
+
+enum ConversationType {
+  /// One person to one person.
+  DIRECT
+  /// The office and a crew. One thread here, one SMS each on the way out.
+  CREW
+  /// Everybody on a job.
+  PROJECT
+  /// The office and a subcontracting company.
+  SUBCONTRACTOR
+}
+
+enum MessageDirection {
+  /// From Fortitude outwards.
+  OUTBOUND
+  /// From a crew, a sub or a handset, inwards.
+  INBOUND
+}
+
+enum MessageKind {
+  /// Somebody typed it.
+  USER
+  /// The app recording something that happened — a task assigned, a
+  /// participant added, an SMS that failed. Never a chat bubble.
+  SYSTEM
+  /// Sent by a rule rather than a person. Looks like a message because it is
+  /// one, but it is attributable to the automation that raised it.
+  AUTOMATED
+}
+
+enum DeliveryChannel {
+  IN_APP
+  SMS
+}
+
+enum DeliveryStatus {
+  /// Accepted by us, not yet handed to a provider.
+  QUEUED
+  /// Handed over.
+  SENT
+  /// The carrier says it arrived.
+  DELIVERED
+  FAILED
+  /// An inbound message — it arrived here.
+  RECEIVED
+  /// Deliberately not attempted: no consent, no number, channel disabled.
+  /// Distinct from FAILED, which means we tried.
+  SKIPPED
+}
+
+/// Whether somebody may lawfully be texted.
+///
+/// UNKNOWN is the default and it means "do not send". Consent is a thing
+/// somebody gives, not a thing absent data implies.
+enum SmsConsent {
+  UNKNOWN
+  GRANTED
+  REVOKED
+}
+
+/// Somebody reachable who has no Vantara login.
+///
+/// A crew's second foreman, a customer's inspector, the man who answers the
+/// phone at a supplier. They can be in a conversation and receive a text
+/// without an account, and a number is the identity — normalised to E.164 so
+/// "(864) 555-0134" and "+18645550134" cannot become two people.
+model MessageContact {
+  id   String  @id @default(cuid())
+  name String  @default("")
+  /// E.164. Unique, because that is what stops the same person arriving twice.
+  phoneE164 String @unique
+  email     String @default("")
+
+  /// The company they belong to, when they belong to one.
+  subcontractor   Subcontractor? @relation(fields: [subcontractorId], references: [id], onDelete: SetNull)
+  subcontractorId String?
+
+  consent     SmsConsent @default(UNKNOWN)
+  optInAt     DateTime?
+  optOutAt    DateTime?
+  /// Where the consent came from — the packet, the public page, a staff note.
+  consentSource String   @default("")
+
+  participants ConversationParticipant[]
+  sentMessages Message[]
+  deliveries   MessageDelivery[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([subcontractorId])
+}
+
+model Conversation {
+  id    String           @id @default(cuid())
+  type  ConversationType
+  title String           @default("")
+  /// What it is about, in a few words — "COI request", "Reynolds Rd rework".
+  subject String         @default("")
+
+  /// The work this is attached to. All optional and all indexed: a
+  /// conversation usually has one, occasionally two, and the pairing is what
+  /// stops a second thread being opened for the same thing.
+  project         Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  projectId       String?
+  subcontractor   Subcontractor? @relation(fields: [subcontractorId], references: [id], onDelete: SetNull)
+  subcontractorId String?
+  task            Task?          @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  taskId          String?
+  /// Plain ids rather than relations: a daily or a locate being deleted must
+  /// not take the conversation about it with them.
+  dailyId  String @default("")
+  locateId String @default("")
+
+  createdByUserId String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  /// Denormalised so the inbox can sort without touching every message.
+  lastMessageAt   DateTime  @default(now())
+  archivedAt      DateTime?
+
+  participants ConversationParticipant[]
+  messages     Message[]
+  events       ConversationEvent[]
+
+  @@index([type, lastMessageAt])
+  @@index([projectId])
+  @@index([subcontractorId])
+  @@index([taskId])
+}
+
+/// Somebody in a conversation, and what they have read.
+///
+/// Read state is per participant and never a flag on the conversation: two
+/// people reading the same thread have different unread counts, and one of
+/// them marking it read must not clear it for the other.
+model ConversationParticipant {
+  id             String       @id @default(cuid())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversationId String
+
+  /// Exactly one of these three identifies the participant.
+  user            User?           @relation("ConversationMember", fields: [userId], references: [id], onDelete: Cascade)
+  userId          String?
+  contact         MessageContact? @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  contactId       String?
+  /// A whole company, for a thread with a subcontractor rather than a person.
+  subcontractor   Subcontractor?  @relation("ConversationCrew", fields: [subcontractorId], references: [id], onDelete: Cascade)
+  subcontractorId String?
+
+  joinedAt   DateTime  @default(now())
+  leftAt     DateTime?
+  lastReadAt DateTime?
+
+  @@unique([conversationId, userId])
+  @@unique([conversationId, contactId])
+  @@unique([conversationId, subcontractorId])
+  @@index([userId, lastReadAt])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversationId String
+
+  senderUser      User?           @relation("MessageAuthor", fields: [senderUserId], references: [id], onDelete: SetNull)
+  senderUserId    String?
+  senderContact   MessageContact? @relation(fields: [senderContactId], references: [id], onDelete: SetNull)
+  senderContactId String?
+  /// Kept as text as well, so a deleted account does not erase who said it.
+  senderName      String          @default("")
+
+  direction MessageDirection @default(OUTBOUND)
+  kind      MessageKind      @default(USER)
+  body      String
+
+  attachments MessageAttachment[]
+  deliveries  MessageDelivery[]
+
+  createdAt DateTime @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+model MessageAttachment {
+  id        String  @id @default(cuid())
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  messageId String
+  url       String
+  name      String  @default("")
+  contentType String @default("")
+  bytes     Int     @default(0)
+
+  @@index([messageId])
+}
+
+/// One attempt to get one message to one recipient by one channel.
+///
+/// Separate from the message because a crew thread is one message and five
+/// deliveries, and four of them succeeding is not the same as all five.
+model MessageDelivery {
+  id        String  @id @default(cuid())
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  messageId String
+
+  channel DeliveryChannel
+  status  DeliveryStatus  @default(QUEUED)
+
+  toUser      User?           @relation("MessageRecipient", fields: [toUserId], references: [id], onDelete: SetNull)
+  toUserId    String?
+  toContact   MessageContact? @relation(fields: [toContactId], references: [id], onDelete: SetNull)
+  toContactId String?
+  /// The number it actually went to, frozen — a contact's number can change.
+  toPhoneE164 String          @default("")
+
+  provider String @default("")
+  /// The provider's own id. Unique, and it is what makes webhook processing
+  /// idempotent: the same SID arriving twice updates one row rather than
+  /// creating a second.
+  providerMessageId String? @unique
+  errorCode         String  @default("")
+  errorMessage      String  @default("")
+
+  queuedAt    DateTime  @default(now())
+  sentAt      DateTime?
+  deliveredAt DateTime?
+  failedAt    DateTime?
+
+  @@index([messageId])
+  @@index([status])
+}
+
+/// The audit trail.
+///
+/// Kept apart from messages so the thread stays readable: "Sean added Jose"
+/// belongs in a history, not between two sentences somebody typed. System
+/// messages that a reader should see are Messages with kind SYSTEM; this is
+/// everything else, including provider detail nobody needs in the UI.
+model ConversationEvent {
+  id             String       @id @default(cuid())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversationId String
+
+  /// created | participant_added | participant_removed | message_sent |
+  /// sms_attempted | sms_delivered | sms_failed | sms_received | linked |
+  /// reminder_sent | read
+  kind   String
+  detail String @default("")
+  actor  String @default("")
+  /// Provider payloads and ids, for debugging. Never rendered to a crew.
+  meta   Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+/// A reusable operational message.
+///
+/// The foundation only. Nothing sends on a schedule yet — this is what a
+/// reminder will be written from once consent and configuration allow it.
+model MessageTemplate {
+  id   String @id @default(cuid())
+  /// task_assigned | task_reminder | coi_expiring | daily_missing | locate_clear
+  key  String @unique
+  name String
+  body String
+  /// Which placeholders the body understands, for whoever edits it later.
+  tokens String @default("")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
