@@ -75,6 +75,11 @@ export default async function ProjectsPage({
   // the grid showed three jobs made the two disagree, and the number in
   // bigger type is the one that gets believed.
   const remaining = projects.reduce((s, p) => s + p.remainingFt, 0);
+  // A job with no route on its material list and none typed on the form is
+  // unmeasured, not finished. Adding its 0 into the total quietly understates
+  // the book, so the strip says how many jobs it could not count instead of
+  // letting the figure read as the whole picture.
+  const unmeasured = projects.filter((p) => p.remainingFt === 0 && p.pctComplete < 100).length;
   const atRisk = projects.filter((p) => p.tone === "critical" || p.tone === "warning").length;
   const avgHealth = projects.length
     ? Math.round(projects.reduce((s, p) => s + p.health, 0) / projects.length)
@@ -122,7 +127,13 @@ export default async function ProjectsPage({
               { label: "Avg health", value: String(avgHealth) },
               { label: "At risk", value: String(atRisk), tone: atRisk ? "text-warning" : undefined },
               { label: "Behind schedule", value: String(behind), tone: behind ? "text-critical" : undefined },
-              { label: "Feet remaining", value: formatFeet(remaining) },
+              {
+                label: "Feet remaining",
+                value: formatFeet(remaining),
+                hint: unmeasured
+                  ? `${unmeasured} job${unmeasured === 1 ? "" : "s"} with no route plan yet`
+                  : undefined,
+              },
             ]}
           />
         ) : null}

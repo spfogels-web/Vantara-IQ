@@ -1125,15 +1125,7 @@ export async function getProjects(): Promise<Project[]> {
 
   return rows.map((r) => {
     const p = toProject({ ...r, ...maps.get(r.id) });
-    const b = built.get(r.id);
-    if (!b || b.total === 0) return p;
-
-    // Everything below comes off filed dailies. The stored columns it replaces
-    // are written once when a project is created and never again, which is why
-    // every job read 0 ft at 0/0 pace on health 80 while Charles Hart had
-    // 7,326 ft in the ground.
-    const perDay = b.days > 0 ? Math.round(b.total / b.days) : 0;
-    const assigned = (r.crews ?? []).map((c) => c.company.trim()).filter(Boolean);
+    const b = built.get(r.id) ?? { total: 0, days: 0 };
 
     // `remainingFt` holds the whole route, entered once on the project form.
     // What is left is that less what the dailies have put in the ground, so
@@ -1142,6 +1134,21 @@ export async function getProjects(): Promise<Project[]> {
     // plan for the job. The form field is only the fallback for a job whose
     // list has not been loaded yet.
     const planned = routes.get(r.id) || r.remainingFt;
+
+    // A job with a route and no dailies yet has all of it left, not none of
+    // it. Bailing out here whenever nothing had been filed sent those jobs
+    // back to the stored column, which is 0 on every project nobody typed a
+    // length into — so Hurricane read "0 ft left" against 8,280 ft of plowing
+    // on its own material list, and the projects strip totalled 3,794 ft
+    // against roughly 60,000 ft of route still in the ground.
+    if (b.total === 0 && planned === 0) return p;
+
+    // Everything below comes off filed dailies. The stored columns it replaces
+    // are written once when a project is created and never again, which is why
+    // every job read 0 ft at 0/0 pace on health 80 while Charles Hart had
+    // 7,326 ft in the ground.
+    const perDay = b.days > 0 ? Math.round(b.total / b.days) : 0;
+    const assigned = (r.crews ?? []).map((c) => c.company.trim()).filter(Boolean);
     // A job somebody has called finished stops being measured against its
     // plan. The footage ratio is a progress estimate, and a finished job that
     // reads 94% because the material list overestimated is telling the office
