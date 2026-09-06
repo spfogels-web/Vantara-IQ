@@ -88,6 +88,7 @@ model User {
   subUserRole     SubUserRole    @default(OWNER)
   tasks           Task[]         @relation("TaskAssignee")
   conversationSeat ConversationParticipant[] @relation("ConversationMember")
+  prospectsOwned   Prospect[]                @relation("ProspectOwner")
   messagesSent     Message[]                 @relation("MessageAuthor")
   messagesTo       MessageDelivery[]         @relation("MessageRecipient")
   createdAt       DateTime       @default(now())
@@ -1592,9 +1593,31 @@ enum ProspectStage {
   CONTACTED
   QUALIFYING
   IN_DISCUSSION
+  /// Terms being agreed. Between discussion and ready.
+  NEGOTIATING
+  /// Everything a crew needs is in; onboarding is the next act.
+  READY_TO_ONBOARD
   WON
   LOST
   DORMANT
+  /// Deliberately never again, with a reason on the record.
+  DO_NOT_USE
+
+  /// Prime-side stages. A prime is not recruited, it is pursued, and forcing
+  /// a crew pipeline onto one made every prime sit in "Qualifying" forever.
+  VENDOR_REGISTRATION
+  PREQUALIFIED
+  BID_SUBMITTED
+}
+
+/// Whether somebody can start.
+enum ProspectAvailability {
+  UNKNOWN
+  AVAILABLE_NOW
+  AVAILABLE_SOON
+  LIMITED
+  COMMITTED
+  UNAVAILABLE
 }
 
 model Prospect {
@@ -1637,10 +1660,50 @@ model Prospect {
   lastContact String @default("")
   owner       String @default("")
 
+  /// Who owns the relationship, as an account rather than a typed name — a
+  /// pipeline filtered by "Sean" and a pipeline filtered by "sean" are two
+  /// different pipelines.
+  ownerUser   User?   @relation("ProspectOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  ownerUserId String?
+
+  availability      ProspectAvailability @default(UNKNOWN)
+  /// How many of their crews could start, and when the first one could.
+  availableCrews    Int      @default(0)
+  earliestStart     String   @default("")
+  yearsInBusiness   Int      @default(0)
+  /// How far they will travel, and what it costs to move them.
+  travelRadiusMiles Int      @default(0)
+  perDiemRequired   Boolean  @default(false)
+  lodgingRequired   Boolean  @default(false)
+
+  /// When the prospect entered the stage it is in. A prospect sitting in
+  /// discussion for thirty-one days is the thing worth seeing, and an
+  /// updatedAt that moves every time somebody adds a note cannot show it.
+  stageEnteredAt DateTime @default(now())
+
+  /// Why it stopped. Kept when a prospect is reactivated, because the reason
+  /// it went cold is exactly what the next person needs to read.
+  closedReason String @default("")
+  closedNote   String @default("")
+
+  /// Flagged as a likely duplicate of another record. Never merged
+  /// automatically — a merge that guesses wrong destroys two histories.
+  duplicateOfId String?
+
   /// Set when a won crew is promoted into the real subcontractor roster, so
   /// the pipeline keeps its history instead of the record vanishing.
   convertedSubcontractorId String?
+  convertedCustomerId      String?
   convertedAt              DateTime?
+
+  contacts       ProspectContact[]
+  equipmentItems ProspectEquipment[]
+  capabilities   ProspectCapability[]
+  rates          ProspectRate[]
+  availabilityLog ProspectAvailabilityEntry[]
+  qualifications ProspectQualification[]
+  references     ProspectReference[]
+  opportunities  ProspectOpportunity[]
 
   activities ProspectActivity[]
   createdAt  DateTime           @default(now())
@@ -1648,6 +1711,11 @@ model Prospect {
 
   @@index([kind, stage])
   @@index([homeState])
+  @@index([ownerUserId])
+  @@index([availability])
+  @@index([nextStepDue])
+  @@index([stage, stageEnteredAt])
+  @@index([name])
 }
 
 /// One logged touch — a call, an email, a note, or a stage change.
@@ -2506,3 +2574,181 @@ model VarianceReason {
   sortOrder    Int     @default(0)
 }
 
+/// Somebody at a prospect company.
+///
+/// A company is not a phone number. The estimator who answers about rates and
+/// the owner who signs the agreement are different people, and a CRM that holds
+/// one of them makes somebody hunt for the other in a note.
+model ProspectContact {
+  id         String   @id @default(cuid())
+  prospect   Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  prospectId String
+
+  name    String
+  title   String @default("")
+  phone   String @default("")
+  email   String @default("")
+  /// phone | text | email
+  prefers String @default("")
+  primary Boolean @default(false)
+  notes   String @default("")
+
+  createdAt DateTime @default(now())
+
+  @@index([prospectId])
+}
+
+/// What they own, as rows rather than a sentence.
+///
+/// "24x40, couple of mini-ex, missile setup" cannot be searched. A prime
+/// asking who has two directional drills in Georgia needs this to be data.
+model ProspectEquipment {
+  id         String   @id @default(cuid())
+  prospect   Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  prospectId String
+
+  /// Directional drill | Plow | Missile | Excavator | Vac trailer | Truck | Other
+  category     String @default("Other")
+  manufacturer String @default("")
+  model        String @default("")
+  quantity     Int    @default(1)
+  /// owned | leased | rented
+  ownership    String @default("owned")
+  notes        String @default("")
+
+  createdAt DateTime @default(now())
+
+  @@index([prospectId])
+  @@index([category])
+  @@index([model])
+}
+
+/// What they can actually do, and how well.
+model ProspectCapability {
+  id         String   @id @default(cuid())
+  prospect   Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  prospectId String
+
+  trade String
+  /// primary | secondary | occasional
+  level String @default("primary")
+  /// Production they claim, in whatever unit the trade is measured in —
+  /// footage for plough, shots for missile. Assuming feet breaks half of them.
+  productionQty  Float  @default(0)
+  productionUnit String @default("ft")
+  productionPer  String @default("week")
+  notes String @default("")
+
+  @@unique([prospectId, trade])
+  @@index([trade])
+}
+
+/// What they want to be paid.
+///
+/// Keyed on the same unit code the rate cards and daily sheets use, so a
+/// prospect's expectation can be held against a customer's rate without a
+/// mapping table in between.
+model ProspectRate {
+  id         String   @id @default(cuid())
+  prospect   Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  prospectId String
+
+  code        String
+  description String @default("")
+  unit        String @default("ft")
+  rate        Float  @default(0)
+  notes       String @default("")
+
+  createdAt DateTime @default(now())
+
+  @@unique([prospectId, code])
+  @@index([code])
+}
+
+/// Availability as it changed, not just as it stands.
+///
+/// "Committed through the 20th" said in August is what tells you in September
+/// that they are free now. Overwriting it loses the only forward-looking thing
+/// a recruiter has.
+model ProspectAvailabilityEntry {
+  id         String   @id @default(cuid())
+  prospect   Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  prospectId String
+
+  status    ProspectAvailability
+  crews     Int      @default(0)
+  fromDate  String   @default("")
+  note      String   @default("")
+  recordedBy String  @default("")
+  createdAt DateTime @default(now())
+
+  @@index([prospectId, createdAt])
+}
+
+/// One line of the prequalification checklist.
+model ProspectQualification {
+  id         String   @id @default(cuid())
+  prospect   Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  prospectId String
+
+  /// company | insurance | w9 | safety | references | equipment | rates |
+  /// geography | availability | agreement | nda
+  item   String
+  /// missing | received | review | complete | na
+  status String @default("missing")
+  note   String @default("")
+  /// For anything that lapses.
+  expiresOn String @default("")
+  updatedBy String @default("")
+  updatedAt DateTime @updatedAt
+
+  @@unique([prospectId, item])
+}
+
+model ProspectReference {
+  id         String   @id @default(cuid())
+  prospect   Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  prospectId String
+
+  company      String
+  contactName  String @default("")
+  phone        String @default("")
+  email        String @default("")
+  relationship String @default("")
+  projects     String @default("")
+  notes        String @default("")
+  verifiedOn   String @default("")
+  verifiedBy   String @default("")
+
+  createdAt DateTime @default(now())
+
+  @@index([prospectId])
+}
+
+/// Work being pursued with a prime.
+///
+/// A prime prospect is not a person to recruit; it is a relationship with
+/// bids attached, and the bids are what the pipeline is actually about.
+model ProspectOpportunity {
+  id         String   @id @default(cuid())
+  prospect   Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
+  prospectId String
+
+  name   String
+  market String @default("")
+  /// identified | qualified | bid_requested | bid_prep | bid_submitted |
+  /// negotiating | awarded | lost
+  stage  String @default("identified")
+  estimatedValue Float @default(0)
+  probability    Int   @default(0)
+  bidDue         String @default("")
+  expectedAward  String @default("")
+  owner  String @default("")
+  notes  String @default("")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([prospectId])
+  @@index([stage])
+}
