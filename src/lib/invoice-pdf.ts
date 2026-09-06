@@ -4,6 +4,7 @@ import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import type { Prisma } from "@prisma/client";
 
 import { safe } from "@/lib/pdf-text";
+import { embedOrgLogo, logoBox } from "@/lib/pdf-logo";
 
 export type InvoiceWith = Prisma.InvoiceGetPayload<{
   include: {
@@ -18,7 +19,13 @@ const M = 48;
 const money = (n: number) =>
   `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-export async function buildInvoicePdf(invoice: InvoiceWith, company: string): Promise<Uint8Array> {
+export async function buildInvoicePdf(
+  invoice: InvoiceWith,
+  company: string,
+  logoUrl?: string | null,
+  /** This deployment's own origin, so the mark can be resized on the way in. */
+  origin?: string | null,
+): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
   pdf.setTitle(`${invoice.number} — ${company}`);
 
@@ -54,10 +61,20 @@ export async function buildInvoicePdf(invoice: InvoiceWith, company: string): Pr
     });
 
   // --- Header ---------------------------------------------------------------
-  text(company.toUpperCase(), M, 15, bold);
+  // The mark, where a customer's accounts department looks first. The legal
+  // name still prints beside it — a logo is recognition, the name is what gets
+  // matched against a purchase order.
+  const logo = await embedOrgLogo(pdf, logoUrl, origin);
+  let nameX = M;
+  if (logo) {
+    const { width, height } = logoBox(logo, 46, 30);
+    page.drawImage(logo, { x: M, y: y - height + 11, width, height });
+    nameX = M + width + 10;
+  }
+  text(company.toUpperCase(), nameX, 15, bold);
   right("INVOICE", PAGE.w - M, 17, bold);
   y -= 16;
-  text("1309 Coffeen Avenue, Suite 1200 · Sheridan, WY 82801", M, 8.5, body, muted);
+  text("1309 Coffeen Avenue, Suite 1200 · Sheridan, WY 82801", nameX, 8.5, body, muted);
   right(invoice.number, PAGE.w - M, 11, bold, muted);
   y -= 22;
   line(y);

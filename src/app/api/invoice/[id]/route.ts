@@ -40,11 +40,16 @@ export async function GET(
   });
   if (!invoice) return NextResponse.json({ error: "Invoice not found." }, { status: 404 });
 
-  const org = await prisma.organization.findFirst({ select: { name: true } });
+  const org = await prisma.organization.findFirst({ select: { name: true, logoUrl: true } });
 
   let pdf: Uint8Array;
   try {
-    pdf = await buildInvoicePdf(invoice, org?.name ?? "Fortitude Infrastructure LLC");
+    pdf = await buildInvoicePdf(
+      invoice,
+      org?.name ?? "Fortitude Infrastructure LLC",
+      org?.logoUrl,
+      new URL(request.url).origin,
+    );
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Could not render this invoice." },

@@ -137,7 +137,10 @@ function StatementRow({ invoice: inv, actionable }: { invoice: SubInvoiceRow; ac
 
   // What fast pay would cost on this statement, quoted live from the same
   // rules the server freezes onto the record when it is elected.
-  const quote = fastPayQuote(inv.subtotal);
+  // Quoted off what is actually payable this week, not the gross. Retainage
+  // is money not going out at all, and charging a fee to receive it early
+  // charges for something that is not being received.
+  const quote = fastPayQuote(inv.payable, FAST_PAY_FEE_PCT, FAST_PAY_DAYS);
 
   // Both dates counted from the Friday that closed the week, so the choice is
   // between two calendar dates rather than two abstractions.
@@ -224,6 +227,32 @@ function StatementRow({ invoice: inv, actionable }: { invoice: SubInvoiceRow; ac
         {inv.issuedAt ? ` · sent ${inv.issuedAt}` : ""}
       </p>
 
+      {/* What comes off, in the order it comes off.
+          Retainage was not on this screen at all — the crew saw a gross figure
+          and then a smaller payment, with nothing on the statement to explain
+          the gap. It is their money, held not deducted, and they are entitled
+          to see how much and at what rate. */}
+      <div className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 rounded-lg border border-border/60 bg-foreground/[0.02] px-2.5 py-2 text-[12px]">
+        <span className="text-muted-foreground">
+          Earned <span className="num font-medium text-foreground">{formatCurrency(inv.subtotal)}</span>
+        </span>
+        {inv.retainage > 0 ? (
+          <span className="text-muted-foreground">
+            Retainage held ({Math.round(inv.retainagePct * 1000) / 10}%){" "}
+            <span className="num font-medium text-warning">−{formatCurrency(inv.retainage)}</span>
+          </span>
+        ) : null}
+        <span className="text-muted-foreground">
+          Payable{" "}
+          <span className="num gold-figure font-semibold">{formatCurrency(inv.payable)}</span>
+        </span>
+        {inv.retainage > 0 ? (
+          <span className="ml-auto text-[11px] text-muted-foreground/80">
+            Retainage is released with the job, not lost.
+          </span>
+        ) : null}
+      </div>
+
       {/* The record of their answer, once given. */}
       {inv.acceptedAt ? (
         <p className="mt-1.5 flex items-center gap-1.5 rounded-lg border border-success/25 bg-success/[0.05] px-2.5 py-1.5 text-[11.5px] text-success">
@@ -261,7 +290,8 @@ function StatementRow({ invoice: inv, actionable }: { invoice: SubInvoiceRow; ac
             <p className="text-[11.5px] font-medium text-foreground">Need it sooner?</p>
             <p className="num text-[11px] text-muted-foreground">
               Fast pay lands {formatCurrency(quote.net)} within {FAST_PAY_DAYS} days by wire, after
-              the {FAST_PAY_FEE_PCT}% fee of {formatCurrency(quote.fee)}.
+              the {FAST_PAY_FEE_PCT}% fee of {formatCurrency(quote.fee)} — charged on the{" "}
+              {formatCurrency(inv.payable)} payable, not on the gross.
             </p>
           </div>
           <button

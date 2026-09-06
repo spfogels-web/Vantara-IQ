@@ -542,6 +542,14 @@ model SubInvoice {
   status          SubInvoiceStatus @default(DRAFT)
   /// What we owe, from the lines. Frozen once issued.
   subtotal        Float            @default(0)
+
+  /// Retainage, held back at the rate Fortitude is held back on that job.
+  ///
+  /// Frozen onto the statement rather than read from the customer each time
+  /// it is displayed: the rate on the job can be renegotiated, and a crew who
+  /// accepted a figure in August must still see that figure in December.
+  retainagePct    Float            @default(0)
+  retainageHeld   Float            @default(0)
   issuedAt        DateTime?
 
   /// The record of them agreeing: who, and exactly when.

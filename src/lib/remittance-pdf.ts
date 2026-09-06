@@ -5,7 +5,8 @@ import type { Prisma } from "@prisma/client";
 
 import { safe } from "@/lib/pdf-text";
 import { addDays } from "@/lib/billing";
-import { fastPayQuote } from "@/lib/fast-pay";
+import { statementMoney } from "@/lib/fast-pay";
+import { embedOrgLogo, logoBox } from "@/lib/pdf-logo";
 
 /**
  * Remittance advice — the letter that goes out with a payment to a crew.
@@ -56,6 +57,9 @@ const money = (n: number) =>
 export async function buildRemittancePdf(
   inv: RemittanceInvoice,
   company: string,
+  logoUrl?: string | null,
+  /** This deployment's own origin, so the mark can be resized on the way in. */
+  origin?: string | null,
 ): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
   pdf.setTitle(`Remittance advice ${inv.number} — ${inv.subcontractor.company}`);
@@ -97,10 +101,19 @@ export async function buildRemittancePdf(
   const R = PAGE.w - M;
 
   // ── Heading ──────────────────────────────────────────────────────────
-  text(company, M, 15, bold);
+  // The mark, when there is one. The name still prints beside it: a logo is
+  // recognition, the legal name is what a bank and an accountant need.
+  const logo = await embedOrgLogo(pdf, logoUrl, origin);
+  let nameX = M;
+  if (logo) {
+    const { width, height } = logoBox(logo, 46, 30);
+    page.drawImage(logo, { x: M, y: y - height + 11, width, height });
+    nameX = M + width + 10;
+  }
+  text(company, nameX, 15, bold);
   right("REMITTANCE ADVICE", R, 13, bold, gold);
   y -= 15;
-  text("Underground utility and fiber construction", M, 9, body, muted);
+  text("Underground utility and fiber construction", nameX, 9, body, muted);
   right(inv.number, R, 10, bold);
   y -= 12;
   right(
@@ -200,25 +213,50 @@ export async function buildRemittancePdf(
 
   // ── The money ────────────────────────────────────────────────────────
   room(90);
-  const quote = inv.fastPay
-    ? fastPayQuote(inv.subtotal, inv.fastPayFeePct, inv.termsDays)
-    : null;
+  // Every figure from the one place that knows the order: retainage first,
+  // then any fast-pay fee on what is left.
+  const m = statementMoney(inv);
 
   text("Gross earned", cols.rate - 60, 9.5, body, muted);
-  right(money(inv.subtotal), R, 9.5);
+  right(money(m.gross), R, 9.5);
   y -= 14;
 
-  if (quote && quote.fee > 0) {
-    text(`Fast pay fee (${inv.fastPayFeePct}%)`, cols.rate - 60, 9.5, body, muted);
-    right(`-${money(quote.fee)}`, R, 9.5);
+  if (m.retainage > 0) {
+    text(
+      `Retainage held (${Math.round(m.retainagePct * 1000) / 10}%)`,
+      cols.rate - 60,
+      9.5,
+      body,
+      muted,
+    );
+    right(`-${money(m.retainage)}`, R, 9.5);
+    y -= 14;
+  }
+
+  if (m.fee > 0) {
+    text(`Fast pay fee (${m.feePct}%)`, cols.rate - 60, 9.5, body, muted);
+    right(`-${money(m.fee)}`, R, 9.5);
     y -= 14;
   }
 
   line();
   y -= 16;
   text("NET PAID", cols.rate - 60, 11, bold);
-  right(money(quote ? quote.net : inv.subtotal), R, 13, bold, gold);
+  right(money(m.net), R, 13, bold, gold);
   y -= 24;
+
+  if (m.retainage > 0) {
+    // Said plainly. Retainage is the single line on this document most likely
+    // to prompt a phone call, and "held" and "deducted" are different words.
+    text(
+      `Retainage is held against the job, not deducted. It is released when the job's retainage is.`,
+      M,
+      8.5,
+      body,
+      muted,
+    );
+    y -= 16;
+  }
 
   // ── Where it went ────────────────────────────────────────────────────
   room(110);

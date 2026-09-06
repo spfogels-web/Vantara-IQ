@@ -17,7 +17,7 @@ export const runtime = "nodejs";
  * The check is against the statement's own subcontractor rather than a project
  * assignment: a pay statement belongs to a company, not to a job.
  */
-export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const me = await getCurrentUser();
   if (!me) return NextResponse.json({ error: "Not authorised." }, { status: 403 });
 
@@ -55,8 +55,13 @@ export async function GET(_req: Request, ctx: { params: Promise<{ id: string }> 
     }
   }
 
-  const org = await prisma.organization.findFirst({ select: { name: true } });
-  const pdf = await buildRemittancePdf(inv, org?.name || "Fortitude Infrastructure LLC");
+  const org = await prisma.organization.findFirst({ select: { name: true, logoUrl: true } });
+  const pdf = await buildRemittancePdf(
+    inv,
+    org?.name || "Fortitude Infrastructure LLC",
+    org?.logoUrl,
+    new URL(req.url).origin,
+  );
 
   const stem = `remittance-${inv.number}`.replace(/[^\w.-]+/g, "-");
 

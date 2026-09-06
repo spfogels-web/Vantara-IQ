@@ -75,14 +75,24 @@ export function fastPayQuote(
  */
 export function amountPayable(inv: {
   subtotal: number;
+  retainagePct?: number | null;
+  retainageHeld?: number | null;
   fastPay: boolean;
   fastPayFeePct: number;
+  termsDays?: number;
 }): FastPayQuote {
-  if (!inv.fastPay) {
-    const gross = fromCents(Math.max(0, toCents(inv.subtotal)));
-    return { gross, fee: 0, net: gross, feePct: 0, days: STANDARD_TERMS_DAYS };
-  }
-  return fastPayQuote(inv.subtotal, inv.fastPayFeePct);
+  // Kept as a thin wrapper rather than deleted: every reader already goes
+  // through it, and the shape it returns is the one they expect. What changed
+  // is underneath — retainage comes off before any fee is worked out.
+  const m = statementMoney({
+    subtotal: inv.subtotal,
+    retainagePct: inv.retainagePct,
+    retainageHeld: inv.retainageHeld,
+    fastPay: inv.fastPay,
+    fastPayFeePct: inv.fastPayFeePct,
+    termsDays: inv.termsDays ?? (inv.fastPay ? FAST_PAY_DAYS : STANDARD_TERMS_DAYS),
+  });
+  return { gross: m.gross, fee: m.fee, net: m.net, feePct: m.feePct, days: m.days };
 }
 
 /**
@@ -122,4 +132,77 @@ export function canElectFastPay(status: string, alreadyElected: boolean): boolea
 /** One line the crew reads before committing. */
 export function fastPaySummary(q: FastPayQuote): string {
   return `Paid within ${q.days} days by wire, less a ${q.feePct}% fee.`;
+}
+
+
+/** Every figure on a pay statement, in the order they come off it. */
+export interface StatementMoney {
+  /** What the work came to, at the crew's own signed rates. */
+  gross: number;
+  retainagePct: number;
+  /** Held back on this statement. Released when the job's retainage is. */
+  retainage: number;
+  /** Gross less retainage — what is actually payable this week. */
+  payable: number;
+  /** The fast-pay fee, or zero on standard terms. */
+  fee: number;
+  feePct: number;
+  /** What lands in their account. */
+  net: number;
+  days: number;
+}
+
+/**
+ * What a crew is actually paid, and in what order it comes off.
+ *
+ * The order is the whole point and it was wrong: the fast-pay fee used to be
+ * taken on the gross, before retainage. Retainage is money not being paid this
+ * week at all, so charging a fee to receive it early charges for something
+ * that is not being received — on a $2,659.60 statement at 10% held back that
+ * is a fee on $2,659.60 when only $2,393.64 is going out.
+ *
+ * Retainage first, then the fee on what is left.
+ */
+export function statementMoney(inv: {
+  subtotal: number;
+  retainagePct?: number | null;
+  retainageHeld?: number | null;
+  fastPay: boolean;
+  fastPayFeePct: number;
+  termsDays: number;
+}): StatementMoney {
+  const gross = Math.round(Math.max(0, inv.subtotal) * 100) / 100;
+  const pct = inv.retainagePct ?? 0;
+  // The stored figure when there is one, so a statement a crew accepted cannot
+  // be restated by a rate change on the job.
+  const retainage =
+    inv.retainageHeld != null && inv.retainageHeld > 0
+      ? Math.round(inv.retainageHeld * 100) / 100
+      : Math.round(gross * pct * 100) / 100;
+  const payable = Math.round((gross - retainage) * 100) / 100;
+
+  if (!inv.fastPay) {
+    return {
+      gross,
+      retainagePct: pct,
+      retainage,
+      payable,
+      fee: 0,
+      feePct: 0,
+      net: payable,
+      days: inv.termsDays || STANDARD_TERMS_DAYS,
+    };
+  }
+
+  const q = fastPayQuote(payable, inv.fastPayFeePct, inv.termsDays || FAST_PAY_DAYS);
+  return {
+    gross,
+    retainagePct: pct,
+    retainage,
+    payable,
+    fee: q.fee,
+    feePct: inv.fastPayFeePct,
+    net: q.net,
+    days: q.days,
+  };
 }

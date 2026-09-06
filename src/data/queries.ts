@@ -13,12 +13,12 @@ import {
   viewer,
   visibleProjectIds,
 } from "@/lib/authz";
-import { fastPayQuote } from "@/lib/fast-pay";
+import { statementMoney } from "@/lib/fast-pay";
 import { packetStatus } from "@/lib/vendor-packet";
 import { badgeReadiness } from "@/lib/badge";
 import { isStaff } from "@/lib/auth";
 import { addDays, balanceOf, billingWeekFor, isPastDue, weekOf } from "@/lib/billing";
-import { amountPayable, canElectFastPay, dueDateFromCutoff } from "@/lib/fast-pay";
+import { canElectFastPay, dueDateFromCutoff } from "@/lib/fast-pay";
 import { schedulePosition, type SchedulePosition } from "@/lib/schedule";
 import {
   STANDING_LABEL,
@@ -1605,6 +1605,9 @@ export async function getPayApplications(): Promise<PayApplication[]> {
       fastPay: true,
       fastPayFeePct: true,
       subtotal: true,
+      retainagePct: true,
+      retainageHeld: true,
+      termsDays: true,
       createdAt: true,
       subcontractor: { select: { company: true } },
       lines: { select: { amount: true } },
@@ -1615,10 +1618,17 @@ export async function getPayApplications(): Promise<PayApplication[]> {
 
   return rows.map((r) => {
     const amount = Number(r.lines.reduce((sum, l) => sum + l.amount, 0).toFixed(2));
-    // Retainage follows the customer's card on that job. Crews are held back
-    // at the rate Fortitude is held back, not at a number typed per row.
-    const pct = r.project?.customer?.retainagePct ?? 0;
-    const retainage = Number((amount * pct).toFixed(2));
+    // Every figure from the one place that knows the order they come off in:
+    // retainage first, then any fast-pay fee on what is left.
+    const money = statementMoney({
+      subtotal: amount,
+      retainagePct: r.retainagePct || (r.project?.customer?.retainagePct ?? 0),
+      retainageHeld: r.retainageHeld,
+      fastPay: r.fastPay,
+      fastPayFeePct: r.fastPayFeePct,
+      termsDays: r.termsDays,
+    });
+    const retainage = money.retainage;
 
     const { label, tone } = payAppStatus(r.status);
     return {
@@ -1639,7 +1649,7 @@ export async function getPayApplications(): Promise<PayApplication[]> {
       state: r.status as PayApplication["state"],
       // What actually lands. The register showed gross beside a fast-pay bolt
       // and left the reader to do the subtraction.
-      net: r.fastPay ? fastPayQuote(amount, r.fastPayFeePct).net : amount,
+      net: money.net,
       paid: r.payments.length > 0,
     };
   });
@@ -3798,6 +3808,11 @@ export interface SubInvoiceRow {
   fastPayElectedBy: string;
   /** ACH normally; wire when fast pay was taken. Never the crew's choice. */
   payMethod: string;
+  /** Held back on this statement, and the rate it was held at. */
+  retainagePct: number;
+  retainage: number;
+  /** Gross less retainage — what is payable this week before any fee. */
+  payable: number;
   /** What the fee comes to, and what actually lands in their account. */
   fee: number;
   net: number;
@@ -3823,6 +3838,7 @@ function toSubInvoiceRow(r: {
   periodStart: string; periodEnd: string; status: string; subtotal: number;
   issuedAt: Date | null; acceptedAt: Date | null; acceptedBy: string;
   termsDays: number; fastPay: boolean; fastPayFeePct: number;
+  retainagePct: number; retainageHeld: number;
   fastPayElectedAt: Date | null; fastPayElectedBy: string; payMethod: string;
   disputeNote: string; disputedAt: Date | null; disputedBy: string;
   resolutionNote: string;
@@ -3834,7 +3850,7 @@ function toSubInvoiceRow(r: {
 }): SubInvoiceRow {
   // One place decides what a statement is worth, so the office view, the crew
   // view and any batch total all read the same number off the same rules.
-  const money = amountPayable(r);
+  const money = statementMoney(r);
   return {
     id: r.id,
     number: r.number,
@@ -3862,6 +3878,9 @@ function toSubInvoiceRow(r: {
       r.fastPayElectedAt?.toISOString().slice(0, 16).replace("T", " ") ?? null,
     fastPayElectedBy: r.fastPayElectedBy,
     payMethod: r.payMethod,
+    retainagePct: money.retainagePct,
+    retainage: money.retainage,
+    payable: money.payable,
     fee: money.fee,
     net: money.net,
     canElectFastPay: canElectFastPay(r.status, r.fastPay),
@@ -3875,6 +3894,7 @@ const SUB_INVOICE_SELECT = {
   periodStart: true, periodEnd: true, status: true, subtotal: true,
   issuedAt: true, acceptedAt: true, acceptedBy: true,
   termsDays: true, fastPay: true, fastPayFeePct: true,
+  retainagePct: true, retainageHeld: true,
   fastPayElectedAt: true, fastPayElectedBy: true, payMethod: true,
   disputeNote: true, disputedAt: true, disputedBy: true, resolutionNote: true,
   subcontractor: { select: { company: true } },

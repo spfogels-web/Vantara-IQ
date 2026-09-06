@@ -43,6 +43,7 @@ import {
   FAST_PAY_METHOD,
   canElectFastPay,
   fastPayQuote,
+  statementMoney,
 } from "@/lib/fast-pay";
 import { balanceOf } from "@/lib/billing";
 import { badgeReadiness } from "@/lib/badge";
@@ -4747,7 +4748,15 @@ export async function recordSubPayment(input: {
 
   const inv = await prisma.subInvoice.findUnique({
     where: { id: input.id },
-    select: { status: true, subtotal: true, fastPay: true, fastPayFeePct: true },
+    select: {
+      status: true,
+      subtotal: true,
+      retainagePct: true,
+      retainageHeld: true,
+      fastPay: true,
+      fastPayFeePct: true,
+      termsDays: true,
+    },
   });
   if (!inv) return { ok: false as const, error: "Statement not found." };
   if (inv.status !== "ACCEPTED" && inv.status !== "PAID") {
@@ -4764,8 +4773,8 @@ export async function recordSubPayment(input: {
   // rather than accepted on trust. A mismatch is allowed — partial payments and
   // corrections are real — but it is said out loud rather than filed silently.
   const owed = inv.fastPay
-    ? fastPayQuote(inv.subtotal, inv.fastPayFeePct).net
-    : inv.subtotal;
+    ? statementMoney(inv).net
+    : statementMoney(inv).payable;
 
   await prisma.$transaction([
     prisma.subPayment.create({

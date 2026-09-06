@@ -20,14 +20,26 @@ import { billingWeekFor } from "@/lib/billing";
 export async function recalcSubInvoice(invoiceId: string): Promise<void> {
   const inv = await prisma.subInvoice.findUnique({
     where: { id: invoiceId },
-    select: { status: true, lines: { select: { amount: true } } },
+    select: {
+      status: true,
+      retainagePct: true,
+      lines: { select: { amount: true } },
+      // Crews are held back at the rate Fortitude is held back on that job,
+      // not at a number typed per statement.
+      project: { select: { customer: { select: { retainagePct: true } } } },
+    },
   });
   if (!inv || inv.status !== "DRAFT") return;
+
+  const subtotal = Math.round(inv.lines.reduce((s, l) => s + l.amount, 0) * 100) / 100;
+  const pct = inv.project?.customer?.retainagePct ?? inv.retainagePct ?? 0;
 
   await prisma.subInvoice.update({
     where: { id: invoiceId },
     data: {
-      subtotal: Math.round(inv.lines.reduce((s, l) => s + l.amount, 0) * 100) / 100,
+      subtotal,
+      retainagePct: pct,
+      retainageHeld: Math.round(subtotal * pct * 100) / 100,
     },
   });
 }
