@@ -1201,7 +1201,14 @@ enum RowStatus {
 model RateImport {
   id            String         @id @default(cuid())
   docType       RateDocType
+  /// The file as it arrived. Kept even after somebody renames the import —
+  /// it is what the document is actually called, and the only way back to it
+  /// when a name typed months later stops matching anything.
   fileName      String
+  /// What the office calls it. Empty means nobody has renamed it, and the
+  /// file name stands in — not a copy of it, so a rename can be undone by
+  /// clearing this rather than by remembering the original.
+  displayName   String         @default("")
   mediaType     String         @default("")
   status        ImportStatus   @default(PROCESSING)
   // Optional scoping the user provides at upload.

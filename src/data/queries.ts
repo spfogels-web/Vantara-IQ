@@ -1743,7 +1743,8 @@ export async function getProjectMaterialImports(
 
   return imports.map((imp) => ({
     id: imp.id,
-    fileName: imp.fileName,
+    // Whatever the office called it, falling back to the file itself.
+    fileName: imp.displayName || imp.fileName,
     summary: imp.summary,
     status: imp.status,
     error: imp.error,

@@ -1404,6 +1404,27 @@ async function extractLongDocument(input: {
   };
 }
 
+/**
+ * Rename an import.
+ *
+ * The uploaded file name stays where it is. "Fortitude_A85311_EA_24042_
+ * 08012026.xls (1)-compressed.pdf" is what the document is actually called and
+ * it is the way back to the original; what the office needs is a name it can
+ * find the thing by. Clearing the name restores the file name rather than
+ * requiring anybody to remember it.
+ */
+export async function renameRateImport(id: string, name: string) {
+  await requireStaff();
+  const clean = name.trim().slice(0, 160);
+  const imp = await prisma.rateImport.findUnique({ where: { id }, select: { id: true } });
+  if (!imp) return { ok: false as const, error: "Import not found." };
+
+  await prisma.rateImport.update({ where: { id }, data: { displayName: clean } });
+  revalidatePath("/rate-import");
+  revalidatePath(`/rate-import/${id}`);
+  return { ok: true as const };
+}
+
 export async function extractRateDocument(formData: FormData) {
   await requireStaff();
   if (!isConfigured()) {
@@ -1415,12 +1436,24 @@ export async function extractRateDocument(formData: FormData) {
   const customer = String(formData.get("customer") || "");
   const market = String(formData.get("market") || "");
   const project = String(formData.get("project") || "");
+  // What the office wants to call it, given at upload. Optional — an unnamed
+  // import still shows the file name, which is what happened before.
+  const displayName = String(formData.get("displayName") || "").trim().slice(0, 160);
   if (!file || !docType) return { ok: false as const, error: "Pick a document type and a file." };
 
   const { mediaType, base64, text, name } = await readDocument(file);
 
   const imp = await prisma.rateImport.create({
-    data: { docType, fileName: name, mediaType, status: "PROCESSING", customer, market, project },
+    data: {
+      docType,
+      fileName: name,
+      displayName,
+      mediaType,
+      status: "PROCESSING",
+      customer,
+      market,
+      project,
+    },
   });
 
   try {

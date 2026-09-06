@@ -24,6 +24,7 @@ export default async function RateImportPage() {
     id: r.id,
     docType: r.docType,
     fileName: r.fileName,
+    displayName: r.displayName,
     status: r.status,
     summary: r.summary,
     rowCount: r._count.rows,

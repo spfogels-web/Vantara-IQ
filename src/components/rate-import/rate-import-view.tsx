@@ -3,10 +3,10 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { FileUp, Loader2, Sparkles, Upload } from "lucide-react";
+import { Check, FileUp, Loader2, Pencil, Sparkles, Upload } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { extractRateDocument } from "@/app/actions";
+import { extractRateDocument, renameRateImport } from "@/app/actions";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { StatusPill } from "@/components/common/status-pill";
 import { Button } from "@/components/ui/button";
@@ -29,7 +29,10 @@ const STATUS_TONE: Record<string, "info" | "success" | "warning" | "critical" | 
 export type ImportRow = {
   id: string;
   docType: string;
+  /** The file as it arrived. Always kept. */
   fileName: string;
+  /** What the office calls it, when somebody has said. */
+  displayName: string;
   status: string;
   summary: string;
   rowCount: number;
@@ -49,6 +52,7 @@ export function RateImportView({
   const router = useRouter();
   const [docType, setDocType] = React.useState(DOC_TYPES[0].value);
   const [file, setFile] = React.useState<File | null>(null);
+  const [displayName, setDisplayName] = React.useState("");
   const [customer, setCustomer] = React.useState("");
   const [market, setMarket] = React.useState("");
   const [busy, setBusy] = React.useState(false);
@@ -62,11 +66,15 @@ export function RateImportView({
     const fd = new FormData();
     fd.set("file", file);
     fd.set("docType", docType);
+    fd.set("displayName", displayName);
     fd.set("customer", customer);
     fd.set("market", market);
     const res = await extractRateDocument(fd);
     setBusy(false);
-    if (res.ok) router.push(`/rate-import/${res.id}`);
+    if (res.ok) {
+      setDisplayName("");
+      router.push(`/rate-import/${res.id}`);
+    }
     else {
       setError(res.error ?? "Extraction failed");
       if (res.id) router.push(`/rate-import/${res.id}`);
@@ -97,6 +105,23 @@ export function RateImportView({
                     <option key={d.value} value={d.value}>{d.label}</option>
                   ))}
                 </select>
+              </label>
+
+              {/* What to call it.
+                  Files arrive named things like
+                  "Fortitude_A85311_EA_24042_08012026.xls (1)-compressed.pdf",
+                  and a list of twenty-five of those is unreadable. Optional —
+                  left blank, the file name stands in as it always did. */}
+              <label className="flex flex-col gap-1.5">
+                <span className="text-[11.5px] font-medium text-muted-foreground">
+                  Name it (optional)
+                </span>
+                <input
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  placeholder={file ? file.name : "Trawick S Georgia rates"}
+                  className={inputClass}
+                />
               </label>
 
               <label className="flex flex-col gap-1.5">
@@ -152,26 +177,132 @@ export function RateImportView({
             <ul className="p-2">
               {imports.map((imp) => (
                 <li key={imp.id}>
-                  <Link
-                    href={`/rate-import/${imp.id}`}
-                    className="focus-ring flex items-center gap-3 rounded-lg px-2.5 py-2.5 hover:bg-foreground/[0.03]"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-[12.5px] font-medium text-foreground">{imp.fileName}</p>
-                      <p className="truncate text-[11px] text-muted-foreground">
-                        {DOC_TYPES.find((d) => d.value === imp.docType)?.label ?? imp.docType}
-                        {imp.summary ? ` · ${imp.summary}` : ""}
-                      </p>
-                    </div>
-                    <span className="num shrink-0 text-[11.5px] text-muted-foreground">{imp.rowCount} rows</span>
-                    <StatusPill label={imp.status} tone={STATUS_TONE[imp.status] ?? "neutral"} dot={false} className="shrink-0 text-[10px]" />
-                  </Link>
+                  <ImportRowItem imp={imp} />
                 </li>
               ))}
             </ul>
           )}
         </Panel>
       </div>
+    </div>
+  );
+}
+
+
+/**
+ * One import in the list, renameable where it sits.
+ *
+ * The row is a link to the review screen, so the rename controls stop the
+ * click going through — a pencil that navigates instead of editing is worse
+ * than no pencil. Editing swaps the link for a field rather than opening a
+ * dialog: it is one short string and a dialog for it is ceremony.
+ */
+function ImportRowItem({ imp }: { imp: ImportRow }) {
+  const router = useRouter();
+  const [editing, setEditing] = React.useState(false);
+  const [name, setName] = React.useState(imp.displayName || "");
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const shown = imp.displayName || imp.fileName;
+
+  async function save() {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    const res = await renameRateImport(imp.id, name);
+    setBusy(false);
+    if (!res.ok) return setError(res.error);
+    setEditing(false);
+    router.refresh();
+  }
+
+  if (editing) {
+    return (
+      <div className="flex flex-wrap items-center gap-2 rounded-lg bg-foreground/[0.03] px-2.5 py-2.5">
+        <input
+          autoFocus
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void save();
+            if (e.key === "Escape") setEditing(false);
+          }}
+          placeholder={imp.fileName}
+          aria-label="Name this import"
+          className="focus-ring h-8 min-w-0 flex-1 rounded-lg border border-border bg-transparent px-2.5 text-[12.5px] text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-brand"
+        />
+        <button
+          type="button"
+          onClick={() => void save()}
+          disabled={busy}
+          className="focus-ring inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand px-2.5 text-[12px] font-semibold text-white hover:bg-brand-bright disabled:opacity-40"
+        >
+          {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Check className="size-3.5" />}
+          Save
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setName(imp.displayName || "");
+            setEditing(false);
+          }}
+          className="focus-ring h-8 rounded-lg border border-border px-2.5 text-[12px] font-medium text-foreground"
+        >
+          Cancel
+        </button>
+        {/* Clearing the name puts the file name back, so a rename is undoable
+            without anybody having written the original down. */}
+        {imp.displayName ? (
+          <button
+            type="button"
+            onClick={() => {
+              setName("");
+              void (async () => {
+                setBusy(true);
+                await renameRateImport(imp.id, "");
+                setBusy(false);
+                setEditing(false);
+                router.refresh();
+              })();
+            }}
+            className="focus-ring h-8 rounded-lg px-2 text-[11.5px] text-muted-foreground hover:text-foreground"
+          >
+            Use the file name
+          </button>
+        ) : null}
+        {error ? <span className="w-full text-[11.5px] text-critical">{error}</span> : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="group/imp flex items-center gap-3 rounded-lg px-2.5 py-2.5 hover:bg-foreground/[0.03]">
+      <Link href={`/rate-import/${imp.id}`} className="focus-ring min-w-0 flex-1 rounded">
+        <p className="truncate text-[12.5px] font-medium text-foreground">{shown}</p>
+        <p className="truncate text-[11px] text-muted-foreground">
+          {DOC_TYPES.find((d) => d.value === imp.docType)?.label ?? imp.docType}
+          {imp.summary ? ` · ${imp.summary}` : ""}
+        </p>
+        {/* The real file, once it is no longer the name on the row. Somebody
+            tracing a document back needs what it was actually called. */}
+        {imp.displayName ? (
+          <p className="truncate text-[10.5px] text-muted-foreground/60">{imp.fileName}</p>
+        ) : null}
+      </Link>
+
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        aria-label={`Rename ${shown}`}
+        title="Rename"
+        className="focus-ring grid size-7 shrink-0 place-items-center rounded-lg text-muted-foreground opacity-0 transition hover:text-foreground focus:opacity-100 group-hover/imp:opacity-100"
+      >
+        <Pencil className="size-3.5" />
+      </button>
+
+      <span className="num shrink-0 text-[11.5px] text-muted-foreground">{imp.rowCount} rows</span>
+      <StatusPill label={imp.status} tone={STATUS_TONE[imp.status] ?? "neutral"} dot={false} className="shrink-0 text-[10px]" />
     </div>
   );
 }

@@ -33,12 +33,16 @@ export default async function RateImportDetailPage({
   }));
 
   return (
-    <PageShell eyebrow="Rate import" title="Review extraction" description={imp.fileName}>
+    <PageShell
+      eyebrow="Rate import"
+      title="Review extraction"
+      description={imp.displayName || imp.fileName}
+    >
       <ReviewScreen
         imp={{
           id: imp.id,
           docType: imp.docType,
-          fileName: imp.fileName,
+          fileName: imp.displayName || imp.fileName,
           status: imp.status,
           summary: imp.summary,
           customer: imp.customer,
