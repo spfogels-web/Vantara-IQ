@@ -58,6 +58,7 @@ export async function receiveAction(input: {
   supplier?: string;
   poNumber?: string;
   locationLabel?: string;
+  yardId?: string;
   projectId?: string;
   notes?: string;
   photos?: string[];
@@ -147,6 +148,7 @@ export async function returnAction(input: {
   varianceReason?: string;
   comment?: string;
   location?: string;
+  yardId?: string;
   photos?: string[];
 }) {
   const me = await requireUser();
@@ -259,6 +261,70 @@ export async function assignActiveReel(input: {
     where: { id: input.instanceId },
     data: { crew: input.crew, projectId: input.projectId || undefined },
   });
+  revalidatePath("/materials");
+  return { ok: true as const };
+}
+
+/**
+ * Open a yard.
+ *
+ * Deliberately a handful of fields. A yard is a place material stands, and
+ * asking for ten of them before somebody can record a reel is how a system
+ * gets worked around with a spreadsheet.
+ */
+export async function createYard(input: {
+  name: string;
+  primeContractor?: string;
+  market?: string;
+  city?: string;
+  address?: string;
+  managerName?: string;
+}) {
+  const me = await requireStaff();
+  const name = input.name.trim();
+  if (!name) return { ok: false as const, error: "Give the yard a name." };
+
+  const clash = await prisma.yard.findFirst({
+    where: { name, status: { not: "ARCHIVED" } },
+    select: { id: true },
+  });
+  if (clash) return { ok: false as const, error: `There is already a yard called ${name}.` };
+
+  const y = await prisma.yard.create({
+    data: {
+      name,
+      primeContractor: input.primeContractor?.trim() ?? "",
+      market: input.market?.trim() ?? "",
+      city: input.city?.trim() ?? "",
+      address: input.address?.trim() ?? "",
+      managerName: input.managerName?.trim() ?? "",
+    },
+    select: { id: true },
+  });
+  void me;
+  revalidatePath("/materials");
+  return { ok: true as const, id: y.id };
+}
+
+/**
+ * Retire a yard.
+ *
+ * Refused while material is still standing in it. Archiving a yard with
+ * fourteen reels in it does not move the reels; it just makes them harder to
+ * find, which is the opposite of the point.
+ */
+export async function archiveYard(id: string) {
+  await requireStaff();
+  const held = await prisma.materialInstance.count({
+    where: { yardId: id, status: { notIn: ["CLOSED", "DISPOSED"] } },
+  });
+  if (held > 0) {
+    return {
+      ok: false as const,
+      error: `${held} item${held === 1 ? "" : "s"} still recorded in this yard. Move or close them first.`,
+    };
+  }
+  await prisma.yard.update({ where: { id }, data: { status: "ARCHIVED" } });
   revalidatePath("/materials");
   return { ok: true as const };
 }

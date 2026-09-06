@@ -38,6 +38,7 @@ export interface InstanceRow {
   crew: string;
   responsibleName: string;
   locationLabel: string;
+  yardId: string;
   vehicle: string;
   trailer: string;
   checkedOutAt: string | null;
@@ -171,6 +172,7 @@ export async function getMaterialInstances(): Promise<InstanceRow[]> {
       crew: r.crew,
       responsibleName: r.responsibleName,
       locationLabel: r.locationLabel,
+      yardId: r.yardId ?? "",
       vehicle: r.vehicle,
       trailer: r.trailer,
       checkedOutAt: r.checkedOutAt?.toISOString() ?? null,
@@ -415,4 +417,76 @@ export async function getVarianceReasons() {
     orderBy: [{ sortOrder: "asc" }, { label: "asc" }],
   });
   return rows.map((r) => ({ label: r.label, needsComment: r.needsComment }));
+}
+
+export interface YardRow {
+  id: string;
+  name: string;
+  primeContractor: string;
+  market: string;
+  city: string;
+  status: string;
+  /** What is standing in this yard right now. */
+  onHand: number;
+  /** Issued from here and still out with somebody. */
+  checkedOut: number;
+  flagged: number;
+  total: number;
+}
+
+/**
+ * The yards, each with its own counts.
+ *
+ * A prime like Globe runs five to ten of these and the material in one has
+ * nothing to do with the material in another — a single company-wide total is
+ * a number nobody can act on, because nobody can drive to it.
+ *
+ * Counted from the instances rather than stored on the yard: a stored count is
+ * a number that drifts the first time somebody moves a reel.
+ */
+export async function getYards(): Promise<YardRow[]> {
+  const user = await requireUser();
+  const [yards, rows] = await Promise.all([
+    prisma.yard.findMany({
+      where: { status: { not: "ARCHIVED" } },
+      orderBy: [{ primeContractor: "asc" }, { name: "asc" }],
+    }),
+    getMaterialInstances(),
+  ]);
+  void user;
+
+  const tally = (id: string) => {
+    const mine = rows.filter((r) => (r.yardId ?? "") === id);
+    return {
+      total: mine.length,
+      onHand: mine.filter((r) => ["AVAILABLE", "RECEIVED", "RESERVED"].includes(r.status)).length,
+      checkedOut: mine.filter((r) => ["CHECKED_OUT", "ACTIVE", "IN_TRANSIT"].includes(r.status)).length,
+      flagged: mine.filter((r) => r.risks.length > 0).length,
+    };
+  };
+
+  const out: YardRow[] = yards.map((y) => ({
+    id: y.id,
+    name: y.name,
+    primeContractor: y.primeContractor,
+    market: y.market,
+    city: y.city,
+    status: y.status,
+    ...tally(y.id),
+  }));
+
+  // Material received before anybody set a yard up still has to be findable.
+  const loose = tally("");
+  if (loose.total > 0) {
+    out.push({
+      id: "",
+      name: "No yard set",
+      primeContractor: "",
+      market: "",
+      city: "",
+      status: "ACTIVE",
+      ...loose,
+    });
+  }
+  return out;
 }

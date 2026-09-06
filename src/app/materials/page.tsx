@@ -6,6 +6,7 @@ import {
   getMaterialInstances,
   getMaterialOverview,
   getVarianceReasons,
+  getYards,
 } from "@/data/materials-ops";
 import { PageShell } from "@/components/common/page-shell";
 import { MaterialsView } from "@/components/materials/materials-view";
@@ -17,12 +18,13 @@ export default async function MaterialsPage() {
   const me = await getCurrentUser();
   const staff = !!me && isStaff(me.role);
 
-  const [rows, overview, activity, custody, reasons, crews, projects] = await Promise.all([
+  const [rows, overview, activity, custody, reasons, yards, crews, projects] = await Promise.all([
     getMaterialInstances(),
     getMaterialOverview(),
     getMaterialActivity(),
     getCustodyBySubcontractor(),
     getVarianceReasons(),
+    getYards(),
     // Only the office picks who material goes to.
     staff
       ? prisma.subcontractor.findMany({ select: { id: true, company: true }, orderBy: { company: "asc" } })
@@ -44,6 +46,7 @@ export default async function MaterialsPage() {
         activity={activity}
         custody={custody}
         reasons={reasons}
+        yards={yards}
         crews={crews}
         projects={projects}
         canManage={staff}

@@ -12,7 +12,9 @@ import {
   Package,
   PackagePlus,
   Search,
+  Plus,
   Truck,
+  Warehouse,
   X,
 } from "lucide-react";
 
@@ -22,6 +24,7 @@ import { Panel, PanelHeader } from "@/components/common/panel";
 import { MessageButton } from "@/components/messages/message-button";
 import type { InstanceRow } from "@/data/materials-ops";
 import {
+  createYard,
   issueAction,
   receiveAction,
   returnAction,
@@ -67,25 +70,98 @@ export function MaterialsView({
   reasons,
   crews,
   projects,
+  yards,
   canManage,
 }: {
   rows: InstanceRow[];
   overview: { total: number; onHand: number; checkedOut: number; low: number; flagged: number; unverified: number; issuedToday: number };
-  activity: { id: string; kind: string; code: string; quantity: number; unit: string; at: string; reelNumber: string; crew: string; person: string; actor: string; fromDaily: boolean }[];
+  activity: { id: string; kind: string; code: string; quantity: number; unit: string; at: string; reelNumber: string; crew: string; person: string; actor: string; instanceId: string | null; fromDaily: boolean }[];
   custody: { id: string; name: string; items: number; issued: number; installed: number; returned: number; unexplained: number; flagged: number; lastVerified: string | null }[];
   reasons: { label: string; needsComment: boolean }[];
   crews: { id: string; company: string }[];
   projects: { id: string; name: string }[];
+  yards: { id: string; name: string; primeContractor: string; market: string; city: string; onHand: number; checkedOut: number; flagged: number; total: number }[];
   canManage: boolean;
 }) {
   const [filter, setFilter] = React.useState<Filter>("ALL");
+  const [yard, setYard] = React.useState<string>("ALL");
   const [query, setQuery] = React.useState("");
+  const [addingYard, setAddingYard] = React.useState(false);
   const [open, setOpen] = React.useState<InstanceRow | null>(null);
   const [receiving, setReceiving] = React.useState(false);
 
+  // The yard narrows everything, including the figures across the top. A
+  // company-wide total is a number nobody can act on, because nobody can drive
+  // to it — a prime running eight yards needs the one in front of them.
+  const inYard = React.useMemo(
+    () => (yard === "ALL" ? rows : rows.filter((r) => (r.yardId ?? "") === yard)),
+    [rows, yard],
+  );
+
+  // Everything on this screen reads from the selected yard, not just the
+  // table. A movement list showing another yard's reels while one yard is
+  // selected is the same lie as a total nobody can drive to.
+  const inYardIds = React.useMemo(() => new Set(inYard.map((r) => r.id)), [inYard]);
+
+  const shownActivity = React.useMemo(
+    () =>
+      yard === "ALL"
+        ? activity
+        : activity.filter((a) => a.instanceId && inYardIds.has(a.instanceId)),
+    [activity, yard, inYardIds],
+  );
+
+  const shownCustody = React.useMemo(() => {
+    if (yard === "ALL") return custody;
+    const map = new Map<string, (typeof custody)[number]>();
+    for (const r of inYard) {
+      if (!r.custodianSubId) continue;
+      const cur =
+        map.get(r.custodianSubId) ?? {
+          id: r.custodianSubId,
+          name: r.custodianName,
+          items: 0,
+          issued: 0,
+          installed: 0,
+          returned: 0,
+          unexplained: 0,
+          flagged: 0,
+          lastVerified: null as string | null,
+        };
+      cur.items += 1;
+      cur.issued += r.issued;
+      cur.installed += r.installed;
+      cur.returned += r.returned;
+      cur.unexplained += Math.max(
+        0,
+        r.issued - r.installed - r.returned - r.damaged - Math.max(0, r.expectedRemaining),
+      );
+      if (r.risks.length) cur.flagged += 1;
+      if (r.lastVerifiedAt && (!cur.lastVerified || r.lastVerifiedAt > cur.lastVerified)) {
+        cur.lastVerified = r.lastVerifiedAt;
+      }
+      map.set(r.custodianSubId, cur);
+    }
+    return [...map.values()].sort((a, b) => b.issued - a.issued);
+  }, [custody, inYard, yard]);
+
+  const counts = React.useMemo(
+    () => ({
+      total: inYard.length,
+      onHand: inYard.filter((r) => ["AVAILABLE", "RECEIVED", "RESERVED"].includes(r.status)).length,
+      checkedOut: inYard.filter((r) => ["CHECKED_OUT", "ACTIVE", "IN_TRANSIT"].includes(r.status)).length,
+      low: inYard.filter((r) => ["LOW", "NEARLY_EMPTY"].includes(r.status)).length,
+      flagged: inYard.filter((r) => r.risks.length > 0).length,
+      unverified: inYard.filter(
+        (r) => ["CHECKED_OUT", "ACTIVE"].includes(r.status) && (r.daysSinceVerified ?? 999) >= 14,
+      ).length,
+    }),
+    [inYard],
+  );
+
   const shown = React.useMemo(() => {
     const q = query.trim().toLowerCase();
-    return rows.filter((r) => {
+    return inYard.filter((r) => {
       if (filter === "ON_HAND" && !["AVAILABLE", "RECEIVED", "RESERVED"].includes(r.status)) return false;
       if (filter === "OUT" && !["CHECKED_OUT", "ACTIVE", "IN_TRANSIT"].includes(r.status)) return false;
       if (filter === "LOW" && !["LOW", "NEARLY_EMPTY"].includes(r.status)) return false;
@@ -102,19 +178,83 @@ export function MaterialsView({
         return false;
       return true;
     });
-  }, [rows, filter, query]);
+  }, [inYard, filter, query]);
 
   return (
     <div className="flex flex-col gap-3">
-      {/* Seven figures, each one the filter for itself. A count that makes you
-          go and find the thing it counted is half a feature. */}
+      {/* Which yard. Everything below reads from it.
+          Grouped by prime contractor: Globe runs eight of these and a flat
+          list of eight names across three markets is not navigable. */}
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border/70 bg-foreground/[0.02] px-3 py-2.5">
+        <Warehouse className="size-4 shrink-0 text-gold" />
+        <span className="text-[12px] font-semibold text-foreground">Yard</span>
+        <select
+          value={yard}
+          onChange={(e) => setYard(e.target.value)}
+          aria-label="Filter by yard"
+          className={cn(
+            "focus-ring h-8 max-w-[300px] cursor-pointer rounded-lg px-2.5 text-[12.5px] font-medium outline-none transition-colors",
+            yard === "ALL" ? "bg-foreground/[0.06] text-foreground" : "bg-brand text-white",
+          )}
+        >
+          <option value="ALL">All yards — {rows.length} items</option>
+          {Object.entries(
+            yards.reduce<Record<string, typeof yards>>((acc, y) => {
+              const k = y.primeContractor || "Fortitude";
+              (acc[k] ??= []).push(y);
+              return acc;
+            }, {}),
+          ).map(([prime, list]) => (
+            <optgroup key={prime} label={prime}>
+              {list.map((y) => (
+                <option key={y.id} value={y.id}>
+                  {[y.name, y.city].filter(Boolean).join(" · ")} — {y.total} items
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+
+        {yard !== "ALL" ? (
+          <span className="flex flex-wrap items-center gap-x-3 text-[11.5px] text-muted-foreground">
+            <span>
+              <span className="num font-semibold text-foreground">{counts.onHand}</span> on hand
+            </span>
+            <span>
+              <span className="num font-semibold text-foreground">{counts.checkedOut}</span> out
+            </span>
+            {counts.flagged > 0 ? (
+              <span className="text-critical">
+                <span className="num font-semibold">{counts.flagged}</span> flagged
+              </span>
+            ) : null}
+          </span>
+        ) : yards.length === 0 ? (
+          <span className="text-[11.5px] text-muted-foreground">
+            No yards set up yet. Material lands in &ldquo;no yard&rdquo; until there is one.
+          </span>
+        ) : null}
+
+        {canManage ? (
+          <button
+            type="button"
+            onClick={() => setAddingYard(true)}
+            className="focus-ring ml-auto inline-flex h-7 items-center gap-1.5 rounded-lg border border-border px-2.5 text-[11.5px] font-medium text-foreground hover:border-brand/60"
+          >
+            <Plus className="size-3" /> Add a yard
+          </button>
+        ) : null}
+      </div>
+
+      {/* Six figures, each one the filter for itself, all of them counted
+          inside whichever yard is selected. */}
       <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4 xl:grid-cols-7">
-        <Stat label="Tracked" value={overview.total} hint="reels and instances" active={filter === "ALL"} onClick={() => setFilter("ALL")} />
-        <Stat label="In the yard" value={overview.onHand} hint="available to issue" active={filter === "ON_HAND"} onClick={() => setFilter("ON_HAND")} />
-        <Stat label="Checked out" value={overview.checkedOut} hint="with a crew" active={filter === "OUT"} onClick={() => setFilter("OUT")} />
-        <Stat label="Low" value={overview.low} hint="running out" tone="warning" active={filter === "LOW"} onClick={() => setFilter("LOW")} />
-        <Stat label="Flagged" value={overview.flagged} hint="needs reconciling" tone="critical" active={filter === "FLAGGED"} onClick={() => setFilter("FLAGGED")} />
-        <Stat label="Unverified" value={overview.unverified} hint="14+ days uncounted" tone="warning" active={filter === "UNVERIFIED"} onClick={() => setFilter("UNVERIFIED")} />
+        <Stat label="Tracked" value={counts.total} hint="reels and instances" active={filter === "ALL"} onClick={() => setFilter("ALL")} />
+        <Stat label="In the yard" value={counts.onHand} hint="available to issue" active={filter === "ON_HAND"} onClick={() => setFilter("ON_HAND")} />
+        <Stat label="Checked out" value={counts.checkedOut} hint="with a crew" active={filter === "OUT"} onClick={() => setFilter("OUT")} />
+        <Stat label="Low" value={counts.low} hint="running out" tone="warning" active={filter === "LOW"} onClick={() => setFilter("LOW")} />
+        <Stat label="Flagged" value={counts.flagged} hint="needs reconciling" tone="critical" active={filter === "FLAGGED"} onClick={() => setFilter("FLAGGED")} />
+        <Stat label="Unverified" value={counts.unverified} hint="14+ days uncounted" tone="warning" active={filter === "UNVERIFIED"} onClick={() => setFilter("UNVERIFIED")} />
         <Stat label="Issued today" value={overview.issuedToday} hint="movements" />
       </div>
 
@@ -176,14 +316,16 @@ export function MaterialsView({
         <div className="flex flex-col gap-3">
           {/* Who is holding what. The prime-contractor question. */}
           <Panel>
-            <PanelHeader title="Who has material" count={custody.length} icon={<Truck className="size-3.5" />} />
-            {custody.length === 0 ? (
+            <PanelHeader title="Who has material" count={shownCustody.length} icon={<Truck className="size-3.5" />} />
+            {shownCustody.length === 0 ? (
               <p className="px-4 py-8 text-center text-[12.5px] text-muted-foreground">
-                All tracked material is in the yard.
+                {yard === "ALL"
+                  ? "All tracked material is in the yard."
+                  : "Nothing from this yard is out with a crew."}
               </p>
             ) : (
               <ul className="divide-y divide-border/40">
-                {custody.map((c) => (
+                {shownCustody.map((c) => (
                   <li key={c.id} className="px-3 py-2.5">
                     <p className="flex items-baseline gap-2">
                       <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-brand">
@@ -211,14 +353,14 @@ export function MaterialsView({
           </Panel>
 
           <Panel>
-            <PanelHeader title="Recent movement" count={activity.length} icon={<ArrowLeftRight className="size-3.5" />} />
-            {activity.length === 0 ? (
+            <PanelHeader title="Recent movement" count={shownActivity.length} icon={<ArrowLeftRight className="size-3.5" />} />
+            {shownActivity.length === 0 ? (
               <p className="px-4 py-8 text-center text-[12.5px] text-muted-foreground">
-                Nothing has moved yet.
+                {yard === "ALL" ? "Nothing has moved yet." : "Nothing has moved in this yard."}
               </p>
             ) : (
               <ul className="divide-y divide-border/40">
-                {activity.slice(0, 12).map((a) => (
+                {shownActivity.slice(0, 12).map((a) => (
                   <li key={a.id} className="px-3 py-2 text-[12px]">
                     <p className="flex flex-wrap items-baseline gap-x-1.5">
                       <span className="font-semibold text-foreground">{label(a.kind)}</span>
@@ -251,7 +393,16 @@ export function MaterialsView({
         />
       ) : null}
 
-      {receiving ? <ReceiveDialog projects={projects} onClose={() => setReceiving(false)} /> : null}
+      {receiving ? (
+        <ReceiveDialog
+          projects={projects}
+          yards={yards}
+          defaultYardId={yard === "ALL" ? "" : yard}
+          onClose={() => setReceiving(false)}
+        />
+      ) : null}
+
+      {addingYard ? <AddYardDialog onClose={() => setAddingYard(false)} /> : null}
     </div>
   );
 }
@@ -730,7 +881,17 @@ function ActionForm({
   );
 }
 
-function ReceiveDialog({ projects, onClose }: { projects: { id: string; name: string }[]; onClose: () => void }) {
+function ReceiveDialog({
+  projects,
+  yards,
+  defaultYardId,
+  onClose,
+}: {
+  projects: { id: string; name: string }[];
+  yards: { id: string; name: string; city: string }[];
+  defaultYardId: string;
+  onClose: () => void;
+}) {
   const router = useRouter();
   const [code, setCode] = React.useState("");
   const [description, setDescription] = React.useState("");
@@ -741,6 +902,7 @@ function ReceiveDialog({ projects, onClose }: { projects: { id: string; name: st
   const [supplier, setSupplier] = React.useState("");
   const [po, setPo] = React.useState("");
   const [projectId, setProjectId] = React.useState("");
+  const [yardId, setYardId] = React.useState(defaultYardId);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
@@ -759,6 +921,8 @@ function ReceiveDialog({ projects, onClose }: { projects: { id: string; name: st
       manufacturer,
       supplier,
       poNumber: po,
+      yardId: yardId || undefined,
+      locationLabel: yards.find((y) => y.id === yardId)?.name,
       projectId: projectId || undefined,
     });
     setBusy(false);
@@ -819,6 +983,17 @@ function ReceiveDialog({ projects, onClose }: { projects: { id: string; name: st
             <input value={po} onChange={(e) => setPo(e.target.value)} placeholder="PO-4831" className={field} />
           </label>
           <label className="col-span-2 flex flex-col gap-1">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">Yard</span>
+            <select value={yardId} onChange={(e) => setYardId(e.target.value)} className={field}>
+              <option value="">No yard set</option>
+              {yards.filter((y) => y.id).map((y) => (
+                <option key={y.id} value={y.id}>
+                  {[y.name, y.city].filter(Boolean).join(" · ")}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="col-span-2 flex flex-col gap-1">
             <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">Project (optional)</span>
             <select value={projectId} onChange={(e) => setProjectId(e.target.value)} className={field}>
               <option value="">Unallocated</option>
@@ -843,6 +1018,90 @@ function ReceiveDialog({ projects, onClose }: { projects: { id: string; name: st
           >
             {busy ? <Loader2 className="size-3.5 animate-spin" /> : <ClipboardCheck className="size-3.5" />}
             Receive
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Opening a yard.
+ *
+ * Four fields. A yard is a place material stands, and asking for a dozen
+ * details before somebody can record a reel is how a system gets worked
+ * around with a spreadsheet.
+ */
+function AddYardDialog({ onClose }: { onClose: () => void }) {
+  const router = useRouter();
+  const [name, setName] = React.useState("");
+  const [prime, setPrime] = React.useState("");
+  const [market, setMarket] = React.useState("");
+  const [city, setCity] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const field =
+    "h-9 w-full rounded-lg border border-border bg-transparent px-2.5 text-[13px] text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-brand";
+
+  async function go() {
+    setBusy(true);
+    setError(null);
+    const res = await createYard({ name, primeContractor: prime, market, city });
+    setBusy(false);
+    if (!res.ok) return setError(res.error);
+    onClose();
+    router.refresh();
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4" onClick={onClose}>
+      <div className="w-full max-w-sm rounded-t-2xl border border-border bg-card p-4 sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2">
+          <h2 className="flex-1 text-[15px] font-semibold text-foreground">Add a yard</h2>
+          <button type="button" onClick={onClose} aria-label="Close" className="focus-ring grid size-7 place-items-center rounded-lg text-muted-foreground hover:text-foreground">
+            <X className="size-4" />
+          </button>
+        </div>
+        <p className="mt-1 text-[12px] text-muted-foreground">
+          The prime is what yards are grouped under, so eight of them stay navigable.
+        </p>
+
+        <div className="mt-3 flex flex-col gap-2.5">
+          <label className="flex flex-col gap-1">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">Name</span>
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="White Plains Yard" className={field} />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">Prime contractor</span>
+            <input value={prime} onChange={(e) => setPrime(e.target.value)} placeholder="Globe Communications" className={field} />
+          </label>
+          <div className="grid grid-cols-2 gap-2.5">
+            <label className="flex flex-col gap-1">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">Market</span>
+              <input value={market} onChange={(e) => setMarket(e.target.value)} placeholder="North Georgia" className={field} />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-muted-foreground">City</span>
+              <input value={city} onChange={(e) => setCity(e.target.value)} placeholder="Toccoa" className={field} />
+            </label>
+          </div>
+        </div>
+
+        {error ? <p className="mt-2 text-[12px] text-critical">{error}</p> : null}
+
+        <div className="mt-4 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="focus-ring h-9 rounded-lg border border-border px-3 text-[12.5px] font-medium text-foreground">
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => void go()}
+            disabled={busy || !name.trim()}
+            className="focus-ring inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand px-3.5 text-[12.5px] font-semibold text-white hover:bg-brand-bright disabled:opacity-40"
+          >
+            {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Warehouse className="size-3.5" />}
+            Add it
           </button>
         </div>
       </div>
