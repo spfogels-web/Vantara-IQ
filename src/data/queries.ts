@@ -13,6 +13,7 @@ import {
   viewer,
   visibleProjectIds,
 } from "@/lib/authz";
+import { fastPayQuote } from "@/lib/fast-pay";
 import { packetStatus } from "@/lib/vendor-packet";
 import { badgeReadiness } from "@/lib/badge";
 import { isStaff } from "@/lib/auth";
@@ -1602,9 +1603,12 @@ export async function getPayApplications(): Promise<PayApplication[]> {
       periodEnd: true,
       status: true,
       fastPay: true,
+      fastPayFeePct: true,
+      subtotal: true,
       createdAt: true,
       subcontractor: { select: { company: true } },
       lines: { select: { amount: true } },
+      payments: { select: { id: true } },
       project: { select: { customer: { select: { retainagePct: true } } } },
     },
   });
@@ -1632,6 +1636,11 @@ export async function getPayApplications(): Promise<PayApplication[]> {
       tone,
       submitted: r.createdAt.toISOString(),
       fastPayEligible: r.fastPay,
+      state: r.status as PayApplication["state"],
+      // What actually lands. The register showed gross beside a fast-pay bolt
+      // and left the reader to do the subtraction.
+      net: r.fastPay ? fastPayQuote(amount, r.fastPayFeePct).net : amount,
+      paid: r.payments.length > 0,
     };
   });
 }

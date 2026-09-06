@@ -1302,7 +1302,9 @@ export const payApplications: PayApplication[] = [
     status: "Pending review",
     tone: "warning",
     submitted: "2 hr ago",
-    fastPayEligible: true,
+    fastPayEligible: true,    state: "ISSUED",
+      net: 84200,
+      paid: false,
   },
   {
     id: "pa-0087",
@@ -1315,7 +1317,9 @@ export const payApplications: PayApplication[] = [
     status: "Held",
     tone: "critical",
     submitted: "3 hr ago",
-    fastPayEligible: false,
+    fastPayEligible: false,    state: "DISPUTED",
+      net: 41800,
+      paid: false,
   },
   {
     id: "pa-0086",
@@ -1328,7 +1332,9 @@ export const payApplications: PayApplication[] = [
     status: "Approved",
     tone: "success",
     submitted: "Yesterday",
-    fastPayEligible: true,
+    fastPayEligible: true,    state: "ACCEPTED",
+      net: 96400,
+      paid: false,
   },
   {
     id: "pa-0085",
@@ -1341,7 +1347,9 @@ export const payApplications: PayApplication[] = [
     status: "Scheduled",
     tone: "info",
     submitted: "Yesterday",
-    fastPayEligible: false,
+    fastPayEligible: false,    state: "ACCEPTED",
+      net: 58900,
+      paid: false,
   },
   {
     id: "pa-0084",
@@ -1354,7 +1362,9 @@ export const payApplications: PayApplication[] = [
     status: "Paid",
     tone: "neutral",
     submitted: "2 days ago",
-    fastPayEligible: false,
+    fastPayEligible: false,    state: "PAID",
+      net: 112400,
+      paid: true,
   },
 ];
 

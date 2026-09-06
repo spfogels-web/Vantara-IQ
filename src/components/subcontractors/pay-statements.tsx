@@ -199,10 +199,15 @@ function StatementRow({ invoice: inv, actionable }: { invoice: SubInvoiceRow; ac
           {formatCurrency(inv.subtotal)}
         </span>
 
-        {/* Offered once the crew has agreed the figures and not before. A
-            remittance for a statement still under dispute is a letter saying
-            money is on its way when it is not. */}
-        {inv.status === "ACCEPTED" || inv.status === "PAID" ? (
+        {/* Only once the money has actually gone.
+            Not when the statement is merely accepted: a remittance is a letter
+            saying a payment has been made, and a crew holding one before the
+            transfer is arranged has been told they are being paid. Work can
+            still be held back over craftsmanship between acceptance and
+            payment, and that decision must not be pre-empted by a document.
+            The office can produce it earlier — see the pay register — because
+            they need it to send with the transfer. */}
+        {inv.status === "PAID" ? (
           <a
             href={`/api/remittance/${inv.id}`}
             className="focus-ring inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg border border-border px-2.5 text-[11.5px] font-medium text-foreground hover:border-brand/60"

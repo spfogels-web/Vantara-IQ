@@ -7,7 +7,7 @@ import { formatCompactCurrency, formatCurrency } from "@/lib/format";
 import { PageShell, StatStrip } from "@/components/common/page-shell";
 import { Panel, PanelHeader } from "@/components/common/panel";
 import { StatusPill } from "@/components/common/status-pill";
-import { Button } from "@/components/ui/button";
+import { PayAppActions } from "@/components/financials/pay-app-actions";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Pay applications · Vantara IQ" };
@@ -28,9 +28,12 @@ export default async function PayApplicationsPage() {
       title="Pay applications"
       description="Subcontractor pay, driven by approved dailies. Retainage, Fast Pay and ACH export handled in one register with a full audit trail."
       actions={
-        <Button size="sm" className="h-9 gap-1.5 rounded-lg bg-brand px-3.5 text-[12.5px] font-semibold text-white hover:bg-brand-bright">
-          Export ACH batch
-        </Button>
+        <span className="text-[11.5px] text-muted-foreground">
+          {/* There was an "Export ACH batch" button here wired to nothing. On a
+              screen about money, a control that silently does nothing reads as
+              a step that has been taken. */}
+          Arrange the transfer at the bank, then record it here.
+        </span>
       }
     >
       <div className="flex flex-col gap-3">
@@ -39,7 +42,13 @@ export default async function PayApplicationsPage() {
             { label: "Pending review", value: formatCompactCurrency(pendingTotal), hint: `${pending.length} pay apps`, tone: "text-warning" },
             { label: "Approved / scheduled", value: formatCompactCurrency(approvedTotal), tone: "text-success" },
             { label: "Retainage held", value: formatCompactCurrency(retainageHeld) },
-            { label: "Total pay apps", value: String(payApps.length) },
+            {
+              label: "Paid",
+              value: formatCompactCurrency(
+                payApps.filter((p) => p.paid).reduce((s, p) => s + p.net, 0),
+              ),
+              hint: `${payApps.filter((p) => p.paid).length} settled`,
+            },
           ]}
         />
 
@@ -55,6 +64,7 @@ export default async function PayApplicationsPage() {
                   <th className="px-3 py-2.5 font-medium">Period</th>
                   <th className="px-3 py-2.5 text-right font-medium">Retainage</th>
                   <th className="px-3 py-2.5 text-right font-medium">Amount</th>
+                  <th className="px-3 py-2.5 text-right font-medium">Net</th>
                   <th className="px-3 py-2.5 font-medium">Status</th>
                   <th className="px-4 py-2.5 text-right font-medium sm:px-5">Action</th>
                 </tr>
@@ -80,17 +90,23 @@ export default async function PayApplicationsPage() {
                     <td className={cn("num px-3 py-3 text-right text-[12.5px] font-medium", toneStyles[p.tone].text)}>
                       {formatCurrency(p.amount)}
                     </td>
+                    {/* What actually lands. The register showed gross beside a
+                        fast-pay bolt and left the reader to subtract 3.5% in
+                        their head to know what to key into the bank. */}
+                    <td className="num gold-figure px-3 py-3 text-right text-[12.5px] font-semibold">
+                      {formatCurrency(p.net)}
+                    </td>
                     <td className="px-3 py-3">
                       <StatusPill label={p.status} tone={p.tone} dot={false} className="text-[10px]" />
                     </td>
                     <td className="px-4 py-3 text-right sm:px-5">
-                      {p.status === "Pending review" ? (
-                        <Button size="sm" className="h-8 gap-1.5 rounded-lg bg-brand px-3 text-[12px] font-semibold text-white hover:bg-brand-bright">
-                          <Check className="size-3.5" /> Approve
-                        </Button>
-                      ) : (
-                        <span className="text-[11.5px] text-muted-foreground">—</span>
-                      )}
+                      <PayAppActions
+                        id={p.id}
+                        state={p.state}
+                        net={p.net}
+                        paid={p.paid}
+                        fastPay={p.fastPayEligible}
+                      />
                     </td>
                   </tr>
                 ))}

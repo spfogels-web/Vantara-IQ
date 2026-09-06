@@ -466,6 +466,17 @@ export interface PayApplication {
   tone: Tone;
   submitted: string;
   fastPayEligible: boolean;
+  /**
+   * The statement's own state, not the register's label for it.
+   *
+   * The two do not line up — DRAFT and ISSUED both read "Pending review" — and
+   * which action a row offers depends on the real one.
+   */
+  state: "DRAFT" | "ISSUED" | "ACCEPTED" | "DISPUTED" | "PAID" | "VOID";
+  /** What actually lands, after any fast-pay fee. */
+  net: number;
+  /** Whether a payment has been recorded against it. */
+  paid: boolean;
 }
 
 export interface ReportDefinition {
