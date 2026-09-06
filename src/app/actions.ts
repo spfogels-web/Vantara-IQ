@@ -4597,7 +4597,82 @@ export async function reopenSubInvoice(id: string, note: string) {
   return { ok: true as const };
 }
 
-/** Mark an accepted statement as paid. */
+/**
+ * Record the money actually going out, and mark the statement paid.
+ *
+ * This used to set the word PAID and store nothing else — not the amount, not
+ * the day the money moved, not the trace number. A crew ringing in November to
+ * ask which payment covered the second week of August had no answer available
+ * to the person who picked up the phone.
+ *
+ * The date is the bank's, not today's: a Friday ACH keyed on Monday is a
+ * Friday payment, and reconciling against a statement means matching the day
+ * the money left.
+ */
+const usd = (n: number) =>
+  `${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+export async function recordSubPayment(input: {
+  id: string;
+  amount: number;
+  paidOn: string;
+  method: string;
+  reference?: string;
+  note?: string;
+}) {
+  const me = await requireStaff();
+
+  const inv = await prisma.subInvoice.findUnique({
+    where: { id: input.id },
+    select: { status: true, subtotal: true, fastPay: true, fastPayFeePct: true },
+  });
+  if (!inv) return { ok: false as const, error: "Statement not found." };
+  if (inv.status !== "ACCEPTED" && inv.status !== "PAID") {
+    return { ok: false as const, error: "Wait for the crew to accept it before paying it." };
+  }
+  if (!Number.isFinite(input.amount) || input.amount <= 0) {
+    return { ok: false as const, error: "Enter the amount that was sent." };
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.paidOn)) {
+    return { ok: false as const, error: "Enter the date the money moved, as YYYY-MM-DD." };
+  }
+
+  // What they were owed, so an amount typed by hand can be checked against it
+  // rather than accepted on trust. A mismatch is allowed — partial payments and
+  // corrections are real — but it is said out loud rather than filed silently.
+  const owed = inv.fastPay
+    ? fastPayQuote(inv.subtotal, inv.fastPayFeePct).net
+    : inv.subtotal;
+
+  await prisma.$transaction([
+    prisma.subPayment.create({
+      data: {
+        invoiceId: input.id,
+        amount: Math.round(input.amount * 100) / 100,
+        paidOn: input.paidOn,
+        method: input.method === "WIRE" ? "WIRE" : "ACH",
+        reference: (input.reference ?? "").trim().slice(0, 120),
+        note: (input.note ?? "").trim().slice(0, 300),
+        recordedBy: me.name ?? "",
+      },
+    }),
+    prisma.subInvoice.update({ where: { id: input.id }, data: { status: "PAID" } }),
+  ]);
+
+  revalidatePath("/pay");
+  revalidatePath("/pay-applications");
+  revalidatePath("/subcontractors");
+
+  const off = Math.abs(owed - input.amount) >= 0.01;
+  return {
+    ok: true as const,
+    warning: off
+      ? `Recorded, but that is ${usd(input.amount)} against ${usd(owed)} owed.`
+      : undefined,
+  };
+}
+
+/** Mark an accepted statement as paid, with no payment detail. */
 export async function markSubInvoicePaid(id: string) {
   await requireStaff();
   const inv = await prisma.subInvoice.findUnique({ where: { id }, select: { status: true } });

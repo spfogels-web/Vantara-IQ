@@ -2,7 +2,16 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Check, FileText, Loader2, ShieldCheck, TriangleAlert, X, Zap } from "lucide-react";
+import {
+  Check,
+  Download,
+  FileText,
+  Loader2,
+  ShieldCheck,
+  TriangleAlert,
+  X,
+  Zap,
+} from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatNumber, formatRate } from "@/lib/format";
@@ -189,6 +198,19 @@ function StatementRow({ invoice: inv, actionable }: { invoice: SubInvoiceRow; ac
         <span className="num ml-auto text-[15px] font-semibold text-foreground">
           {formatCurrency(inv.subtotal)}
         </span>
+
+        {/* Offered once the crew has agreed the figures and not before. A
+            remittance for a statement still under dispute is a letter saying
+            money is on its way when it is not. */}
+        {inv.status === "ACCEPTED" || inv.status === "PAID" ? (
+          <a
+            href={`/api/remittance/${inv.id}`}
+            className="focus-ring inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg border border-border px-2.5 text-[11.5px] font-medium text-foreground hover:border-brand/60"
+          >
+            <Download className="size-3.5" />
+            Remittance
+          </a>
+        ) : null}
       </div>
 
       <p className="mt-0.5 text-[11px] text-muted-foreground">

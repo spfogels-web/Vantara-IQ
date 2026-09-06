@@ -528,8 +528,9 @@ model SubInvoice {
   disputedAt  DateTime?
   disputedBy  String    @default("")
 
-  /// Settlement window in calendar days. 30 unless fast pay is elected.
-  termsDays Int @default(30)
+  /// Settlement window in calendar days. 21 unless fast pay is elected,
+  /// which takes it to 10.
+  termsDays Int @default(21)
 
   /// Fast pay — the crew trades a slice of the statement for getting paid
   /// sooner. Wire only, and that is not a preference they set: wire is what
@@ -546,6 +547,7 @@ model SubInvoice {
   /// Fortitude's note back, when a dispute is settled.
   resolutionNote String           @default("")
   lines          SubInvoiceLine[]
+  payments       SubPayment[]
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 
@@ -1869,4 +1871,33 @@ model SmsOptIn {
   revokedVia String  @default("")
 
   @@index([phone])
+}
+
+/// Money actually sent to a crew.
+///
+/// Separate from Payment, which records money coming in from a customer. The
+/// two directions share a shape and nothing else: mixing them would put what
+/// we owe and what we are owed one careless where-clause apart.
+///
+/// Marking a statement PAID used to store the word and nothing else — not the
+/// amount, not the day the money moved, not the trace number. Six months on,
+/// "which payment covered that week" had no answer.
+model SubPayment {
+  id         String     @id @default(cuid())
+  invoice    SubInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoiceId  String
+  amount     Float      @default(0)
+  /// The day the money moved, as YYYY-MM-DD. The bank's date, not today's —
+  /// a payment entered on Monday for a Friday ACH is a Friday payment.
+  paidOn     String     @default("")
+  /// ACH or WIRE. Fast pay is wire; standard terms settle by ACH.
+  method     String     @default("ACH")
+  /// The bank's trace or confirmation number. This is what a crew quotes
+  /// when they ring to say they cannot find it.
+  reference  String     @default("")
+  note       String     @default("")
+  recordedBy String     @default("")
+  createdAt  DateTime   @default(now())
+
+  @@index([invoiceId])
 }

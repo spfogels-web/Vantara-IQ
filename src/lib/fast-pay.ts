@@ -1,22 +1,28 @@
 /**
  * Fast pay — a crew trading a slice of the statement for getting paid sooner.
  *
- * Standard settlement is NET 30. A crew may elect fast pay instead: NET 10,
- * with a fee taken off what they receive. The fee percentage is frozen onto the
- * statement at the moment it is elected, exactly like a rate is frozen onto an
- * invoice line — changing the house rate next quarter must not restate what
- * somebody already agreed to.
+ * Standard settlement is NET 21 and nothing comes off it. A crew may elect
+ * fast pay instead: NET 10, with a fee taken off what they receive. The fee
+ * percentage is frozen onto the statement at the moment it is elected, exactly
+ * like a rate is frozen onto an invoice line — changing the house rate next
+ * quarter must not restate what somebody already agreed to.
  *
  * Fast pay settles by wire only, and that is not a preference the crew sets.
  * Wire is what actually clears inside ten days; offering ACH beside it would be
  * offering a promise the rail cannot keep.
  */
 
-/** House terms when nothing is elected. */
-export const STANDARD_TERMS_DAYS = 30;
+/** House terms when nothing is elected. Net 21, no fee. */
+export const STANDARD_TERMS_DAYS = 21;
 
-/** What fast pay costs and buys, as it stands today. */
-export const FAST_PAY_FEE_PCT = 4;
+/**
+ * What fast pay costs and buys, as it stands today.
+ *
+ * A statement already elected keeps the percentage it was elected at — see
+ * SubInvoice.fastPayFeePct — so moving this number changes what is offered
+ * from here on and restates nothing behind it.
+ */
+export const FAST_PAY_FEE_PCT = 3.5;
 export const FAST_PAY_DAYS = 10;
 
 /** How fast pay is settled. Not a choice — see the note above. */

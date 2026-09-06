@@ -70,6 +70,10 @@ const SUB_ALLOWED_PREFIXES = [
   "/settings",
   "/api/daily-sheet",
   "/api/project-map",
+  // Their own pay statement's remittance advice. The route checks the
+  // statement belongs to the company asking before it renders anything —
+  // what another crew is paid is the one figure that must never cross over.
+  "/api/remittance",
 ];
 
 /**
