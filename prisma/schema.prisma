@@ -171,6 +171,7 @@ model CustomerRate {
 }
 
 model Project {
+  materialInstances MaterialInstance[]
   conversations    Conversation[]
   id               String            @id @default(cuid())
   number           String            @default("")
@@ -408,6 +409,7 @@ model Subcontractor {
   userInvites            SubUserInvite[]
   conversations          Conversation[]
   conversationSeat       ConversationParticipant[] @relation("ConversationCrew")
+  materialCustody        MaterialInstance[]        @relation("MaterialCustodian")
   messageContacts        MessageContact[]
   smsConsentAt   DateTime?
   /// Set the moment they reply STOP. Kept forever rather than cleared, so a
@@ -1896,6 +1898,41 @@ model MaterialTransaction {
   /// Reel this came off, where the material is reel-tracked.
   reelNumber     String @default("")
 
+  /// The physical thing that moved, where there is one. The reel number above
+  /// stays populated for movements predating instances and for unit material
+  /// nobody serialises.
+  instance   MaterialInstance? @relation(fields: [instanceId], references: [id], onDelete: SetNull)
+  instanceId String?
+
+  /// The pickup or delivery this was part of.
+  session   MaterialSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  sessionId String?
+
+  /// Custody either side of the movement, frozen. Deriving it later from
+  /// neighbouring rows is how a history starts disagreeing with itself.
+  fromSubId    String @default("")
+  fromCrew     String @default("")
+  fromPerson   String @default("")
+  fromLocation String @default("")
+  toSubId      String @default("")
+  toCrew       String @default("")
+  toPerson     String @default("")
+  toLocation   String @default("")
+
+  vehicle String @default("")
+  trailer String @default("")
+
+  /// The daily that consumed it, when the movement came from production rather
+  /// than from somebody at a keyboard.
+  sourceDailyId String @default("")
+  /// manual | daily | ai_intake | request
+  source        String @default("manual")
+
+  /// On a COUNT: what was expected, what was found, and why they differ.
+  expectedQty    Float?
+  actualQty      Float?
+  varianceReason String @default("")
+
   /// Paperwork behind the movement.
   reference String @default("")
   /// Required on ADJUST. Why the number moved without material moving.
@@ -1915,6 +1952,9 @@ model MaterialTransaction {
   @@index([reelNumber])
   @@index([custodianSubId])
   @@index([at])
+  @@index([instanceId, at])
+  @@index([sessionId])
+  @@index([sourceDailyId])
 }
 
 /// Proof that a person agreed to be texted.
@@ -2282,5 +2322,187 @@ model MessageTemplate {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+/* ------------------------------------------------------------------ *
+ * Material chain of custody.
+ *
+ * The distinction everything below depends on: "288ct SM Fiber" is a material,
+ * "Reel R-88142" is a thing you can put on a truck. The ledger tracked
+ * material by code, which answers how much a job used and cannot answer who
+ * has it — and who has it is the question being asked when 480 ft is missing.
+ *
+ * Custody is derived from events and cached on the instance. Every movement is
+ * an event; the instance carries the latest one so a list of two hundred reels
+ * does not replay two thousand movements to draw itself. Nothing overwrites
+ * history.
+ * ------------------------------------------------------------------ */
+
+enum MaterialInstanceStatus {
+  /// Booked in, not yet available to issue.
+  RECEIVED
+  AVAILABLE
+  /// Held for a job so nobody else issues it.
+  RESERVED
+  CHECKED_OUT
+  IN_TRANSIT
+  /// Issued and being drawn down.
+  ACTIVE
+  LOW
+  NEARLY_EMPTY
+  RETURNED
+  DAMAGED
+  QUARANTINED
+  /// The numbers do not add up and somebody has to look.
+  RECONCILE
+  CLOSED
+  DISPOSED
+}
+
+/// A physical, identifiable piece of material.
+///
+/// A reel, a pallet, a bundle — anything with a number on the side. Unit
+/// material nobody serialises does not need one; the code-level ledger already
+/// handles a pile of handholes.
+model MaterialInstance {
+  id String @id @default(cuid())
+
+  /// The material code, the same one the rate card and the daily sheet use, so
+  /// the three reconcile without a mapping table between them.
+  code        String
+  description String @default("")
+  category    String @default("Hardware")
+  unit        String @default("ft")
+
+  /// What is written on the side. Unique with the code: two suppliers can both
+  /// ship an "R-1", and the same reel on the same material is the duplicate
+  /// worth refusing.
+  reelNumber   String @default("")
+  lotNumber    String @default("")
+  serialNumber String @default("")
+  manufacturer String @default("")
+  partNumber   String @default("")
+
+  /// What it held on arrival. The denominator for everything after.
+  originalQty Float @default(0)
+
+  status MaterialInstanceStatus @default(RECEIVED)
+
+  yardId          String  @default("")
+  locationLabel   String  @default("")
+  project         Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  projectId       String?
+  custodian       Subcontractor? @relation("MaterialCustodian", fields: [custodianSubId], references: [id], onDelete: SetNull)
+  custodianSubId  String?
+  crew            String  @default("")
+  /// The person answerable for it, by name. A crew's staff change, and a
+  /// custody record naming only a company answers nobody.
+  responsibleName String  @default("")
+  vehicle         String  @default("")
+  trailer         String  @default("")
+
+  checkedOutAt DateTime?
+  issuedByName String    @default("")
+
+  lastVerifiedAt  DateTime?
+  lastVerifiedQty Float?
+  lastVerifiedBy  String    @default("")
+
+  supplier       String @default("")
+  poNumber       String @default("")
+  shipmentNumber String @default("")
+
+  events   MaterialTransaction[]
+  sessions MaterialSessionItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([code, reelNumber])
+  @@index([status])
+  @@index([projectId])
+  @@index([custodianSubId])
+  @@index([reelNumber])
+  @@index([code])
+}
+
+/// One pickup, one delivery, one transfer, one return.
+///
+/// A crew does not come for a reel; they come for a reel, twelve handholes and
+/// twenty ground rods, and they sign once. Grouping the movements makes that
+/// one event in the history rather than thirty-three.
+model MaterialSession {
+  id   String @id @default(cuid())
+  /// RECEIPT | PICKUP | TRANSFER | RETURN
+  kind String
+
+  reference String @default("")
+
+  projectId      String @default("")
+  custodianSubId String @default("")
+  crew           String @default("")
+  yardId         String @default("")
+
+  /// Who physically took it, and what they do. The most useful field on this
+  /// table when a dispute starts eight weeks later.
+  personName String @default("")
+  personRole String @default("")
+  vehicle    String @default("")
+  trailer    String @default("")
+
+  actorUserId String @default("")
+  actorName   String @default("")
+
+  acknowledgedBy      String @default("")
+  acknowledgedAt      DateTime?
+  acknowledgementText String @default("")
+  signatureUrl        String @default("")
+
+  supplier       String @default("")
+  poNumber       String @default("")
+  shipmentNumber String @default("")
+
+  photos Json   @default("[]")
+  notes  String @default("")
+
+  items  MaterialSessionItem[]
+  events MaterialTransaction[]
+
+  at        DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  @@index([kind, at])
+  @@index([projectId])
+  @@index([custodianSubId])
+}
+
+model MaterialSessionItem {
+  id        String          @id @default(cuid())
+  session   MaterialSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sessionId String
+
+  instance   MaterialInstance? @relation(fields: [instanceId], references: [id], onDelete: SetNull)
+  instanceId String?
+
+  code     String
+  quantity Float
+  unit     String @default("")
+  notes    String @default("")
+
+  @@index([sessionId])
+  @@index([instanceId])
+}
+
+/// Why a count came out different.
+///
+/// A table rather than an enum, because the list is a business decision and
+/// adding one should not need a deploy.
+model VarianceReason {
+  id           String  @id @default(cuid())
+  label        String  @unique
+  /// Whether choosing it forces a comment.
+  needsComment Boolean @default(false)
+  active       Boolean @default(true)
+  sortOrder    Int     @default(0)
 }
 

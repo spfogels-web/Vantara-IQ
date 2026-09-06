@@ -2218,6 +2218,16 @@ export async function reviewDaily(input: {
     // them is our margin, and a crew reaches one and never the other.
     billing = await fileApprovedDaily(daily.id);
     crewPay = await fileApprovedDailyForSub(daily.id);
+
+    // And draw the material down off the reel the crew is on.
+    //
+    // The footage is already on the sheet; making an inventory manager type it
+    // a second time is how the two numbers start disagreeing. Idempotent on
+    // the daily, so re-approving a corrected day does not consume twice.
+    //
+    // Best-effort by design: material is a record of what happened, and a
+    // reel that cannot be matched must not block a crew being paid.
+    await consumeDailyIntoMaterial(daily.id).catch(() => undefined);
   } else {
     // Denied work cannot sit on either. It comes off a draft; anything already
     // issued needs a credit or a conversation, not a quiet edit.
@@ -7036,4 +7046,73 @@ export async function setProjectComplete(projectId: string, complete: boolean) {
   revalidatePath("/projects");
   revalidatePath("/");
   return { ok: true as const, complete };
+}
+
+
+/**
+ * Turn an approved daily's production into material movements.
+ *
+ * Matching is deliberately conservative. A line consumes off a reel only when
+ * exactly one active instance carries that code for that crew — if two reels
+ * of 288ct fiber are out with Crew 3, guessing which one the footage came off
+ * would put a number against the wrong reel and make both wrong. Ambiguity is
+ * left alone for a person to assign.
+ */
+async function consumeDailyIntoMaterial(dailyId: string) {
+  const daily = await prisma.daily.findUnique({
+    where: { id: dailyId },
+    select: {
+      id: true, projectId: true, crew: true, subcontractor: true, lineItems: true,
+    },
+  });
+  if (!daily) return;
+
+  const lines = (Array.isArray(daily.lineItems) ? daily.lineItems : []) as {
+    code?: string;
+    quantity?: number;
+    unit?: string;
+  }[];
+  if (lines.length === 0) return;
+
+  const sub = daily.subcontractor?.trim()
+    ? await prisma.subcontractor.findFirst({
+        where: { company: daily.subcontractor.trim() },
+        select: { id: true },
+      })
+    : null;
+
+  const { consumeFromDaily } = await import("@/lib/material-custody");
+
+  for (const line of lines) {
+    const code = (line.code ?? "").trim().toUpperCase();
+    const qty = Number(line.quantity ?? 0);
+    if (!code || !(qty > 0)) continue;
+
+    const candidates = await prisma.materialInstance.findMany({
+      where: {
+        code,
+        status: { in: ["CHECKED_OUT", "ACTIVE", "LOW", "NEARLY_EMPTY"] },
+        ...(sub ? { custodianSubId: sub.id } : {}),
+        ...(daily.projectId ? { projectId: daily.projectId } : {}),
+      },
+      select: { id: true, unit: true },
+      take: 2,
+    });
+
+    // One match consumes. None means unit material nobody serialised, which
+    // the code-level ledger already covers. Two means a person has to say.
+    if (candidates.length !== 1) continue;
+
+    await consumeFromDaily({
+      dailyId: daily.id,
+      instanceId: candidates[0].id,
+      code,
+      quantity: qty,
+      unit: candidates[0].unit || line.unit,
+      projectId: daily.projectId ?? undefined,
+      crew: daily.crew,
+      custodianSubId: sub?.id,
+      actor: { userId: "", name: "Daily approval" },
+    }).catch(() => undefined);
+  }
 }
