@@ -91,6 +91,14 @@ export const MAIN_BILLABLE_CODES = [
   "BFO192I",
   "BFO216I",
   "BFO288I",
+  // Micro ribbon fibre blown through microduct the plow already placed. The
+  // "RI" suffix is not the same work as "I": BFO24I pulls a jacketed cable
+  // into existing pipe, BFO24RI blows ribbon through microduct, and Globe
+  // prices them apart. Both are a second pass down a route already opened, so
+  // productionMethod calls them "other" and they bill without counting toward
+  // footage progress a second time.
+  "BFO12RI",
+  "BFO24RI",
   // Splice and misc buried.
   "BM2F",
   "BM2AF",
