@@ -26,7 +26,7 @@ export function PageShell({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div className="min-w-0">
           {eyebrow ? <p className="eyebrow">{eyebrow}</p> : null}
-          <h1 className="text-[22px] font-semibold leading-tight tracking-[-0.025em] text-gradient sm:text-[26px]">
+          <h1 className="section-title text-[22px] font-semibold leading-tight tracking-[-0.025em] sm:text-[26px]">
             {title}
           </h1>
           {description ? (

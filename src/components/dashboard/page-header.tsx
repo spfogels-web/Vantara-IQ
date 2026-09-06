@@ -31,7 +31,7 @@ export function PageHeader({ name, summary }: { name?: string; summary?: string 
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0">
-        <h1 className="text-[22px] font-semibold leading-tight tracking-[-0.025em] text-gradient sm:text-[26px]">
+        <h1 className="section-title text-[22px] font-semibold leading-tight tracking-[-0.025em] sm:text-[26px]">
           {now ? greeting(now.getHours()) : "Welcome back"}, {firstName}
         </h1>
         <p className="mt-1 text-[13px] text-muted-foreground">

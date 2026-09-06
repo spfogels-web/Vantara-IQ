@@ -668,6 +668,19 @@
     box-shadow: 0 1px 0 0 var(--border);
   }
 
+  /* The name of whatever section you are standing in.
+     Gold rather than the blue-to-violet gradient the rest of the brand
+     uses: the gradient reads as decoration and the eye slid past it, and
+     these headings are the one thing on the page that says where you are.
+     Gold is already the accent that means Vantara here.
+
+     The strong variant, not the flat one — it is the gold built to invert
+     across themes, lifting off a dark surface and sinking into a light
+     one, which is what a 26px heading needs to carry on both. */
+  .section-title {
+    color: var(--vq-gold-strong);
+  }
+
   .text-gradient {
     background: linear-gradient(180deg, var(--gradient-from) 0%, var(--gradient-to) 100%);
     -webkit-background-clip: text;
