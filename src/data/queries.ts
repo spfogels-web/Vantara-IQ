@@ -4318,6 +4318,13 @@ export interface LocateTicketRow {
   datesStated: boolean;
   /** Whether a crew may dig on it today, and why. */
   dig: { ok: boolean; because: string };
+  /** Has 811 finished — see src/lib/locate-readiness.ts. */
+  externalReadiness: string;
+  /** May a crew actually dig. Different question, different answer. */
+  fieldReadiness: string;
+  blockingReason: string;
+  /** Utilities we locate ourselves that are not signed off yet. */
+  contractorOutstanding: string[];
   responses: LocateResponseRow[];
   /** Members still silent. Silence is not clearance. */
   awaiting: string[];
@@ -4330,6 +4337,8 @@ const LOCATE_SELECT = {
   ticketType: true, responseBy: true, updateableOn: true,
   lat: true, lng: true, locateInstructions: true,
   closedOn: true, notes: true,
+  externalReadiness: true, fieldReadiness: true, blockingReason: true,
+  contractorLocates: { select: { utilityName: true, status: true } },
   project: { select: { name: true } },
   responses: {
     orderBy: { member: "asc" as const },
@@ -4382,7 +4391,16 @@ export async function getLocateTickets(): Promise<LocateTicketRow[]> {
       standingLabel: STANDING_LABEL[standing.standing],
       daysToExpiry: standing.daysToExpiry,
       datesStated: standing.stated.expiry,
+      // The two answers kept apart. `dig` is the older single flag and stays
+      // for the existing board; these are what the assistant reasons over, so
+      // it can tell "waiting on Windstream" from "Windstream is ours to walk".
       dig: canDig(standing, r.responses),
+      externalReadiness: r.externalReadiness,
+      fieldReadiness: r.fieldReadiness,
+      blockingReason: r.blockingReason,
+      contractorOutstanding: r.contractorLocates
+        .filter((c) => c.status !== "VERIFIED" && c.status !== "NOT_REQUIRED")
+        .map((c) => c.utilityName),
       responses: r.responses.map((x) => ({
         id: x.id, member: x.member, code: x.code, facilityType: x.facilityType, status: x.status,
         respondedOn: x.respondedOn, note: x.note,

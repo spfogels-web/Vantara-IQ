@@ -686,7 +686,7 @@ function AddTickets({
  * the right rows — "what have we got on Thompson", "what runs out this week" —
  * which is exactly the part that is painful in an inbox.
  */
-function LocateChat({ ready, count }: { ready: boolean; count: number }) {
+export function LocateChat({ ready, count }: { ready: boolean; count: number }) {
   const [messages, setMessages] = React.useState<{ role: "user" | "assistant"; content: string }[]>([]);
   const [q, setQ] = React.useState("");
   const [busy, setBusy] = React.useState(false);

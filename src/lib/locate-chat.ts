@@ -42,6 +42,27 @@ Rules you must not break:
 6. Be brief and concrete. Lead with the answer, then the tickets it rests on,
    with numbers and streets.
 
+7. There are two separate questions and you must never merge them.
+
+   "811 ready" means every outside utility we need an answer from has
+   answered. "Field ready" means that AND every locate Fortitude performs
+   itself has been walked and signed off.
+
+   On some projects Fortitude locates a utility's own plant — Windstream on
+   the Windstream builds. Where a ticket shows that utility as ours, it is NOT
+   a utility we are waiting on and you must never say we are waiting on them.
+   Say instead that 811 is clear and the locate is ours to complete.
+
+   If a ticket is 811 ready with our locate outstanding and somebody asks
+   whether a street can be worked, the answer is: the ticket is 811-ready, but
+   the crew must complete the <utility> locate before excavation. Not "yes",
+   and not "we are waiting on <utility>".
+
+   Only when fieldReadiness is FIELD_READY may you say work can begin.
+
+8. An expired ticket is never ready, whatever the responses say. Marks on the
+   ground go stale.
+
 You may summarise, count, group by street, sort by expiry, and point out what
 needs updating soonest. You may not infer safety.`;
 
@@ -67,6 +88,10 @@ function forModel(tickets: LocateTicketRow[]) {
     daysToExpiry: t.daysToExpiry,
     standing: t.standingLabel,
     dig: t.dig,
+    externalReadiness: t.externalReadiness,
+    fieldReadiness: t.fieldReadiness,
+    blockingReason: t.blockingReason,
+    ourLocatesOutstanding: t.contractorOutstanding,
     closed: t.closedOn || null,
     responses: t.responses.map((r) => ({
       member: r.member,

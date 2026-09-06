@@ -91,6 +91,10 @@ model User {
   prospectsOwned   Prospect[]                @relation("ProspectOwner")
   messagesSent     Message[]                 @relation("MessageAuthor")
   messagesTo       MessageDelivery[]         @relation("MessageRecipient")
+  locatesOwned       LocateTicket[]      @relation("LocateAssignee")
+  locatesAssigned    ContractorLocate[]  @relation("ContractorLocateAssignee")
+  locatesWalked      ContractorLocate[]  @relation("ContractorLocateLocator")
+  locateChecks       LocateTicketCheck[] @relation("LocateCheckRequester")
   createdAt       DateTime       @default(now())
 }
 
@@ -235,6 +239,9 @@ model Project {
   documents        Document[]
   createdAt        DateTime          @default(now())
   locateTickets    LocateTicket[]
+  /// Who locates what on this job. Empty means every utility is a member
+  /// locate, which is the ordinary case.
+  locateRules      ProjectLocateRule[]
 }
 
 /// A saved Globe-style subcontractor daily billing sheet. The grids are stored
@@ -492,6 +499,8 @@ model Subcontractor {
   documents SubDocument[]
   rates     SubcontractorRate[]
   contracts Document[]
+  locateTickets     LocateTicket[]
+  contractorLocates ContractorLocate[]
   createdAt DateTime            @default(now())
 }
 
@@ -1839,13 +1848,66 @@ model LocateTicket {
   closedOn String @default("")
   notes    String @default("")
 
-  responses LocateResponse[]
+  /// Which one-call centre issued this. GA811 today; the adapter layer means
+  /// AL811 and SC811 are a row here rather than a fork in the code.
+  provider String @default("GA811")
+  /// Two-letter state, so a multi-state board can be read by market.
+  state    String @default("GA")
+
+  /// The crew this work belongs to. Crews are subcontractors here — the same
+  /// record a daily, an invoice and a project assignment already hang off.
+  crew   Subcontractor? @relation(fields: [crewId], references: [id], onDelete: SetNull)
+  crewId String?
+
+  /// Who in the office owns chasing this one.
+  assignedTo   User?   @relation("LocateAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  assignedToId String?
+
+  excavatorName       String @default("")
+  contactName         String @default("")
+  contactPhone        String @default("")
+  workAreaDescription String @default("")
+
+  /// Where the ticket is in its own life. Kept apart from readiness on
+  /// purpose: a ticket can be perfectly ACTIVE and still unworkable.
+  lifecycle LocateLifecycle @default(NEW)
+
+  /// Whether 811 has done its part, and whether the ground is actually safe to
+  /// open. These are two different questions and conflating them is how a crew
+  /// digs on a ticket that reads green.
+  externalReadiness ExternalReadiness @default(UNKNOWN)
+  fieldReadiness    FieldReadiness    @default(UNKNOWN)
+  /// Why, in a sentence, in the words a foreman would use. Stored so the board
+  /// and a text message say the same thing as the detail page.
+  blockingReason    String            @default("")
+
+  /// Monitoring. A ticket stops being checked when the work is done, not when
+  /// somebody remembers to turn it off.
+  monitoringEnabled Boolean   @default(true)
+  lastCheckedAt     DateTime?
+  nextCheckAt       DateTime?
+  lastChangedAt     DateTime?
+  sourceUrl         String    @default("")
+  /// Hash of the last snapshot, so an unchanged check is cheap to recognise
+  /// and does not manufacture a change event.
+  rawSourceHash     String    @default("")
+
+  responses         LocateResponse[]
+  contractorLocates ContractorLocate[]
+  checks            LocateTicketCheck[]
+  changes           LocateTicketChange[]
   createdAt DateTime         @default(now())
   updatedAt DateTime         @updatedAt
 
   @@unique([number, revision])
   @@index([projectId])
   @@index([expiresOn])
+  @@index([crewId])
+  @@index([provider, number])
+  @@index([externalReadiness])
+  @@index([fieldReadiness])
+  @@index([monitoringEnabled, nextCheckAt])
+  @@index([lifecycle])
 }
 
 model LocateResponse {
@@ -1863,6 +1925,12 @@ model LocateResponse {
   status       LocateResponseStatus @default(UNKNOWN)
   respondedOn  String               @default("")
   note         String               @default("")
+
+  /// The centre's own code and wording, kept verbatim beside our reading of
+  /// it. When a normalisation turns out to be wrong, this is what says so.
+  responseCode        String @default("")
+  responseDescription String @default("")
+  rawResponse         String @default("")
 
   @@unique([ticketId, member])
   @@index([ticketId])
@@ -2751,4 +2819,220 @@ model ProspectOpportunity {
 
   @@index([prospectId])
   @@index([stage])
+}
+
+/// Where a ticket sits in its own life, independent of whether anyone may dig.
+enum LocateLifecycle {
+  NEW
+  ACTIVE
+  UPDATED
+  EXPIRING
+  EXPIRED
+  CANCELLED
+  COMPLETED
+}
+
+/// Has 811 done its part?
+///
+/// This answers one question only: have the utilities we are waiting on
+/// answered acceptably, on a ticket that is in force. It says nothing about
+/// whether the ground is safe to open.
+enum ExternalReadiness {
+  WAITING_ON_811
+  READY
+  NOT_EFFECTIVE_YET
+  NEEDS_REVIEW
+  LOOKUP_ERROR
+  EXPIRED
+  UNKNOWN
+}
+
+/// May a crew actually put steel in the ground here?
+///
+/// The distinction from ExternalReadiness is the point of this whole module.
+/// On the Windstream jobs Fortitude locates Windstream's own plant, so 811 can
+/// be entirely finished while the one locate that matters has not been walked.
+/// A single "ready" flag would have said yes.
+enum FieldReadiness {
+  NOT_READY
+  CONTRACTOR_LOCATE_REQUIRED
+  CONTRACTOR_LOCATE_IN_PROGRESS
+  CONTRACTOR_LOCATE_ISSUE
+  FIELD_READY
+  EXPIRED
+  UNKNOWN
+}
+
+/// Who walks a given utility on a given job.
+enum LocatePerformedBy {
+  /// The 811 member sends a locator and posts a response.
+  MEMBER
+  /// We do it — Fortitude locates it and documents it.
+  CONTRACTOR
+  /// Somebody else contracted to do it.
+  THIRD_PARTY
+}
+
+enum ContractorLocateStatus {
+  NOT_REQUIRED
+  REQUIRED
+  ASSIGNED
+  IN_PROGRESS
+  VERIFIED
+  ISSUE_FOUND
+  UNABLE_TO_LOCATE
+  REQUIRES_ESCALATION
+}
+
+enum LocateCheckType {
+  AUTOMATIC
+  MANUAL
+  IMPORT
+}
+
+enum LocateChangeKind {
+  UTILITY_RESPONSE_CHANGED
+  EXTERNAL_READINESS_CHANGED
+  FIELD_READINESS_CHANGED
+  EXPIRATION_CHANGED
+  EFFECTIVE_DATE_CHANGED
+  ADDRESS_CHANGED
+  TICKET_UPDATED
+  CONTRACTOR_LOCATE_CHANGED
+  LIFECYCLE_CHANGED
+}
+
+/// Who is responsible for locating a given utility on a given job.
+///
+/// Deliberately per project rather than a global list. Fortitude locates
+/// Windstream on the Windstream builds and nowhere else, and a hardcoded
+/// "Windstream never blocks" would quietly clear a ticket on a job where
+/// Windstream really is supposed to send somebody.
+model ProjectLocateRule {
+  id        String  @id @default(cuid())
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String
+
+  /// Matched case-insensitively against the member name 811 states, so
+  /// "WINDSTREAM" catches "WINDSTREAM COMMUNICATIONS - WIN01".
+  utilityName String
+  utilityCode String @default("")
+
+  performedBy LocatePerformedBy @default(MEMBER)
+
+  /// A contractor-performed utility does not hold up 811 readiness — nobody is
+  /// waiting on a response that is never coming. It absolutely holds up field
+  /// readiness, which is the flag that decides whether a crew digs.
+  blocks811Readiness   Boolean @default(false)
+  blocksFieldReadiness Boolean @default(true)
+
+  note      String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([projectId, utilityName])
+  @@index([projectId])
+}
+
+/// A locate we perform ourselves, and the evidence that we did.
+///
+/// This is a safety record before it is a workflow. It keeps who walked it,
+/// when, with what frequency, and the photographs — because the question that
+/// eventually gets asked is not "was it marked" but "who marked it and how do
+/// we know".
+model ContractorLocate {
+  id       String       @id @default(cuid())
+  ticket   LocateTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  ticketId String
+
+  utilityName String
+  utilityCode String                 @default("")
+  status      ContractorLocateStatus @default(REQUIRED)
+
+  /// The crew carrying it, and the person who actually walked it. Both,
+  /// because the crew is who to call and the person is who to ask.
+  assignedCrew   Subcontractor? @relation(fields: [assignedCrewId], references: [id], onDelete: SetNull)
+  assignedCrewId String?
+  assignedTo     User?          @relation("ContractorLocateAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
+  assignedToId   String?
+  locatedBy      User?          @relation("ContractorLocateLocator", fields: [locatedById], references: [id], onDelete: SetNull)
+  locatedById    String?
+  locatedAt      DateTime?
+
+  /// What was on the transmitter and how well it came back. A locate walked at
+  /// the wrong frequency is a locate that found nothing, and the reading is
+  /// what lets somebody else judge that later.
+  frequencyUsed String @default("")
+  signalQuality String @default("")
+
+  notes  String @default("")
+  /// Blob URLs, same shape as every other photo set here.
+  photos Json   @default("[]")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([ticketId, utilityName])
+  @@index([ticketId])
+  @@index([assignedCrewId])
+  @@index([status])
+}
+
+/// Every lookup ever attempted against a ticket, successful or not.
+///
+/// Never overwritten. A board that says a ticket is clear has to be able to
+/// show when it last actually asked, and a failed check that quietly left the
+/// old answer on screen is the failure mode worth being able to prove.
+model LocateTicketCheck {
+  id       String       @id @default(cuid())
+  ticket   LocateTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  ticketId String
+
+  checkedAt     DateTime        @default(now())
+  checkType     LocateCheckType @default(MANUAL)
+  requestedBy   User?           @relation("LocateCheckRequester", fields: [requestedById], references: [id], onDelete: SetNull)
+  requestedById String?
+
+  success         Boolean @default(false)
+  /// What the adapter reported: OK, GA811_LOOKUP_UNAVAILABLE, PARSE_FAILED…
+  providerStatus  String  @default("")
+  httpStatus      Int?
+  sourceHash      String  @default("")
+  rawSnapshot     String  @default("")
+  changesDetected Int     @default(0)
+  errorMessage    String  @default("")
+  durationMs      Int     @default(0)
+
+  changes LocateTicketChange[]
+
+  @@index([ticketId, checkedAt])
+  @@index([checkedAt])
+}
+
+/// What actually moved between one check and the next.
+///
+/// The board's "what changed since this morning" is this table read back, not
+/// a diff recomputed on the fly against data that has already been overwritten.
+model LocateTicketChange {
+  id       String       @id @default(cuid())
+  ticket   LocateTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  ticketId String
+
+  check   LocateTicketCheck? @relation(fields: [checkId], references: [id], onDelete: SetNull)
+  checkId String?
+
+  kind LocateChangeKind
+  /// What moved — a utility name, "Expires on", "Field readiness".
+  subject   String @default("")
+  fromValue String @default("")
+  toValue   String @default("")
+  /// One sentence a person can read without decoding the enums.
+  summary   String @default("")
+  /// Set when a person caused it rather than a lookup.
+  actor     String @default("")
+
+  at DateTime @default(now())
+
+  @@index([ticketId, at])
+  @@index([at])
 }
