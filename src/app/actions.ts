@@ -5778,8 +5778,22 @@ export async function importLocateText(text: string, projectId?: string | null) 
       ...(projectId ? { projectId } : {}),
     };
 
+    // A paste that does not mention a field must not erase it. The parser
+    // returns "" for anything it did not find, so writing the whole object
+    // over an existing ticket wiped the street and the expiry date whenever
+    // somebody pasted the positive-response screen — which carries the
+    // responses and nothing else, and is the one paste people repeat most.
+    // Losing an expiry is not a cosmetic loss: the board reads it as "no date
+    // on file" and refuses to dig on a ticket that was in force a moment ago.
+    //
+    // Only fields the paste actually carried are written. Clearing one on
+    // purpose is done on the ticket form, where it is a deliberate act.
+    const present = Object.fromEntries(
+      Object.entries(data).filter(([, v]) => v !== "" && v !== null && v !== undefined),
+    );
+
     const saved = existing
-      ? await prisma.locateTicket.update({ where: { id: existing.id }, data })
+      ? await prisma.locateTicket.update({ where: { id: existing.id }, data: present })
       : await prisma.locateTicket.create({ data });
     if (existing) updated++;
     else created++;
