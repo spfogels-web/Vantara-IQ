@@ -21,6 +21,8 @@ import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/format";
 import { Panel, PanelHeader } from "@/components/common/panel";
 import type { ProspectRow } from "@/data/prospects-crm";
+import type { Prospect } from "@/lib/types";
+import { ProspectForm } from "@/components/prospects/prospect-form";
 import {
   addNote,
   convertToSubcontractor,
@@ -124,6 +126,9 @@ export function ProspectsCrm({
   overview,
   owners,
   canManage,
+  editable,
+  knownStates,
+  knownMarkets,
 }: {
   rows: ProspectRow[];
   overview: {
@@ -136,11 +141,17 @@ export function ProspectsCrm({
   };
   owners: { id: string; name: string }[];
   canManage: boolean;
+  /** Full records, for the add/edit form. Staff only. */
+  editable: Prospect[];
+  knownStates: string[];
+  knownMarkets: string[];
 }) {
   const [tab, setTab] = React.useState<Tab>("ALL");
   const [quick, setQuick] = React.useState<Quick>("ALL");
   const [query, setQuery] = React.useState("");
   const [openId, setOpenId] = React.useState<string | null>(null);
+  /** null = closed. { p: null } = adding. { p } = editing that one. */
+  const [form, setForm] = React.useState<{ p: Prospect | null } | null>(null);
 
   const CLOSED = ["WON", "LOST", "DORMANT", "DO_NOT_USE"];
 
@@ -201,6 +212,15 @@ export function ProspectsCrm({
               className="focus-ring h-8 w-[220px] rounded-lg bg-foreground/[0.05] pl-7 pr-2.5 text-[12px] text-foreground outline-none placeholder:text-muted-foreground/70"
             />
           </label>
+          {canManage ? (
+            <button
+              type="button"
+              onClick={() => setForm({ p: null })}
+              className="focus-ring inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand px-3 text-[12px] font-semibold text-white transition-colors hover:bg-brand/90"
+            >
+              <Plus className="size-3.5" /> New prospect
+            </button>
+          ) : null}
         </PanelHeader>
 
         <div className="flex flex-wrap items-center gap-1.5 border-b border-border/70 px-2.5 py-2">
@@ -255,6 +275,15 @@ export function ProspectsCrm({
                 ? "Start building your network of crews, workers and prime contractors."
                 : "Try a different filter."}
             </p>
+            {canManage && rows.length === 0 ? (
+              <button
+                type="button"
+                onClick={() => setForm({ p: null })}
+                className="focus-ring mt-3 inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand px-3.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand/90"
+              >
+                <Plus className="size-4" /> Add the first prospect
+              </button>
+            ) : null}
           </div>
         ) : (
           <ul className="flex flex-col">
@@ -272,13 +301,31 @@ export function ProspectsCrm({
                   onToggle={() => setOpenId(openId === r.id ? null : r.id)}
                 />
                 {openId === r.id ? (
-                  <Expanded row={r} owners={owners} canManage={canManage} onClose={() => setOpenId(null)} />
+                  <Expanded
+                    row={r}
+                    owners={owners}
+                    canManage={canManage}
+                    onClose={() => setOpenId(null)}
+                    onEdit={() => {
+                      const full = editable.find((e) => e.id === r.id);
+                      if (full) setForm({ p: full });
+                    }}
+                  />
                 ) : null}
               </li>
             ))}
           </ul>
         )}
       </Panel>
+
+      {form ? (
+        <ProspectForm
+          prospect={form.p}
+          knownStates={knownStates}
+          knownMarkets={knownMarkets}
+          onClose={() => setForm(null)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -413,11 +460,13 @@ function Expanded({
   owners,
   canManage,
   onClose,
+  onEdit,
 }: {
   row: ProspectRow;
   owners: { id: string; name: string }[];
   canManage: boolean;
   onClose: () => void;
+  onEdit: () => void;
 }) {
   const router = useRouter();
   const [busy, setBusy] = React.useState<string | null>(null);
@@ -570,6 +619,7 @@ function Expanded({
             ))}
           </select>
 
+          <Action label="Edit details" onClick={onEdit} />
           <Action label="Note" onClick={() => setPanel(panel === "none" ? "followup" : "none")} hidden />
           <Action label="Follow-up" onClick={() => setPanel(panel === "followup" ? "none" : "followup")} />
           <Action label="Log call" onClick={() => setPanel(panel === "call" ? "none" : "call")} />

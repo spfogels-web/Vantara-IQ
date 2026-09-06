@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser, isStaff } from "@/lib/auth";
 import { getProspectOverview, getProspectRows } from "@/data/prospects-crm";
+import { getProspectSummary, getProspects } from "@/data/queries";
 import { PageShell } from "@/components/common/page-shell";
 import { ProspectsCrm } from "@/components/prospects/prospects-crm";
 
@@ -32,9 +33,12 @@ export default async function ProspectsPage() {
     );
   }
 
-  const [rows, overview, owners] = await Promise.all([
+  // The full records and the state/market suggestions feed the add/edit form.
+  const [rows, overview, editable, summary, owners] = await Promise.all([
     getProspectRows(),
     getProspectOverview(),
+    getProspects(),
+    getProspectSummary(),
     prisma.user.findMany({
       where: { subcontractorId: null },
       select: { id: true, name: true, email: true },
@@ -53,6 +57,9 @@ export default async function ProspectsPage() {
         overview={overview}
         owners={owners.map((o) => ({ id: o.id, name: o.name || o.email }))}
         canManage={staff}
+        editable={editable}
+        knownStates={summary.states.map((x) => x.name)}
+        knownMarkets={summary.markets.map((x) => x.name)}
       />
     </PageShell>
   );
