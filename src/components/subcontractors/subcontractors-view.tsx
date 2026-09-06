@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   BadgeCheck,
   Check,
+  ChevronDown,
   FileText,
   FolderKanban,
   HardHat,
@@ -18,8 +19,8 @@ import {
   ShieldCheck,
   Star,
   Trash2,
-  Users,
   UserPlus,
+  Users,
   Wrench,
   X,
 } from "lucide-react";
@@ -36,6 +37,11 @@ import { AssignProjects } from "@/components/subcontractors/assign-projects";
 import { PacketSummary } from "@/components/subcontractors/packet-summary";
 import { SubFileUpload } from "@/components/subcontractors/sub-file-upload";
 import { InviteDialog } from "@/components/subcontractors/invite-dialog";
+import {
+  SubPeople,
+  type SubUser,
+  type SubUserInviteRow,
+} from "@/components/subcontractors/sub-people";
 import { SubcontractorForm } from "@/components/subcontractors/subcontractor-form";
 import { SubRateCard } from "@/components/subcontractors/sub-rate-card";
 import { DocumentCenter, type SubDoc } from "@/components/subcontractors/document-center";
@@ -92,12 +98,16 @@ function workReadiness(s: Subcontractor) {
 export function SubcontractorsView({
   subs,
   projects,
+  people,
 }: {
   subs: Subcontractor[];
   projects: Project[];
+  /** Logins and outstanding invitations, keyed by subcontractor id. */
+  people: Record<string, { users: SubUser[]; invites: SubUserInviteRow[] }>;
 }) {
   const [query, setQuery] = React.useState("");
-  const [selectedId, setSelectedId] = React.useState<string | null>(subs[0]?.id ?? null);
+  /** Which crew is open, or null. A row toggles rather than only selecting. */
+  const [selectedId, setSelectedId] = React.useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = React.useState(false);
   const [inviteCompany, setInviteCompany] = React.useState<string | undefined>();
   const [formOpen, setFormOpen] = React.useState(false);
@@ -120,7 +130,9 @@ export function SubcontractorsView({
     );
   }, [subs, query]);
 
-  const selected = subs.find((s) => s.id === selectedId) ?? filtered[0] ?? null;
+  // A crew filtered out of the list closes with it, rather than staying open
+  // behind a search that no longer matches it.
+  const openId = filtered.some((s) => s.id === selectedId) ? selectedId : null;
 
   /**
    * Where every crew sits in onboarding.
@@ -161,139 +173,160 @@ export function SubcontractorsView({
     <div className="flex flex-col gap-3">
       <OnboardingTiles data={onboarding} total={subs.length} />
 
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">
-      <div className="lg:col-span-5 xl:col-span-4">
-        <Panel>
-          <PanelHeader title="Subcontractors" count={filtered.length} icon={<ShieldCheck className="size-3.5" />}>
-            <Button
-              size="sm"
-              onClick={() => {
-                setEditing(null);
-                setFormOpen(true);
-              }}
-              className="h-8 gap-1.5 rounded-lg border border-border bg-transparent px-2.5 text-[12px] font-medium text-foreground hover:bg-foreground/[0.05]"
-            >
-              <Plus className="size-3.5" /> Add
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => openInvite()}
-              className="h-8 gap-1.5 rounded-lg bg-brand px-2.5 text-[12px] font-semibold text-white hover:bg-brand-bright"
-            >
-              <UserPlus className="size-3.5" /> Invite
-            </Button>
-          </PanelHeader>
-          <div className="border-b border-border/70 p-2.5">
-            <label className="flex items-center gap-2 rounded-lg bg-foreground/[0.04] px-2.5 py-1.5 ring-1 ring-inset ring-foreground/[0.06] focus-within:ring-brand/40">
-              <Search className="size-3.5 text-muted-foreground" />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search company, lead or trade…"
-                className="w-full bg-transparent text-[12.5px] text-foreground placeholder:text-muted-foreground focus:outline-none"
-              />
-            </label>
-          </div>
-          <ul className="max-h-[70vh] flex-1 overflow-y-auto p-1.5">
-            {/* An empty roster and an empty search result are different problems
-                and deserve different sentences. */}
-            {filtered.length === 0 ? (
-              <li className="px-3 py-8 text-center">
-                <HardHat className="mx-auto size-5 text-muted-foreground/50" />
-                <p className="mt-2 text-[12.5px] font-medium text-foreground">
-                  {subs.length === 0 ? "No subcontractors yet" : "No matches"}
-                </p>
-                <p className="mt-1 text-[11.5px] text-muted-foreground">
-                  {subs.length === 0
-                    ? "Add a crew you work with, or send an invite and let them onboard themselves."
-                    : `Nothing matches “${query}”.`}
-                </p>
-              </li>
-            ) : null}
-            {filtered.map((s) => {
-              const active = selected?.id === s.id;
-              return (
-                <li key={s.id}>
-                  <button
-                    onClick={() => setSelectedId(s.id)}
-                    className={cn(
-                      "focus-ring flex w-full items-center gap-3 rounded-lg px-2.5 py-2.5 text-left transition-colors",
-                      active ? "bg-foreground/[0.055]" : "hover:bg-foreground/[0.03]",
-                    )}
-                  >
-                    <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-foreground/[0.06] text-[11px] font-semibold text-muted-foreground ring-1 ring-inset ring-foreground/[0.06]">
-                      {initials(s.company)}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="truncate text-[13px] font-medium text-foreground">{s.company}</span>
-                      <span className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
-                        <Stars rating={s.scorecard.rating} />
-                        <span className="text-muted-foreground/40">·</span>
-                        {s.lead}
-                      </span>
-                    </span>
-                    {/* Onboarding state, so the queue is visible without
-                        opening every crew in turn. */}
-                    <PacketChip sub={s} />
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </Panel>
-      </div>
-
-      <div className="lg:col-span-7 xl:col-span-8">
-        {selected ? (
-          <SubDetail
-            sub={selected}
-            projects={projects}
-            onEdit={() => {
-              setEditing(selected);
+      <Panel>
+        <PanelHeader title="Subcontractors" count={filtered.length} icon={<ShieldCheck className="size-3.5" />}>
+          <Button
+            size="sm"
+            onClick={() => {
+              setEditing(null);
               setFormOpen(true);
             }}
-            onDeleted={() => setSelectedId(null)}
-          />
-        ) : (
-          <Panel className="grid min-h-[320px] place-items-center p-8 text-center">
-            <div className="max-w-sm">
-              <span className="mx-auto grid size-11 place-items-center rounded-xl bg-brand/10 text-brand-bright ring-1 ring-inset ring-brand/20">
-                <HardHat className="size-5" />
-              </span>
-              <h3 className="mt-3 text-[14px] font-semibold text-foreground">
-                {subs.length === 0 ? "Build your crew list" : "Pick a subcontractor"}
-              </h3>
-              <p className="mt-1 text-[12px] text-muted-foreground">
-                {subs.length === 0
-                  ? "Every sub you add gets a compliance file, a rate card and a place to submit dailies. Add one directly, or invite them to onboard themselves."
-                  : "Choose a company on the left to see compliance, assignments and their rate card."}
+            className="h-8 gap-1.5 rounded-lg border border-border bg-transparent px-2.5 text-[12px] font-medium text-foreground hover:bg-foreground/[0.05]"
+          >
+            <Plus className="size-3.5" /> Add
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => openInvite()}
+            className="h-8 gap-1.5 rounded-lg bg-brand px-2.5 text-[12px] font-semibold text-white hover:bg-brand-bright"
+          >
+            <UserPlus className="size-3.5" /> Invite
+          </Button>
+        </PanelHeader>
+        <div className="border-b border-border/70 p-2.5">
+          <label className="flex items-center gap-2 rounded-lg bg-foreground/[0.04] px-2.5 py-1.5 ring-1 ring-inset ring-foreground/[0.06] focus-within:ring-brand/40">
+            <Search className="size-3.5 text-muted-foreground" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search company, lead or trade…"
+              className="w-full bg-transparent text-[12.5px] text-foreground placeholder:text-muted-foreground focus:outline-none"
+            />
+          </label>
+        </div>
+      {/* Full width, and a crew opens underneath its own row. It was a narrow
+          column beside a permanent detail panel, so the roster — the thing you
+          scan — got a third of the screen while most of it showed one company. */}
+      <ul className="flex flex-col">
+          {/* An empty roster and an empty search result are different problems
+              and deserve different sentences. */}
+          {filtered.length === 0 ? (
+            <li className="px-3 py-8 text-center">
+              <HardHat className="mx-auto size-5 text-muted-foreground/50" />
+              <p className="mt-2 text-[12.5px] font-medium text-foreground">
+                {subs.length === 0 ? "No subcontractors yet" : "No matches"}
               </p>
-              {subs.length === 0 ? (
-                <div className="mt-4 flex items-center justify-center gap-2">
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      setEditing(null);
-                      setFormOpen(true);
-                    }}
-                    className="h-8 gap-1.5 rounded-lg border border-border bg-transparent px-3 text-[12px] font-medium text-foreground hover:bg-foreground/[0.05]"
+              <p className="mt-1 text-[11.5px] text-muted-foreground">
+                {subs.length === 0
+                  ? "Add a crew you work with, or send an invite and let them onboard themselves."
+                  : `Nothing matches “${query}”.`}
+              </p>
+            </li>
+          ) : null}
+          {filtered.map((s) => {
+            const open = openId === s.id;
+            const crew = people[s.id] ?? { users: [], invites: [] };
+            return (
+              <li
+                key={s.id}
+                className={cn(
+                  "border-b border-border/50 last:border-0",
+                  open && "bg-foreground/[0.02]",
+                )}
+              >
+                <button
+                  onClick={() => setSelectedId(open ? null : s.id)}
+                  aria-expanded={open}
+                  className={cn(
+                    "focus-ring group/row flex w-full flex-wrap items-center gap-x-4 gap-y-2 px-3 py-3 text-left transition-colors",
+                    open ? "gold-rail" : "hover:bg-foreground/[0.03]",
+                  )}
+                >
+                  <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-foreground/[0.06] text-[12px] font-semibold text-muted-foreground ring-1 ring-inset ring-foreground/[0.06]">
+                    {initials(s.company)}
+                  </span>
+
+                  <span className="flex min-w-[200px] flex-1 flex-col gap-0.5">
+                    <span className="truncate text-[14.5px] font-semibold text-foreground">
+                      {s.company}
+                    </span>
+                    <span className="flex items-center gap-1.5 text-[12.5px] text-muted-foreground">
+                      <Stars rating={s.scorecard.rating} />
+                      <span className="text-muted-foreground/40">·</span>
+                      <span className="truncate">{s.lead || "no lead named"}</span>
+                    </span>
+                  </span>
+
+                  {/* Who is on the account. The roster could not answer this at
+                      all — a crew was one login and the name on it was whoever
+                      happened to do the onboarding. */}
+                  <span className="flex w-[150px] shrink-0 flex-col">
+                    <span className="num text-[15px] font-semibold leading-none text-foreground">
+                      {crew.users.length}
+                    </span>
+                    <span className="mt-1 text-[9.5px] font-bold uppercase tracking-[0.09em] text-muted-foreground">
+                      {crew.users.length === 1 ? "login" : "logins"}
+                      {crew.invites.length > 0 ? ` · ${crew.invites.length} invited` : ""}
+                    </span>
+                  </span>
+
+                  <span className="hidden w-[140px] shrink-0 flex-col lg:flex">
+                    <span className="truncate text-[12.5px] text-foreground/85">
+                      {s.trades.slice(0, 2).join(", ") || "—"}
+                    </span>
+                    <span className="mt-1 text-[11px] text-muted-foreground">
+                      {s.assignedProjects.length} assigned
+                    </span>
+                  </span>
+
+                  <span className="shrink-0">
+                    <PacketChip sub={s} />
+                  </span>
+
+                  <span
+                    className={cn(
+                      "ml-auto inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-semibold transition-colors",
+                      open
+                        ? "bg-brand text-white"
+                        : "border border-border text-foreground group-hover/row:border-brand/60",
+                    )}
                   >
-                    <Plus className="size-3.5" /> Add a subcontractor
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => openInvite()}
-                    className="h-8 gap-1.5 rounded-lg bg-brand px-3 text-[12px] font-semibold text-white hover:bg-brand-bright"
-                  >
-                    <UserPlus className="size-3.5" /> Send an invite
-                  </Button>
-                </div>
-              ) : null}
-            </div>
-          </Panel>
-        )}
-      </div>
-      </div>
+                    {open ? "Close" : "Open"}
+                    <ChevronDown
+                      className={cn("size-3.5 transition-transform", open && "rotate-180")}
+                    />
+                  </span>
+                </button>
+
+                {open ? (
+                  <div className="border-t border-border/60 bg-background/40 px-3 py-3">
+                    {/* Their people first. It is the newest question this page
+                        answers and the one an office opens a crew to settle:
+                        who at this company can actually sign in. */}
+                    <Panel className="mb-3">
+                      <SubPeople
+                        subcontractorId={s.id}
+                        users={crew.users}
+                        invites={crew.invites}
+                      />
+                    </Panel>
+
+                    <SubDetail
+                      sub={s}
+                      projects={projects}
+                      onEdit={() => {
+                        setEditing(s);
+                        setFormOpen(true);
+                      }}
+                      onDeleted={() => setSelectedId(null)}
+                    />
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      </Panel>
 
       <InviteDialog
         open={inviteOpen}

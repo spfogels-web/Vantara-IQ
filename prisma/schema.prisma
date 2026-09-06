@@ -24,6 +24,26 @@ enum Role {
   SUBCONTRACTOR
 }
 
+/// What somebody does inside a subcontractor.
+///
+/// Role above says which side of the table they sit on — Fortitude or a crew.
+/// This says who they are within their own company, which is a different
+/// question and the one that decides what money they can see.
+///
+/// An owner asked for his EIN and bank details off the account his foreman
+/// uses to file dailies. That was solved with a switch per company, which
+/// works while a company is one login and stops working the moment it is
+/// four people.
+enum SubUserRole {
+  /// Signed the subcontract. Sees pay, rates and their own owner details.
+  OWNER
+  /// Runs the office for them — invoicing, packet, documents.
+  ADMIN
+  PM
+  FOREMAN
+  SUPERVISOR
+}
+
 enum SubState {
   INVITED
   ONBOARDING
@@ -62,6 +82,10 @@ model User {
   organizationId  String?
   subcontractor   Subcontractor? @relation(fields: [subcontractorId], references: [id])
   subcontractorId String?
+  /// Their job inside that company. Defaults to OWNER because every account
+  /// that existed before this was the owner or their nominee — the person who
+  /// onboarded the company. Only invited users get anything else.
+  subUserRole     SubUserRole    @default(OWNER)
   tasks           Task[]         @relation("TaskAssignee")
   createdAt       DateTime       @default(now())
 }
@@ -377,6 +401,7 @@ model Subcontractor {
   /// his to read. Documents and badges stay reachable so he can still upload
   /// a certificate.
   showOwnerDetailsToCrew Boolean @default(false)
+  userInvites            SubUserInvite[]
   smsConsentAt   DateTime?
   /// Set the moment they reply STOP. Kept forever rather than cleared, so a
   /// re-onboarding can never quietly resubscribe someone who opted out.
@@ -1900,4 +1925,25 @@ model SubPayment {
   createdAt  DateTime   @default(now())
 
   @@index([invoiceId])
+}
+
+/// An invitation to join a subcontractor as one of their people.
+///
+/// Separate from Invite, which brings a whole company onto the platform. This
+/// one adds a person to a company that already exists, which is a different
+/// act with a different authority: staff issue it, and it names the company
+/// and the job before the person ever sees it, so nothing they type can put
+/// them somewhere else.
+model SubUserInvite {
+  token           String      @id
+  subcontractor   Subcontractor @relation(fields: [subcontractorId], references: [id], onDelete: Cascade)
+  subcontractorId String
+  email           String
+  name            String      @default("")
+  subUserRole     SubUserRole @default(FOREMAN)
+  used            Boolean     @default(false)
+  invitedBy       String      @default("")
+  createdAt       DateTime    @default(now())
+
+  @@index([subcontractorId])
 }

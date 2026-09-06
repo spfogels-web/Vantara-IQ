@@ -4395,3 +4395,75 @@ export async function getBillableCodes(
     })
     .map((r) => ({ code: r.code, description: r.description }));
 }
+
+
+/**
+ * Who works for each crew, and who has been invited and not yet joined.
+ *
+ * Returned as one map rather than a query per row: the roster page draws every
+ * crew at once, and twelve round trips to fill in a section most people never
+ * open is twelve too many.
+ */
+export async function getSubPeople(): Promise<
+  Record<
+    string,
+    {
+      users: { id: string; name: string; email: string; subUserRole: string; active: boolean }[];
+      invites: {
+        token: string;
+        email: string;
+        name: string;
+        subUserRole: string;
+        invitedBy: string;
+        createdAt: string;
+      }[];
+    }
+  >
+> {
+  await requireStaff();
+
+  const [users, invites] = await Promise.all([
+    prisma.user.findMany({
+      where: { subcontractorId: { not: null } },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        subUserRole: true,
+        subcontractorId: true,
+        passwordHash: true,
+      },
+      orderBy: [{ subUserRole: "asc" }, { name: "asc" }],
+    }),
+    prisma.subUserInvite.findMany({
+      where: { used: false },
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
+
+  const out: Awaited<ReturnType<typeof getSubPeople>> = {};
+  const bucket = (id: string) => (out[id] ??= { users: [], invites: [] });
+
+  for (const u of users) {
+    bucket(u.subcontractorId!).users.push({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      subUserRole: u.subUserRole,
+      // Whether they ever finished setting up. The hash itself never leaves
+      // the server — only whether there is one.
+      active: Boolean(u.passwordHash),
+    });
+  }
+  for (const i of invites) {
+    bucket(i.subcontractorId).invites.push({
+      token: i.token,
+      email: i.email,
+      name: i.name,
+      subUserRole: i.subUserRole,
+      invitedBy: i.invitedBy,
+      createdAt: i.createdAt.toISOString(),
+    });
+  }
+  return out;
+}

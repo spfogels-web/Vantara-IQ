@@ -3619,6 +3619,129 @@ export async function readPhotoExif(formData: FormData) {
  * lets the rest of the flow prove a caller was actually invited and to which
  * job — before they have any login to check.
  */
+/* ------------------------------------------------------------------ *
+ * The people inside a subcontractor.
+ * ------------------------------------------------------------------ */
+
+/**
+ * Invite somebody to join a crew's account.
+ *
+ * A crew was one login, shared. That works while a company is one person and
+ * stops the moment it is four: the owner wants his foreman filing dailies
+ * without the foreman reading his EIN, his bank details or what he is paid.
+ * Named people with a job title each is the only way that comes apart.
+ *
+ * Staff issue these rather than the crew, deliberately. Half these companies
+ * asked us to do their onboarding for them, and an owner who is not confident
+ * with a computer should not have to work out how to add his own PM. The
+ * company and the job title are fixed into the token before the person sees
+ * it, so nothing they type on the way in can put them somewhere else.
+ */
+export async function inviteSubUser(input: {
+  subcontractorId: string;
+  email: string;
+  name?: string;
+  subUserRole: "OWNER" | "ADMIN" | "PM" | "FOREMAN" | "SUPERVISOR";
+}) {
+  const me = await requireStaff();
+
+  const sub = await prisma.subcontractor.findUnique({
+    where: { id: input.subcontractorId },
+    select: { id: true, company: true },
+  });
+  if (!sub) return { ok: false as const, error: "Crew not found." };
+
+  const email = input.email.trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    return { ok: false as const, error: "Enter a valid email address." };
+  }
+
+  // Somebody already signed in with this address cannot be invited into a
+  // second company: one login, one crew, or a foreman moving between two subs
+  // would carry the first one's pay screen with him.
+  const existing = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true, subcontractorId: true, name: true },
+  });
+  if (existing) {
+    if (existing.subcontractorId === sub.id) {
+      return { ok: false as const, error: `${existing.name || email} is already on this crew.` };
+    }
+    return {
+      ok: false as const,
+      error: "That address already has a login on another account. Use a different one.",
+    };
+  }
+
+  // One live invite per address per crew, reused. Minting a fresh token every
+  // time somebody pressed the button left a trail of working links nobody
+  // could account for.
+  const open = await prisma.subUserInvite.findFirst({
+    where: { subcontractorId: sub.id, email, used: false },
+    select: { token: true },
+  });
+  if (open) return { ok: true as const, token: open.token, company: sub.company };
+
+  const token = randomBytes(32).toString("base64url");
+  await prisma.subUserInvite.create({
+    data: {
+      token,
+      subcontractorId: sub.id,
+      email,
+      name: (input.name ?? "").trim().slice(0, 80),
+      subUserRole: input.subUserRole,
+      invitedBy: me.name ?? "",
+    },
+  });
+
+  revalidatePath("/subcontractors");
+  return { ok: true as const, token, company: sub.company };
+}
+
+/** Withdraw an invite that has not been used. */
+export async function revokeSubUserInvite(token: string) {
+  await requireStaff();
+  await prisma.subUserInvite.deleteMany({ where: { token, used: false } });
+  revalidatePath("/subcontractors");
+  return { ok: true as const };
+}
+
+/**
+ * Change what somebody does inside their company.
+ *
+ * The last owner cannot be demoted. An account with no owner is one nobody can
+ * see their own pay or bank details through, and the only way back is a
+ * database edit — so it is refused here rather than discovered later.
+ */
+export async function setSubUserRole(
+  userId: string,
+  role: "OWNER" | "ADMIN" | "PM" | "FOREMAN" | "SUPERVISOR",
+) {
+  await requireStaff();
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { subcontractorId: true, subUserRole: true },
+  });
+  if (!user?.subcontractorId) return { ok: false as const, error: "Not a crew login." };
+
+  if (user.subUserRole === "OWNER" && role !== "OWNER") {
+    const owners = await prisma.user.count({
+      where: { subcontractorId: user.subcontractorId, subUserRole: "OWNER" },
+    });
+    if (owners <= 1) {
+      return {
+        ok: false as const,
+        error: "This is the only owner on the account. Make somebody else an owner first.",
+      };
+    }
+  }
+
+  await prisma.user.update({ where: { id: userId }, data: { subUserRole: role } });
+  revalidatePath("/subcontractors");
+  return { ok: true as const };
+}
+
 export async function createInvite(input: {
   projectId: string;
   email?: string;
