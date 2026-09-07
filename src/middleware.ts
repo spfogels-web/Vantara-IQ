@@ -61,6 +61,10 @@ const PUBLIC_PREFIXES = [
  */
 const SUB_ALLOWED_PREFIXES = [
   "/dailies",
+  // Their own locate tickets, and only those. The query filters to tickets
+  // filed to their company — not to every ticket on a job they happen to
+  // share — so two crews on one build never read each other's work.
+  "/locates",
   "/projects",
   "/company",
   "/badges",

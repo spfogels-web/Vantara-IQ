@@ -1095,3 +1095,193 @@ export async function bulkAssignLocates(input: {
   revalidatePath("/locates");
   return { ok: true as const, updated: ids.length };
 }
+
+/* ------------------------------------------------------------------ *
+ * What a crew may do for themselves
+ * ------------------------------------------------------------------ */
+
+/**
+ * The projects a crew may file a ticket against.
+ *
+ * Their own assignments, nothing else. Returned rather than trusted from the
+ * form, because a select is a suggestion and this is the rule.
+ */
+export async function getMyLocateProjects() {
+  const me = await getCurrentUser();
+  if (!me?.subcontractorId) return [];
+  return prisma.project.findMany({
+    where: { completedAt: null, crews: { some: { id: me.subcontractorId } } },
+    select: { id: true, name: true },
+    orderBy: { name: "asc" },
+  });
+}
+
+/**
+ * A crew sends in their own tickets.
+ *
+ * Three rules, and none of them are enforced by the form:
+ *
+ *   1. The ticket is filed to their company. Not to a company named in the
+ *      request — to the company on their login. A crew cannot file work to
+ *      somebody else, by accident or otherwise.
+ *   2. The project must be one they are assigned to. A project id that is not
+ *      theirs is refused rather than silently dropped, so a crew who picked the
+ *      wrong job finds out.
+ *   3. A ticket number already on file with the office is never taken over.
+ *      Ticket numbers run in sequence and are therefore guessable, and letting
+ *      a submission claim an existing one would be a way to read another
+ *      crew's work by typing numbers near your own.
+ *
+ * Everything they send lands on the office board immediately, and the office is
+ * told it arrived.
+ */
+export async function submitCrewLocateTickets(input: {
+  text: string;
+  projectId: string;
+  mode: "numbers" | "paste";
+}) {
+  const me = await getCurrentUser();
+  if (!me?.subcontractorId) {
+    return { ok: false as const, error: "Only a crew account can send tickets in this way." };
+  }
+
+  const allowed = await prisma.project.findFirst({
+    where: { id: input.projectId, crews: { some: { id: me.subcontractorId } } },
+    select: { id: true, name: true },
+  });
+  if (!allowed) {
+    return { ok: false as const, error: "Pick one of the jobs your crew is assigned to." };
+  }
+
+  const crew = await prisma.subcontractor.findUnique({
+    where: { id: me.subcontractorId },
+    select: { company: true },
+  });
+  const company = crew?.company ?? "A crew";
+  const provider = providerFor(DEFAULT_PROVIDER);
+
+  const created: string[] = [];
+  const updated: string[] = [];
+  const alreadyFiled: string[] = [];
+  const rejected: string[] = [];
+  const noExpiry: string[] = [];
+
+  /** Claim a number for this crew, or say why not. */
+  async function claim(number: string, revision: string) {
+    const existing = await prisma.locateTicket.findUnique({
+      where: { number_revision: { number, revision } },
+      select: { id: true, crewId: true },
+    });
+    if (!existing) {
+      const t = await prisma.locateTicket.create({
+        data: {
+          number,
+          revision,
+          provider: provider.id,
+          state: provider.state,
+          projectId: allowed!.id,
+          crewId: me!.subcontractorId,
+          sourceUrl: provider.ticketUrl(number),
+          notes: `Sent in by ${company}`,
+        },
+        select: { id: true },
+      });
+      created.push(number);
+      return t.id;
+    }
+    if (existing.crewId && existing.crewId !== me!.subcontractorId) {
+      // Deliberately says nothing about whose it is.
+      alreadyFiled.push(number);
+      return null;
+    }
+    await prisma.locateTicket.update({
+      where: { id: existing.id },
+      data: { crewId: me!.subcontractorId, projectId: allowed!.id },
+    });
+    updated.push(number);
+    return existing.id;
+  }
+
+  if (input.mode === "numbers") {
+    const tokens = [
+      ...new Set(String(input.text ?? "").split(/[\s,;|]+/).map((t) => t.trim()).filter(Boolean)),
+    ];
+    if (tokens.length === 0) return { ok: false as const, error: "Enter at least one ticket number." };
+
+    for (const token of tokens) {
+      const v = provider.validateNumber(token);
+      if (!v.ok) {
+        rejected.push(v.error ?? token);
+        continue;
+      }
+      const id = await claim(v.number, v.revision);
+      if (id) {
+        await ensureContractorLocates(id);
+        await syncReadiness(id, { actor: company });
+      }
+    }
+  } else {
+    if (!input.text?.trim()) return { ok: false as const, error: "Paste a ticket first." };
+    let parsed: ProviderTicket[];
+    try {
+      parsed = await provider.parseText(input.text);
+    } catch (e) {
+      return { ok: false as const, error: e instanceof Error ? e.message : "Could not read that." };
+    }
+    if (parsed.length === 0) return { ok: false as const, error: "No ticket found in that text." };
+
+    for (const p of parsed) {
+      const v = provider.validateNumber(p.revision ? `${p.number}-${p.revision}` : p.number);
+      const id = await claim(v.ok ? v.number : p.number, v.ok ? v.revision : p.revision);
+      if (!id) continue;
+
+      const check = await prisma.locateTicketCheck.create({
+        data: {
+          ticketId: id,
+          checkType: "IMPORT",
+          requestedById: me.id,
+          success: true,
+          providerStatus: "SENT_BY_CREW",
+          sourceHash: hash(input.text),
+          rawSnapshot: input.text.slice(0, 20_000),
+        },
+      });
+      const c = await applyTicket(id, p, { checkId: check.id, actor: company });
+      const s = await syncReadiness(id, { checkId: check.id, actor: company });
+      await prisma.locateTicketCheck.update({
+        where: { id: check.id },
+        data: { changesDetected: c + s.changes },
+      });
+
+      const after = await prisma.locateTicket.findUnique({
+        where: { id },
+        select: { expiresOn: true, number: true },
+      });
+      if (after && !after.expiresOn) noExpiry.push(after.number);
+    }
+  }
+
+  const landed = created.length + updated.length;
+  if (landed > 0) {
+    await notifyStaff({
+      title: `${company} sent ${landed} locate ticket${landed === 1 ? "" : "s"}`,
+      detail: `${allowed.name} — ${[...created, ...updated].slice(0, 8).join(", ")}${
+        landed > 8 ? "…" : ""
+      }`,
+      href: `/locates?crew=${me.subcontractorId}`,
+      category: "compliance",
+      tone: "info",
+      actor: company,
+    }).catch(() => {});
+  }
+
+  revalidatePath("/locates");
+  return {
+    ok: true as const,
+    created: created.length,
+    updated: updated.length,
+    alreadyFiled,
+    rejected,
+    noExpiry,
+  };
+}

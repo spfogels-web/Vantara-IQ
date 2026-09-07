@@ -1,10 +1,13 @@
 import { getCurrentUser, isStaff } from "@/lib/auth";
 import { getLocateOverview, getLocatePickers, getLocateRows } from "@/data/locates-ops";
+import { getMyLocateProjects } from "@/app/locates/locate-actions";
 import { locateChatReady } from "@/lib/locate-chat";
 import { providerFor, DEFAULT_PROVIDER } from "@/lib/locate-providers";
 import { PageShell } from "@/components/common/page-shell";
 import { LocateCommandCenter } from "@/components/locates/locate-command-center";
 import { LocateChat } from "@/components/locates/locates-view";
+import { CrewLocates } from "@/components/locates/crew-locates";
+import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Locates · Vantara IQ" };
@@ -34,6 +37,31 @@ export default async function LocatesPage({
     getLocateOverview(),
     getLocatePickers(),
   ]);
+
+  // A crew gets their own tickets and nothing else — no filing, no
+  // refreshing, no assistant, no other company's streets. The query already
+  // scoped the rows to their company and stripped our working notes; this
+  // just draws the read-only version of the same data.
+  if (!staff) {
+    const company = me?.subcontractorId
+      ? (
+          await prisma.subcontractor.findUnique({
+            where: { id: me.subcontractorId },
+            select: { company: true },
+          })
+        )?.company ?? "your company"
+      : "your company";
+
+    return (
+      <PageShell
+        eyebrow="Intelligence"
+        title="Your locates"
+        description="The 811 tickets filed to your company — what is cleared, what has run out, and what has to be located before you break ground."
+      >
+        <CrewLocates rows={rows} company={company} projects={await getMyLocateProjects()} />
+      </PageShell>
+    );
+  }
 
   const provider = providerFor(DEFAULT_PROVIDER);
 

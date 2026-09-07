@@ -66,6 +66,9 @@ export const subNavSections: NavSection[] = [
     items: [
       { label: "Dailies", href: "/dailies", icon: "clipboard", shortcut: "D" },
       { label: "My projects", href: "/projects", icon: "projects", shortcut: "P" },
+      // Their own tickets only. The query scopes it to work filed to their
+      // company, so two crews on one job never read each other.
+      { label: "My locates", href: "/locates", icon: "alert" },
       { label: "Company profile", href: "/company", icon: "users" },
       { label: "Yard badges", href: "/badges", icon: "idCard" },
       { label: "Tasks", href: "/tasks", icon: "clipboard" },

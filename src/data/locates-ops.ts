@@ -120,23 +120,23 @@ const TICKET_INCLUDE = {
  */
 async function scope() {
   const me = await getCurrentUser();
-  if (!me) return { me: null, where: null };
-  if (isStaff(me.role)) return { me, where: {} as Record<string, unknown> };
+  if (!me) return { me: null, where: null, crew: false };
+  if (isStaff(me.role)) return { me, where: {} as Record<string, unknown>, crew: false };
 
-  if (!me.subcontractorId) return { me, where: null };
-  const projects = await prisma.project.findMany({
-    where: { crews: { some: { id: me.subcontractorId } } },
-    select: { id: true },
-  });
-  if (projects.length === 0) return { me, where: null };
+  if (!me.subcontractorId) return { me, where: null, crew: true };
+
+  // Filed to their company, and nothing else.
+  //
+  // This used to also match every ticket on a project they are assigned to,
+  // which is wrong in the ordinary case rather than an edge one: two crews
+  // share a job, and each would have read the other's tickets — other
+  // people's streets, other people's problems. A ticket belongs to a crew
+  // when somebody in the office files it to them, and until that happens it
+  // belongs to nobody.
   return {
     me,
-    where: {
-      OR: [
-        { projectId: { in: projects.map((p) => p.id) } },
-        { crewId: me.subcontractorId },
-      ],
-    } as Record<string, unknown>,
+    where: { crewId: me.subcontractorId } as Record<string, unknown>,
+    crew: true,
   };
 }
 
@@ -160,6 +160,19 @@ function rulesOf(project: { locateRules?: unknown } | null): LocateRule[] {
 type TicketWithRelations = Awaited<
   ReturnType<typeof prisma.locateTicket.findMany<{ include: typeof TICKET_INCLUDE }>>
 >[number];
+
+/**
+ * Columns that are ours, not theirs.
+ *
+ * The note says who sent a ticket in and what we made of it; the owner is
+ * whoever in this office is chasing it. Neither is a crew's business, and
+ * both would otherwise ride along on a row they are entitled to see. The
+ * readiness and the blocking reason stay — those are the whole point of
+ * showing them the ticket at all.
+ */
+function redactForCrew(r: LocateRow): LocateRow {
+  return { ...r, notes: "", assignedToId: null, assignedToName: "" };
+}
 
 function toRow(t: TicketWithRelations): LocateRow {
   const zone = zoneForState(t.state);
@@ -240,7 +253,7 @@ export async function getLocateRows(opts: {
   crewId?: string;
   includeClosed?: boolean;
 } = {}): Promise<{ rows: LocateRow[]; total: number }> {
-  const { where } = await scope();
+  const { where, crew } = await scope();
   if (!where) return { rows: [], total: 0 };
 
   const filter: Record<string, unknown> = { ...where };
@@ -261,7 +274,8 @@ export async function getLocateRows(opts: {
     prisma.locateTicket.count({ where: filter }),
   ]);
 
-  return { rows: rows.map(toRow), total };
+  const mapped = rows.map(toRow);
+  return { rows: crew ? mapped.map(redactForCrew) : mapped, total };
 }
 
 export interface LocateOverview {
@@ -308,7 +322,7 @@ export async function getLocateOverview(): Promise<LocateOverview> {
 
 /** One ticket, with everything the detail page draws. */
 export async function getLocateDetail(id: string) {
-  const { where } = await scope();
+  const { where, crew } = await scope();
   if (!where) return null;
 
   const t = await prisma.locateTicket.findFirst({
@@ -382,7 +396,7 @@ export async function getLocateDetail(id: string) {
       expiryEstimated: r.expiryEstimated,
       daysToExpiry: r.standing.daysToExpiry,
       urgency: expiryUrgency(r.standing.daysToExpiry),
-      notes: t.notes,
+      notes: crew ? "" : t.notes,
       sourceUrl: t.sourceUrl || provider.ticketUrl(t.number),
       monitoringEnabled: t.monitoringEnabled,
       lastCheckedAt: t.lastCheckedAt?.toISOString() ?? null,
@@ -392,7 +406,7 @@ export async function getLocateDetail(id: string) {
       projectName: t.project?.name ?? "",
       crewId: t.crew?.id ?? null,
       crewName: t.crew?.company ?? "",
-      assignedToName: t.assignedTo?.name || t.assignedTo?.email || "",
+      assignedToName: crew ? "" : t.assignedTo?.name || t.assignedTo?.email || "",
     },
     readiness: r,
     /** Each member, with whose job it is to locate them on this project. */
@@ -440,10 +454,10 @@ export async function getLocateDetail(id: string) {
       fromValue: c.fromValue,
       toValue: c.toValue,
       summary: c.summary,
-      actor: c.actor,
+      actor: crew ? "" : c.actor,
       at: c.at.toISOString(),
     })),
-    checks: t.checks.map((c) => ({
+    checks: crew ? [] : t.checks.map((c) => ({
       id: c.id,
       checkedAt: c.checkedAt.toISOString(),
       checkType: c.checkType,
@@ -496,7 +510,7 @@ export async function getProjectLocateSummary(projectId: string) {
 
 /** What moved since a given moment — the "what changed" answer. */
 export async function getRecentChanges(sinceHours = 24) {
-  const { where } = await scope();
+  const { where, crew } = await scope();
   if (!where) return [];
   const since = new Date(Date.now() - sinceHours * 3600_000);
 
@@ -516,7 +530,7 @@ export async function getRecentChanges(sinceHours = 24) {
     subject: c.subject,
     fromValue: c.fromValue,
     toValue: c.toValue,
-    actor: c.actor,
+    actor: crew ? "" : c.actor,
     at: c.at.toISOString(),
     ticketId: c.ticket.id,
     ticketNumber: c.ticket.number,
