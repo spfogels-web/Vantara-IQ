@@ -24,7 +24,31 @@ export default function LoginPage() {
         }}
       />
 
-      <div className="mx-auto flex min-h-svh w-full max-w-md flex-col justify-center px-4 py-10">
+      {/* Alerts, at the top and reachable without an account.
+
+          It was a 11.5px link at the bottom of the page in white at 45%
+          opacity. The two audiences for it are a carrier verifying the
+          campaign and a crew member trying to make the texts stop, and
+          neither should have to hunt. Stopping in particular has to be at
+          least as easy as starting. */}
+      <div className="absolute inset-x-0 top-0 z-10 border-b border-white/10 bg-white/[0.04] backdrop-blur-sm">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-end gap-2 px-4 py-2.5">
+          <Link
+            href="/sms"
+            className="focus-ring inline-flex h-8 items-center gap-1.5 rounded-lg bg-white/10 px-3 text-[12.5px] font-semibold text-white ring-1 ring-white/20 transition-colors hover:bg-white/20"
+          >
+            Text message alerts
+          </Link>
+          <Link
+            href="/sms#stop"
+            className="focus-ring inline-flex h-8 items-center rounded-lg px-2.5 text-[12.5px] font-medium text-white/70 transition-colors hover:text-white"
+          >
+            Stop my texts
+          </Link>
+        </div>
+      </div>
+
+      <div className="mx-auto flex min-h-svh w-full max-w-md flex-col justify-center px-4 pb-10 pt-20">
       {/* The platform's mark, not a tenant's. This is the front door — whoever
           is signing in has not been identified yet, so there is no company logo
           to show.

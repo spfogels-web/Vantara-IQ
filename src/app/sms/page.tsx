@@ -125,7 +125,10 @@ export default async function SmsPage() {
 
       <Section title="How people opt in">
         <p className="text-[14.5px] leading-relaxed" style={{ color: BODY }}>
-          There are four ways and no others. We never buy, rent, or import phone numbers.
+          There are three, and in every one of them the person who owns the phone is the person
+          who ticks the box. Nobody can agree on somebody else&rsquo;s behalf — not their employer,
+          not their crew owner, and not our own staff. We never buy, rent, or import phone
+          numbers, and we never take consent over the phone or in person.
         </p>
         <ol className="mt-4 space-y-3">
           <Step n={1} title="This page">
@@ -134,16 +137,13 @@ export default async function SmsPage() {
           </Step>
           <Step n={2} title="The crew onboarding packet">
             When a subcontractor is engaged, their authorized contact completes a vendor packet
-            inside Vantara IQ. It carries the same unticked consent box, with the same wording,
-            directly beneath the mobile number field. They may leave it unticked, finish
-            onboarding, and still receive work — that is a normal outcome.
+            inside Vantara IQ, signed in as themselves. It carries the same unticked consent box,
+            with the same wording, directly beneath the mobile number field. Where our staff help a
+            crew through onboarding they can fill in every other field, and the system refuses to
+            let them tick this one. A crew may leave it unticked, finish onboarding, and still
+            receive work — that is a normal outcome.
           </Step>
-          <Step n={3} title="Written or verbal authorization on file">
-            A crew owner may authorize alerts for a number in writing or in person, in which case
-            a member of our staff records the number and the date. Staff must confirm they hold
-            that authorization before any number is added.
-          </Step>
-          <Step n={4} title="Our own staff, in their account settings">
+          <Step n={3} title="Our own staff, in their account settings">
             Fortitude employees add their own mobile number and tick the same unticked consent
             box, with the same wording, on their Vantara IQ settings page. Nobody can enter a
             number or agree on another person&rsquo;s behalf.
@@ -156,6 +156,85 @@ export default async function SmsPage() {
             Agreeing to texts is never a condition of registering, of using Vantara IQ, or of
             being awarded work.
           </strong>
+        </p>
+      </Section>
+
+      {/* The reason this section exists.
+
+          A carrier reviewing the campaign has to be able to see the consent
+          experience, and two of the three ways in are inside the product
+          behind a login — a reviewer with no account sees a sign-in screen
+          and marks the call to action unverifiable.
+
+          So the box is reproduced here, and it is not a picture of one. It
+          renders SMS_CONSENT_TEXT, the same constant the real forms render
+          and the same string stored against a person the day they agree.
+          A screenshot would go stale the first time the wording changed;
+          this cannot. */}
+      <Section title="What the consent box looks like inside Vantara IQ">
+        <p className="text-[14.5px] leading-relaxed" style={{ color: BODY }}>
+          Two of the three ways above happen inside the product, behind a login. This is exactly
+          what somebody sees there — the same wording, unticked, directly beneath the field where
+          they type their own number. It is generated from the same text this page&rsquo;s own form
+          uses, so the two can never drift apart.
+        </p>
+
+        <div className="mt-4 rounded-xl border border-slate-300 bg-slate-50 p-4 sm:p-5">
+          <p
+            className="text-[11.5px] font-bold uppercase tracking-[0.12em]"
+            style={{ color: MUTED }}
+          >
+            Vantara IQ — company profile
+          </p>
+
+          <div className="mt-3 max-w-sm">
+            <label className="block text-[13px] font-medium" style={{ color: INK }}>
+              Mobile number
+            </label>
+            <div
+              aria-hidden
+              className="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-[14px]"
+              style={{ color: MUTED }}
+            >
+              (864) 555-0134
+            </div>
+          </div>
+
+          <div className="mt-4 flex items-start gap-2.5">
+            <span
+              aria-hidden
+              className="mt-0.5 inline-block size-[18px] shrink-0 rounded border-2 border-slate-400 bg-white"
+            />
+            <p className="text-[13.5px] leading-relaxed" style={{ color: BODY }}>
+              {SMS_CONSENT_TEXT}
+            </p>
+          </div>
+
+          <p className="mt-3 text-[13px]" style={{ color: MUTED }}>
+            <Link
+              href="/terms"
+              className="font-semibold underline"
+              style={{ color: GOLD }}
+            >
+              Terms &amp; Conditions
+            </Link>
+            <span className="px-2">·</span>
+            <Link
+              href="/privacy"
+              className="font-semibold underline"
+              style={{ color: GOLD }}
+            >
+              Privacy Policy
+            </Link>
+          </p>
+        </div>
+
+        <p className="mt-4 text-[14.5px] leading-relaxed" style={{ color: BODY }}>
+          The box is unticked when the page loads and the form will not save with it ticked by
+          anyone other than the person whose number it is. Our own staff can record a crew&rsquo;s
+          phone number during onboarding; the system refuses to let them tick this box on that
+          crew&rsquo;s behalf. If an owner rings and asks us to stop their texts we can untick it for
+          them — stopping is never made harder than starting.
         </p>
       </Section>
 
@@ -188,7 +267,7 @@ export default async function SmsPage() {
         </div>
       </Section>
 
-      <Section title="How to stop">
+      <Section title="How to stop" id="stop">
         <div className="grid gap-3 sm:grid-cols-2">
           <Callout word="STOP">
             Reply <strong>STOP</strong> to any message and we stop immediately and permanently.
@@ -247,9 +326,17 @@ export default async function SmsPage() {
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({
+  title,
+  id,
+  children,
+}: {
+  title: string;
+  id?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <section className="mt-9">
+    <section id={id} className="mt-9 scroll-mt-6">
       <h2 className="text-[21px] font-bold tracking-[-0.01em]" style={{ color: INK }}>
         {title}
       </h2>

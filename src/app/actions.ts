@@ -2437,13 +2437,22 @@ function normalizeEin(raw: string): string {
  * what AP actually uses.
  */
 export async function saveVendorPacket(subcontractorId: string, input: VendorPacketInput) {
-  await assertOwnSubcontractor(subcontractorId);
+  const actor = await assertOwnSubcontractor(subcontractorId);
 
   const prior = await prisma.subcontractor.findUnique({
     where: { id: subcontractorId },
     select: { smsConsentAt: true },
   });
   const priorConsentAt = prior?.smsConsentAt ?? null;
+  // Consent is the one field on this packet that staff cannot fill in for
+  // somebody. Everything else here is a fact about the company that we may
+  // legitimately record on their behalf; agreeing to be texted is not a
+  // fact, it is a person saying yes, and it has to be that person.
+  //
+  // Withdrawal is deliberately not symmetric. If an owner rings and says
+  // stop, staff can untick it, because making a stop harder than a start is
+  // the wrong way round.
+  const mayGrantConsent = !isStaff(actor.role);
 
   if (!clean(input.legalName)) {
     return { ok: false as const, error: "Legal business name is required — it has to match your W-9." };
@@ -2479,7 +2488,10 @@ export async function saveVendorPacket(subcontractorId: string, input: VendorPac
       // would quietly rewrite the proof to today — and the one question a
       // carrier asks in a complaint is when they agreed, not whether a box is
       // ticked now. Unticking clears it, because that is a withdrawal.
-      smsConsentAt: input.smsConsent ? (priorConsentAt ?? new Date()) : null,
+      smsConsentAt:
+        input.smsConsent && (mayGrantConsent || priorConsentAt)
+          ? (priorConsentAt ?? new Date())
+          : null,
       billingContactName: clean(input.billingContactName),
       billingContactTitle: clean(input.billingContactTitle),
       billingEmail: clean(input.billingEmail),
@@ -6279,18 +6291,30 @@ export async function saveCrewContact(
   subcontractorId: string,
   input: { lead?: string; email?: string; phone?: string; smsConsent?: boolean },
 ) {
-  await assertOwnSubcontractor(subcontractorId);
+  const actor = await assertOwnSubcontractor(subcontractorId);
 
   const prior = await prisma.subcontractor.findUnique({
     where: { id: subcontractorId },
     select: { smsConsentAt: true },
   });
+  // Same rule as the packet: staff may record the number, only the person
+  // may agree to it being texted.
+  const mayGrantConsent = !isStaff(actor.role);
 
   const data: Prisma.SubcontractorUpdateInput = {};
   if (input.lead !== undefined) data.lead = clean(input.lead);
   if (input.email !== undefined) data.email = clean(input.email);
   if (input.phone !== undefined) data.phone = clean(input.phone);
   if (input.smsConsent !== undefined) {
+    if (input.smsConsent && !mayGrantConsent && !prior?.smsConsentAt) {
+      return {
+        ok: false as const,
+        error:
+          "Only the person who owns the number can agree to texts. Send them the " +
+          "link to vantaraiq.com/sms, or ask them to tick the box in their own " +
+          "company profile.",
+      };
+    }
     data.smsConsentAt = input.smsConsent ? (prior?.smsConsentAt ?? new Date()) : null;
   }
   if (Object.keys(data).length === 0) return { ok: true as const };
