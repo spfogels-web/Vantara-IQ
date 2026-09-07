@@ -1,38 +1,69 @@
 /**
  * Georgia 811.
  *
- * The only file in the codebase that knows anything about Georgia specifically.
+ * The only file in the codebase that knows anything about Georgia
+ * specifically. Everything above it asks for a ticket and gets one back, so
+ * the question of HOW we retrieve is settled here and nowhere else.
  *
- * ── On automated retrieval ────────────────────────────────────────────────
+ * ── What we established, and when ─────────────────────────────────────────
  *
- * Georgia 811 publishes no developer API. Their own "Locate Request Management
- * Options" page is a directory of third-party vendors — BOSS811, KorTerra,
- * DigTrack — who hold licensed ticket feeds. There is no documented endpoint
- * for an excavator to query their own tickets.
+ * Researched 7 September 2026. Recorded here rather than in a chat log
+ * because the next person to pick this up will be reading this file.
  *
- * The ticket portal at geocall.ga811.com is PelicanCorp GeoCall. The page shell
- * loads for anyone, which is why the URL appears to work when you paste it. The
- * data behind it does not:
+ * 1. There is no public developer API. Georgia 811's own "Locate Request
+ *    Management Options" page is a directory of third-party vendors —
+ *    BOSS811, KorTerra, DigTrack — who hold licensed feeds.
  *
- *     GET /geocall/api/core/status
- *     → 403 Forbidden   {"message": "NoAuthHeader : No auth"}
+ * 2. The ticket portal at geocall.ga811.com is PelicanCorp GeoCall. The page
+ *    shell loads for anyone, which is why pasting a ticket URL appears to
+ *    work. The data behind it does not:
  *
- * The shell is a container; the ticket is fetched into it by authenticated
- * calls the browser makes with a session it obtained at login. Retrieving that
- * from a server means holding a user's credentials and impersonating them,
- * which is circumventing an access control, so this adapter does not do it and
- * `ready()` returns false until a sanctioned route is configured.
+ *        GET /geocall/api/core/status  →  403  "NoAuthHeader : No auth"
  *
- * Two sanctioned routes exist and both are drop-ins here:
+ *    Probed /geocall/pris, /geocall/portal/pris, /geocall/api/ticket,
+ *    /geocall/api/positiveresponse and /geocall/api/ui/ticketsearch: all 404.
+ *    No unauthenticated positive-response endpoint is discoverable from the
+ *    portal.
  *
- *   1. A direct feed from Georgia 811 for Fortitude's own excavator account.
- *      Set GA811_API_URL and GA811_API_KEY and fill in `lookupTicket`.
- *   2. A vendor with a licensed feed and an API. Same two variables, different
- *      host, same parsing contract.
+ * 3. Georgia 811 does advertise a no-login positive-response lookup — but in
+ *    their MOBILE APP, not on the web. Whatever that app calls is
+ *    undocumented and presumably carries an app credential. It may well be a
+ *    clean endpoint. It is not a published contract, and this module decides
+ *    whether a crew puts a plow in the ground, so it is not something to
+ *    build on until Georgia 811 says in writing that we may.
  *
- * Until one of those exists, tickets arrive by paste and by email, which is a
- * supported way to run this module rather than a degraded one. Nothing else in
- * the codebase changes when that day comes.
+ * 4. The "Ticket Automation (BOT) Policy" is NOT about retrieval. Read in
+ *    full: its stated purpose is "ticket automation system" for "locate
+ *    tickets submission"; its scope requires Online Ticket CREATION training
+ *    and 20–30 test tickets a day for three days; its rate limit is "one
+ *    ticket every ten seconds"; its quality criteria are entirely creation
+ *    fields. It governs automated ticket ENTRY through an authenticated web
+ *    account and says nothing about reading responses.
+ *
+ *    That is worth being careful about in both directions. It does not
+ *    prohibit automated positive-response reads. It does not permit them
+ *    either — the policy simply does not reach them, and a gap in a policy is
+ *    not consent. Ask webhelpdesk@Georgia811.com before switching retrieval
+ *    on, and keep their answer.
+ *
+ * ── The four routes, all of which land here ───────────────────────────────
+ *
+ * The point of an adapter rather than an API client is that the rest of
+ * Vantara never learns which of these we ended up using:
+ *
+ *   FEED      A direct feed from Georgia 811 for our own excavator account,
+ *             or a licensed vendor's API. Set GA811_API_URL and
+ *             GA811_API_KEY and `lookupTicket` below already does the rest.
+ *   STRUCTURED  A public PRIS request, if one is found and permitted. Same
+ *             function, different URL and no key.
+ *   BROWSER   Driving the portal on a schedule. Only with written permission,
+ *             and only ever for our own tickets.
+ *   PASTE     What runs today. A person pastes the ticket or the response
+ *             screen and the same parser reads it.
+ *
+ * Paste is a supported way to run this module, not a degraded one. The
+ * readiness engine cannot tell where a response came from, and that is
+ * deliberate.
  */
 
 import { parseLocateText } from "@/lib/locate-chat";
@@ -64,11 +95,15 @@ export const ga811: LocateProvider = {
   readyDetail() {
     if (apiConfigured()) return "A Georgia 811 feed is configured.";
     return (
-      "Georgia 811 publishes no public API, and their ticket portal requires a " +
-      "login this system deliberately does not hold. Tickets are entered by " +
-      "pasting the ticket or the response screen. To switch on automatic " +
-      "lookups, obtain a feed from Georgia 811 for your excavator account or " +
-      "from a licensed vendor, then set GA811_API_URL and GA811_API_KEY."
+      "Georgia 811 publishes no developer API, and no unauthenticated " +
+      "positive-response endpoint is reachable from their web portal — the " +
+      "no-login lookup they advertise is in their mobile app. Tickets are " +
+      "entered by pasting the ticket or the response screen, which is a " +
+      "supported way to run this rather than a degraded one. To switch " +
+      "automatic retrieval on, get written permission from " +
+      "webhelpdesk@Georgia811.com — their BOT policy covers ticket creation, " +
+      "not retrieval, so it neither allows nor forbids this — then set " +
+      "GA811_API_URL and GA811_API_KEY."
     );
   },
 
