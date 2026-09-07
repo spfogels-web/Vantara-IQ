@@ -7,10 +7,14 @@ import {
   AlertTriangle,
   ArrowLeft,
   CheckCircle2,
+  Camera,
   ExternalLink,
   Loader2,
   RefreshCw,
+  X,
 } from "lucide-react";
+
+import { upload as blobUpload } from "@vercel/blob/client";
 
 import { cn } from "@/lib/utils";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
@@ -82,6 +86,7 @@ type Detail = {
     frequencyUsed: string;
     signalQuality: string;
     notes: string;
+    photos: string[];
   }[];
   changes: {
     id: string;
@@ -306,6 +311,7 @@ export function LocateDetail({
                 <ContractorCard
                   key={c.id}
                   locate={c}
+                  ticketId={t.id}
                   canManage={canManage}
                   crews={crews}
                   users={users}
@@ -431,11 +437,13 @@ function StatusPanel({
  */
 function ContractorCard({
   locate: c,
+  ticketId,
   canManage,
   crews,
   users,
 }: {
   locate: Detail["contractorLocates"][number];
+  ticketId: string;
   canManage: boolean;
   crews: { id: string; company: string }[];
   users: { id: string; name: string }[];
@@ -452,6 +460,7 @@ function ContractorCard({
     React.useState<"ISSUE_FOUND" | "UNABLE_TO_LOCATE" | "REQUIRES_ESCALATION">("UNABLE_TO_LOCATE");
   const [crewId, setCrewId] = React.useState("");
   const [userId, setUserId] = React.useState("");
+  const [photos, setPhotos] = React.useState<string[]>([]);
 
   const verified = c.status === "VERIFIED";
   const problem = ["ISSUE_FOUND", "UNABLE_TO_LOCATE", "REQUIRES_ESCALATION"].includes(c.status);
@@ -560,6 +569,23 @@ function ContractorCard({
         </div>
       ) : null}
 
+      {c.photos?.length ? (
+        <ul className="mt-2 flex flex-wrap gap-1.5">
+          {c.photos.map((u) => (
+            <li key={u}>
+              <a href={u} target="_blank" rel="noreferrer" className="focus-ring block">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={u}
+                  alt="Locate photograph"
+                  className="size-16 rounded-md border border-border object-cover"
+                />
+              </a>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
       {panel === "verify" ? (
         <div className="mt-2 flex flex-col gap-1.5">
           <p className="text-[11.5px] text-muted-foreground">
@@ -587,6 +613,7 @@ function ContractorCard({
             placeholder="Anything the crew should know."
             className="focus-ring rounded-lg border border-border bg-transparent p-2 text-[12px] text-foreground"
           />
+          <PhotoPicker ticketId={ticketId} photos={photos} onChange={setPhotos} />
           <div>
             <Action
               label="Confirm verified"
@@ -599,6 +626,7 @@ function ContractorCard({
                     frequencyUsed: freq,
                     signalQuality: signal,
                     notes,
+                    photos,
                   }),
                 )
               }
@@ -639,6 +667,7 @@ function ContractorCard({
             placeholder="What happened? This is what somebody acts on."
             className="focus-ring rounded-lg border border-border bg-transparent p-2 text-[12px] text-foreground"
           />
+          <PhotoPicker ticketId={ticketId} photos={photos} onChange={setPhotos} />
           <div>
             <Action
               label="Report"
@@ -646,13 +675,92 @@ function ContractorCard({
               busy={busy}
               onClick={() =>
                 void run(() =>
-                  reportContractorLocateIssue({ id: c.id, status: issueKind, notes }),
+                  reportContractorLocateIssue({ id: c.id, status: issueKind, notes, photos }),
                 )
               }
             />
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function PhotoPicker({
+  ticketId,
+  photos,
+  onChange,
+}: {
+  ticketId: string;
+  photos: string[];
+  onChange: (next: string[]) => void;
+}) {
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState<string | null>(null);
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <label className="focus-within:ring-brand/50 inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-border px-2.5 text-[12px] font-medium text-foreground hover:bg-foreground/[0.04]">
+          {busy ? <Loader2 className="size-3.5 animate-spin" /> : <Camera className="size-3.5" />}
+          {busy ? "Uploading…" : "Add photographs"}
+          <input
+            type="file"
+            accept="image/*"
+            multiple
+            className="sr-only"
+            onChange={async (e) => {
+              const files = Array.from(e.target.files ?? []);
+              if (files.length === 0) return;
+              setBusy(true);
+              setErr(null);
+              const added: string[] = [];
+              try {
+                for (const f of files) {
+                  const blob = await blobUpload(
+                    `locates/${ticketId}/${Date.now()}-${f.name}`,
+                    f,
+                    { access: "public", handleUploadUrl: "/api/blob/upload" },
+                  );
+                  added.push(blob.url);
+                }
+                onChange([...photos, ...added]);
+              } catch (x) {
+                // Named rather than swallowed: a photograph somebody believes
+                // they attached, and did not, is evidence that is not there
+                // on the day it gets asked for.
+                setErr(x instanceof Error ? x.message : "That upload did not go through.");
+              }
+              setBusy(false);
+              e.target.value = "";
+            }}
+          />
+        </label>
+        {photos.length > 0 ? (
+          <span className="text-[11.5px] text-muted-foreground">
+            {photos.length} attached
+          </span>
+        ) : null}
+      </div>
+      {photos.length > 0 ? (
+        <ul className="flex flex-wrap gap-1.5">
+          {photos.map((u) => (
+            <li key={u} className="relative">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={u} alt="" className="size-14 rounded-md border border-border object-cover" />
+              <button
+                type="button"
+                onClick={() => onChange(photos.filter((x) => x !== u))}
+                aria-label="Remove this photograph"
+                className="focus-ring absolute -right-1 -top-1 rounded-full border border-border bg-background p-0.5 text-muted-foreground hover:text-critical"
+              >
+                <X className="size-3" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {err ? <p className="text-[11.5px] text-critical">{err}</p> : null}
     </div>
   );
 }

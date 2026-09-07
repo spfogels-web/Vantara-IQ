@@ -2,11 +2,13 @@ import Link from "next/link";
 import { ChevronRight, Clock, FileText, Map as MapIcon, Users } from "lucide-react";
 
 import { getProjects } from "@/data/queries";
+import { getLocateRows } from "@/data/locates-ops";
 import { CUTOFF_LABEL } from "@/lib/billing";
 import { toneStyles } from "@/lib/tone";
 import { projectImageSrc as cover } from "@/lib/project-image";
 import { PageShell } from "@/components/common/page-shell";
 import { DailyBillingSheet } from "@/components/dailies/daily-billing-sheet";
+import { LocateChip } from "@/components/locates/locate-prework";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Daily billing sheet · Vantara IQ" };
@@ -31,7 +33,19 @@ export default async function DailyBillingSheetPage({
     );
   }
 
-  const projects = await getProjects();
+  const [projects, locates] = await Promise.all([
+    getProjects(),
+    // One query for the whole grid rather than one per card.
+    getLocateRows({ take: 500 }),
+  ]);
+  // Grouped once, so each card is a lookup rather than a filter over the lot.
+  const byProject = new Map<string, typeof locates.rows>();
+  for (const r of locates.rows) {
+    if (!r.projectId) continue;
+    const list = byProject.get(r.projectId) ?? [];
+    list.push(r);
+    byProject.set(r.projectId, list);
+  }
 
   return (
     <PageShell
@@ -116,6 +130,11 @@ export default async function DailyBillingSheetPage({
                       <p className="truncate text-[12px] text-muted-foreground">
                         {p.client} · {p.location}
                       </p>
+                      {/* Whether they can dig here, before they pick the job
+                          rather than after they have filled the sheet in. */}
+                      <span className="mt-1 inline-flex">
+                        <LocateChip rows={byProject.get(p.id) ?? []} />
+                      </span>
                     </div>
                     <ChevronRight className="mt-0.5 size-4 shrink-0 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-foreground" />
                   </div>

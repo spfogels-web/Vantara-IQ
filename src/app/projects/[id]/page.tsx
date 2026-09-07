@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Boxes, Calendar, ClipboardList } from "lucide-react";
+import { ArrowLeft, Boxes, Calendar, ClipboardList, MapPin } from "lucide-react";
 
 import {
   getCustomers,
@@ -29,6 +29,8 @@ import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { StatusPill } from "@/components/common/status-pill";
 import { ProjectHeaderActions, ProjectMapPanel } from "@/components/projects/project-detail-client";
 import { ProjectMaterials } from "@/components/projects/project-materials";
+import { ProjectLocateRules } from "@/components/locates/project-locate-rules";
+import { getProjectLocateRules, getProjectLocateSummary } from "@/data/locates-ops";
 import { ProjectPhotos } from "@/components/projects/project-photos";
 import { listCustomerRateCards } from "@/app/actions";
 import { CompleteToggle } from "@/components/projects/complete-toggle";
@@ -57,6 +59,10 @@ export default async function ProjectDetailPage({
   const customers = staff ? await getCustomers() : [];
 
   // The valuation is staff-only and throws for a crew by design, so don't ask.
+  const [locateRules, locateSummary] = await Promise.all([
+    getProjectLocateRules(project.id),
+    getProjectLocateSummary(project.id),
+  ]);
   const [materialImports, trackedMaterials, valuation, photos, projectRates, ratedCrews, schedule, projectCrews, rateCards] = await Promise.all([
     getProjectMaterialImports(project.id, project.name),
     getProjectMaterials(project.id),
@@ -197,6 +203,28 @@ export default async function ProjectDetailPage({
             crews={ratedCrews}
             rateCards={rateCards}
           />
+        </div>
+      ) : null}
+
+      {/* Locates sit above material: what stops a crew digging matters more
+          than what is on the trailer, and the responsibility rules underneath
+          are what decide whether Windstream holds a ticket up. */}
+      {staff ? (
+        <div className="mb-3">
+          <Panel>
+            <PanelHeader
+              title="Locates"
+              count={locateSummary.total}
+              icon={<MapPin className="size-3.5" />}
+              action="All locates"
+              actionHref={"/locates?project=" + project.id}
+            />
+            <ProjectLocateRules
+              projectId={project.id}
+              rules={locateRules}
+              summary={locateSummary}
+            />
+          </Panel>
         </div>
       ) : null}
 

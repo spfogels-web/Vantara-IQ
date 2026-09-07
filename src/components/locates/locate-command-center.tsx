@@ -67,6 +67,9 @@ export function LocateCommandCenter({
   canManage,
   providerReady,
   providerDetail,
+  initialProject = "",
+  initialCrew = "",
+  initialQuick = "",
 }: {
   rows: LocateRow[];
   overview: LocateOverview;
@@ -75,11 +78,19 @@ export function LocateCommandCenter({
   canManage: boolean;
   providerReady: boolean;
   providerDetail: string;
+  initialProject?: string;
+  initialCrew?: string;
+  initialQuick?: string;
 }) {
-  const [quick, setQuick] = React.useState<Quick>("ALL");
+  const QUICKS = [
+    "ALL", "FIELD_READY", "READY_811", "WAITING", "CONTRACTOR", "ATTENTION", "EXPIRING", "EXPIRED",
+  ];
+  const [quick, setQuick] = React.useState<Quick>(
+    QUICKS.includes(initialQuick.toUpperCase()) ? (initialQuick.toUpperCase() as Quick) : "ALL",
+  );
   const [query, setQuery] = React.useState("");
-  const [project, setProject] = React.useState("");
-  const [crew, setCrew] = React.useState("");
+  const [project, setProject] = React.useState(initialProject);
+  const [crew, setCrew] = React.useState(initialCrew);
   const [openId, setOpenId] = React.useState<string | null>(null);
   const [adding, setAdding] = React.useState(false);
 

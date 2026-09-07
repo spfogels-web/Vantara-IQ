@@ -19,7 +19,13 @@ export const metadata = { title: "Locates · Vantara IQ" };
  * A crew sees the tickets on their own jobs — the query scopes it, not the
  * page. Only staff can enter tickets, refresh them, or sign off a locate.
  */
-export default async function LocatesPage() {
+export default async function LocatesPage({
+  searchParams,
+}: {
+  /** Deep links from a project page and a daily arrive already filtered. */
+  searchParams: Promise<{ project?: string; crew?: string; view?: string }>;
+}) {
+  const sp = await searchParams;
   const me = await getCurrentUser();
   const staff = !!me && isStaff(me.role);
 
@@ -39,6 +45,9 @@ export default async function LocatesPage() {
     >
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_360px]">
         <LocateCommandCenter
+          initialProject={sp.project ?? ""}
+          initialCrew={sp.crew ?? ""}
+          initialQuick={sp.view ?? ""}
           rows={rows}
           overview={overview}
           projects={pickers.projects}

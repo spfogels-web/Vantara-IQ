@@ -7,7 +7,9 @@ import {
   getProjectCrews,
 } from "@/data/queries";
 import { getCurrentUser, isStaff } from "@/lib/auth";
+import { getLocateRows } from "@/data/locates-ops";
 import { PageShell } from "@/components/common/page-shell";
+import { LocatePreWork } from "@/components/locates/locate-prework";
 import { DailyBillingSheet } from "@/components/dailies/daily-billing-sheet";
 
 export const dynamic = "force-dynamic";
@@ -25,10 +27,13 @@ export default async function ProjectDailySheetPage({
   const project = await getProject(projectId);
   if (!project) notFound();
 
-  const [saved, me, billableCodes] = await Promise.all([
+  const [saved, me, billableCodes, locates] = await Promise.all([
     sp.sheet ? getDailySheet(sp.sheet) : Promise.resolve(null),
     getCurrentUser(),
     getBillableCodes(project.id),
+    // What the locates say about this job. Scoped by the same project access
+    // the rest of the page uses, so a crew sees their own jobs and no others.
+    getLocateRows({ projectId: project.id, take: 200 }),
   ]);
   // Staff review filed sheets; the crew that submitted one cannot reopen it.
   const canReview = me ? isStaff(me.role) : false;
@@ -49,6 +54,12 @@ export default async function ProjectDailySheetPage({
           : `${project.number ? `${project.number} · ` : ""}${project.name} — job numbers prefilled. Redline the map and print or submit when the crew is done.`
       }
     >
+      {/* Before the form, not after it. A crew that has already filled in a
+          sheet has already done the work — this only closes the gap between
+          the office knowing a locate is outstanding and the field being told
+          if it is the first thing on the page. */}
+      <LocatePreWork rows={locates.rows} projectId={project.id} />
+
       <DailyBillingSheet
         project={{
           id: project.id,
