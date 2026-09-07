@@ -3036,3 +3036,20 @@ model LocateTicketChange {
   @@index([ticketId, at])
   @@index([at])
 }
+
+/// Small pieces of configuration a person can change without a deploy.
+///
+/// Introduced for the alerts kill switch. Environment variables are the right
+/// home for credentials and for whether a thing is provisioned at all, but they
+/// are the wrong home for a control somebody needs at 6am when texts are going
+/// out that should not be — that one has to be a switch in the product, and it
+/// has to be reversible by the person who notices.
+model AppSetting {
+  key   String @id
+  value String
+
+  updatedBy String   @default("")
+  updatedAt DateTime @updatedAt
+
+  @@index([updatedAt])
+}

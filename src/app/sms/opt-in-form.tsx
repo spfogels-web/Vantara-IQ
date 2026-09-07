@@ -46,7 +46,8 @@ export function OptInForm({ consentText }: { consentText: string }) {
   }
 
   return (
-    <form onSubmit={submit} className="rounded-lg border border-slate-300 bg-white p-4">
+    <form onSubmit={submit} className="rounded-lg border p-4"
+      style={{ borderColor: "var(--sms-line)", background: "var(--sms-card)" }}>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Field label="Your name" value={f.name} onChange={(v) => set("name", v)} required />
         <Field label="Company" value={f.company} onChange={(v) => set("company", v)} />
@@ -67,7 +68,7 @@ export function OptInForm({ consentText }: { consentText: string }) {
           onChange={(e) => setConsent(e.target.checked)}
           className="mt-1 size-4 shrink-0"
         />
-        <span className="text-[13.5px] leading-relaxed text-slate-700">{consentText}</span>
+        <span className="text-[13.5px] leading-relaxed" style={{ color: "var(--sms-body)" }}>{consentText}</span>
       </label>
 
       {error ? <p className="mt-2 text-[13px] text-red-700">{error}</p> : null}
@@ -75,11 +76,12 @@ export function OptInForm({ consentText }: { consentText: string }) {
       <button
         type="submit"
         disabled={busy || !consent}
-        className="mt-4 inline-flex h-10 items-center rounded-lg bg-slate-900 px-4 text-[14px] font-semibold text-white disabled:opacity-40"
+        className="mt-4 inline-flex h-10 items-center rounded-lg px-4 text-[14px] font-semibold disabled:opacity-40"
+        style={{ background: "var(--sms-ink)", color: "var(--sms-card)" }}
       >
         {busy ? "Signing up…" : "Sign up for job alerts"}
       </button>
-      <p className="mt-2 text-[12.5px] text-slate-500">
+      <p className="mt-2 text-[12.5px]" style={{ color: "var(--sms-muted)" }}>
         The button stays disabled until you tick the box. We never tick it for you.
       </p>
     </form>
@@ -103,7 +105,7 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-[12.5px] font-medium text-slate-700">
+      <span className="mb-1 block text-[12.5px] font-medium" style={{ color: "var(--sms-body)" }}>
         {label}
         {required ? <span className="text-red-600"> *</span> : null}
       </span>
@@ -112,7 +114,8 @@ function Field({
         value={value}
         placeholder={placeholder}
         onChange={(e) => onChange(e.target.value)}
-        className="h-10 w-full rounded-lg border border-slate-300 px-3 text-[14px] text-slate-900 outline-none focus:border-slate-900"
+        className="h-10 w-full rounded-lg border px-3 text-[14px] outline-none"
+        style={{ borderColor: "var(--sms-line)", background: "var(--sms-card)", color: "var(--sms-ink)" }}
       />
     </label>
   );

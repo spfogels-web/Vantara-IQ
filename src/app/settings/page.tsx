@@ -1,5 +1,5 @@
 ﻿import Link from "next/link";
-import { Building2, Plug, ShieldCheck, Smartphone } from "lucide-react";
+import { Building2, Plug, Radio, ShieldCheck, Smartphone } from "lucide-react";
 
 import { getOrganization, getOrganizationLogo } from "@/data/queries";
 import { PageShell } from "@/components/common/page-shell";
@@ -12,6 +12,8 @@ import { SmsStatus } from "@/components/settings/sms-status";
 import { smsReady, smsSenderLabel } from "@/lib/sms";
 import { getMyAlertSettings } from "@/app/actions";
 import { SMS_CONSENT_TEXT } from "@/lib/sms-consent";
+import { alertsState } from "@/lib/alerts-switch";
+import { AlertsSwitchPanel } from "@/components/settings/alerts-switch-panel";
 import { getCurrentUser, isStaff } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -80,11 +82,12 @@ const integrations = [
 ];
 
 export default async function SettingsPage() {
-  const [org, me, orgLogoUrl, myAlerts] = await Promise.all([
+  const [org, me, orgLogoUrl, myAlerts, alerts] = await Promise.all([
     getOrganization(),
     getCurrentUser(),
     getOrganizationLogo(),
     getMyAlertSettings(),
+    alertsState(),
   ]);
 
   const staff = !!me && isStaff(me.role);
@@ -103,6 +106,20 @@ export default async function SettingsPage() {
       ) : null}
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        {/* The master switch first. Everything below it is somebody's own
+            number and their own consent; this is whether any of it leaves
+            the building at all, so it reads first and it is staff only. */}
+        {staff ? (
+          <Panel className="lg:col-span-2 scroll-mt-6" id="alerts">
+            <PanelHeader
+              title="Job alerts"
+              description="Whether text messages are going out at all. This governs every alert in Vantara IQ."
+              icon={<Radio className="size-3.5 text-gold" />}
+            />
+            <AlertsSwitchPanel state={alerts} />
+          </Panel>
+        ) : null}
+
         <Panel className="lg:col-span-2">
           <PanelHeader
             title="Job alerts to your phone"

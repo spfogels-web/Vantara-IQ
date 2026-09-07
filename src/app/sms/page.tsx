@@ -12,10 +12,16 @@ export const metadata = {
     "How crews working with Fortitude Infrastructure LLC sign up for Vantara IQ job alert text messages, what those messages contain, and how to stop them.",
 };
 
-const GOLD = "#8a5d0a";
-const INK = "#0f172a";
-const BODY = "#334155";
-const MUTED = "#475569";
+// Defined by src/app/sms/layout.tsx, which carries a measured value for each
+// in both themes. Named constants rather than the raw var() at every call site
+// so the page reads the same as it did when the palette was literal.
+const GOLD = "var(--sms-gold)";
+const INK = "var(--sms-ink)";
+const BODY = "var(--sms-body)";
+const MUTED = "var(--sms-muted)";
+const CARD = "var(--sms-card)";
+const SUNK = "var(--sms-sunk)";
+const LINE = "var(--sms-line)";
 
 /**
  * The page a carrier opens when verifying the A2P campaign.
@@ -67,7 +73,7 @@ export default async function SmsPage() {
           />
           {org?.logoUrl ? (
             <>
-              <span aria-hidden className="h-8 w-px bg-slate-300" />
+              <span aria-hidden className="h-8 w-px" style={{ background: LINE }} />
               {/* Resized on the way out. The original is a 2.5 MB PNG and
                   this draws it at 48 pixels tall. */}
               <Image
@@ -110,7 +116,7 @@ export default async function SmsPage() {
 
       {/* The opt-in leads the page. It is what a reviewer came to find and what
           a crew member came to do. */}
-      <section className="mt-9 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-900/10 sm:p-7">
+      <section className="mt-9 rounded-2xl p-6 shadow-sm ring-1 sm:p-7" style={{ background: CARD, boxShadow: "0 1px 2px 0 var(--sms-hair)", "--tw-ring-color": "var(--sms-hair)" } as React.CSSProperties}>
         <h2 className="text-[21px] font-bold tracking-[-0.01em]" style={{ color: INK }}>
           Sign up for job alerts
         </h2>
@@ -179,7 +185,10 @@ export default async function SmsPage() {
           uses, so the two can never drift apart.
         </p>
 
-        <div className="mt-4 rounded-xl border border-slate-300 bg-slate-50 p-4 sm:p-5">
+        <div
+          className="mt-4 rounded-xl border p-4 sm:p-5"
+          style={{ borderColor: LINE, background: SUNK }}
+        >
           <p
             className="text-[11.5px] font-bold uppercase tracking-[0.12em]"
             style={{ color: MUTED }}
@@ -193,8 +202,8 @@ export default async function SmsPage() {
             </label>
             <div
               aria-hidden
-              className="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-[14px]"
-              style={{ color: MUTED }}
+              className="mt-1 rounded-lg border px-3 py-2 text-[14px]"
+              style={{ borderColor: LINE, background: CARD, color: MUTED }}
             >
               (864) 555-0134
             </div>
@@ -203,7 +212,8 @@ export default async function SmsPage() {
           <div className="mt-4 flex items-start gap-2.5">
             <span
               aria-hidden
-              className="mt-0.5 inline-block size-[18px] shrink-0 rounded border-2 border-slate-400 bg-white"
+              className="mt-0.5 inline-block size-[18px] shrink-0 rounded border-2"
+              style={{ borderColor: LINE, background: CARD }}
             />
             <p className="text-[13.5px] leading-relaxed" style={{ color: BODY }}>
               {SMS_CONSENT_TEXT}
@@ -258,8 +268,14 @@ export default async function SmsPage() {
           {SAMPLE_MESSAGES.map((m) => (
             <p
               key={m}
-              className="rounded-xl rounded-bl-sm bg-slate-100 px-4 py-3 font-mono text-[13px] leading-relaxed ring-1 ring-slate-900/[0.06]"
-              style={{ color: INK }}
+              className="rounded-xl rounded-bl-sm px-4 py-3 font-mono text-[13px] leading-relaxed ring-1"
+              style={
+                {
+                  background: SUNK,
+                  color: INK,
+                  "--tw-ring-color": "var(--sms-hair)",
+                } as React.CSSProperties
+              }
             >
               {m}
             </p>
@@ -347,7 +363,10 @@ function Section({
 
 function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
   return (
-    <li className="flex gap-3.5 rounded-xl bg-white p-4 ring-1 ring-slate-900/[0.08]">
+    <li
+      className="flex gap-3.5 rounded-xl p-4 ring-1"
+      style={{ background: CARD, "--tw-ring-color": "var(--sms-hair)" } as React.CSSProperties}
+    >
       <span
         className="grid size-7 shrink-0 place-items-center rounded-full text-[13px] font-bold text-white"
         style={{ background: GOLD }}
@@ -366,7 +385,10 @@ function Step({ n, title, children }: { n: number; title: string; children: Reac
 
 function Callout({ word, children }: { word: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-xl bg-white p-4 ring-1 ring-slate-900/[0.08]">
+    <div
+      className="rounded-xl p-4 ring-1"
+      style={{ background: CARD, "--tw-ring-color": "var(--sms-hair)" } as React.CSSProperties}
+    >
       <p className="font-mono text-[15px] font-bold" style={{ color: GOLD }}>
         {word}
       </p>

@@ -5,7 +5,8 @@ import { GeistMono } from "geist/font/mono";
 import "./globals.css";
 import { prisma } from "@/lib/prisma";
 import { AppShell } from "@/components/layout/app-shell";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, isStaff } from "@/lib/auth";
+import { alertsState } from "@/lib/alerts-switch";
 import { getNavBadges, getOrganizationLogo , getNotifications } from "@/data/queries";
 import { getLocale } from "@/lib/i18n-server";
 import { LanguageProvider } from "@/components/layout/language-provider";
@@ -39,6 +40,11 @@ export default async function RootLayout({
     getNotifications(),
     getLocale(),
   ]);
+
+  // The alerts light in the top bar. Staff only — a crew has their own consent
+  // and no say in the master switch, and a control they cannot use is a
+  // question with no answer.
+  const alertsLive = user && isStaff(user.role) ? (await alertsState()).live : undefined;
 
   // Whether this crew may see their own pay. Off unless the office has
   // turned it on — several owners have their own people fill in the
@@ -76,6 +82,7 @@ export default async function RootLayout({
             badges={badges}
             notifications={notifications}
             showPay={showPay}
+            alertsLive={alertsLive}
           >
             {children}
           </AppShell>

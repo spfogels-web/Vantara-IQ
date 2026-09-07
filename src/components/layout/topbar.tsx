@@ -11,6 +11,7 @@ import {
   Menu,
   MessageSquarePlus,
   Plus,
+  Radio,
   Search,
   Settings,
   UserRound,
@@ -376,11 +377,14 @@ export function Topbar({
   logoUrl,
   badges,
   notifications = [],
+  alertsLive,
 }: {
   user: CurrentUser | null;
   logoUrl?: string | null;
   badges?: Record<string, number>;
   notifications?: AppNotification[];
+  /** Whether outbound texts are switched on. Undefined for a crew, who have no say in it. */
+  alertsLive?: boolean;
 }) {
   const { setOpen: setCommandOpen } = useCommandMenu();
   const t = useT();
@@ -410,6 +414,38 @@ export function Topbar({
           </TooltipTrigger>
           <TooltipContent>Data refreshed 2 minutes ago</TooltipContent>
         </Tooltip>
+
+        {/* Whether texts are actually going out.
+
+            Beside the data-freshness dot rather than buried in settings,
+            because the question it answers — is the business texting
+            people right now — is one you want answered without going to
+            look. Staff only: a crew has their own consent and no say in
+            the master switch, so showing them a control they cannot use
+            would only raise a question with no answer. */}
+        {alertsLive !== undefined ? (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Link
+                href="/settings#alerts"
+                className={cn(
+                  "focus-ring hidden items-center gap-1.5 rounded-full border px-2 py-[3px] text-[10.5px] font-medium transition-colors lg:inline-flex",
+                  alertsLive
+                    ? "border-success/25 bg-success/10 text-success hover:bg-success/15"
+                    : "border-warning/30 bg-warning/10 text-warning hover:bg-warning/15",
+                )}
+              >
+                <Radio className="size-3" />
+                {alertsLive ? t("Alerts on") : t("Alerts off")}
+              </Link>
+            </TooltipTrigger>
+            <TooltipContent>
+              {alertsLive
+                ? "Text alerts are going out. Click to manage."
+                : "No text alerts are being sent. Click to manage."}
+            </TooltipContent>
+          </Tooltip>
+        ) : null}
       </div>
 
       <SearchTrigger className="mx-auto hidden w-full min-w-0 max-w-md md:flex" />

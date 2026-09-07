@@ -28,6 +28,7 @@ function ShellFrame({
   badges,
   notifications,
   showPay,
+  alertsLive,
 }: {
   children: React.ReactNode;
   user: CurrentUser | null;
@@ -36,6 +37,8 @@ function ShellFrame({
   notifications?: AppNotification[];
   /** Whether this crew may see their own pay. Off unless the office says so. */
   showPay?: boolean;
+  /** Whether outbound texts are on. Undefined for anyone who cannot change it. */
+  alertsLive?: boolean;
 }) {
   const { collapsed } = useSidebar();
   const isDesktop = useIsDesktop();
@@ -53,7 +56,13 @@ function ShellFrame({
           transition: "margin-inline-start 260ms cubic-bezier(0.16, 1, 0.3, 1)",
         }}
       >
-        <Topbar user={user} logoUrl={logoUrl} badges={badges} notifications={notifications} />
+        <Topbar
+          user={user}
+          logoUrl={logoUrl}
+          badges={badges}
+          notifications={notifications}
+          alertsLive={alertsLive}
+        />
         <main className="flex-1">{children}</main>
       </div>
     </div>
@@ -67,6 +76,7 @@ export function AppShell({
   badges,
   notifications,
   showPay,
+  alertsLive,
 }: {
   children: React.ReactNode;
   user: CurrentUser | null;
@@ -75,6 +85,7 @@ export function AppShell({
   notifications?: AppNotification[];
   /** Whether this crew may see their own pay. Off unless the office says so. */
   showPay?: boolean;
+  alertsLive?: boolean;
 }) {
   const pathname = usePathname();
 
@@ -103,6 +114,7 @@ export function AppShell({
         <CommandMenuProvider role={user?.role}>
           <ShellFrame user={user} logoUrl={logoUrl} badges={badges} notifications={notifications}
         showPay={showPay}
+      alertsLive={alertsLive}
       >{children}</ShellFrame>
         </CommandMenuProvider>
       </SidebarProvider>

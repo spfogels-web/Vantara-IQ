@@ -1,6 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
+import { alertsLive } from "@/lib/alerts-switch";
 
 /**
  * Text messages to crews.
@@ -95,6 +96,17 @@ function withOptOut(body: string): string {
  * form POST is not worth a dependency, and this keeps the bundle honest.
  */
 async function post(to: string, body: string): Promise<SmsResult> {
+  // The kill switch, and it sits here rather than in each caller because this
+  // is the one function every message goes through. Checked on the send, not
+  // cached at import: somebody switching alerts off expects the next message
+  // to stop, not the next deploy.
+  //
+  // Deliberately after nothing and before everything. A welcome text is a
+  // message too, and "off" that still sends welcomes is not off.
+  if (!(await alertsLive())) {
+    return { sent: false, reason: "Job alerts are switched off." };
+  }
+
   const sid = process.env.TWILIO_ACCOUNT_SID;
   const token = process.env.TWILIO_AUTH_TOKEN;
   const sender = smsSender();
