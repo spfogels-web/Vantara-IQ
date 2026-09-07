@@ -38,11 +38,25 @@ export const WELCOME_MESSAGE =
   "Vantara IQ (Fortitude Infrastructure LLC): job alerts are on. " +
   "Msg frequency varies. Msg&data rates may apply. Reply STOP to opt out, HELP for help.";
 
-/** What the messages actually look like, for the campaign submission and the page. */
+/**
+ * What the messages actually look like.
+ *
+ * Rendered on the opt-in page and copied into the campaign submission from the
+ * same array, because a carrier compares the two and any difference reads as a
+ * programme that does not know its own traffic.
+ *
+ * Each of these is a real template, not an illustration. In order: a daily
+ * approved and a daily sent back (notifyCrew from reviewDaily), a pay statement
+ * issued (notifyCrew from issuing a statement), a message a person typed in the
+ * messaging hub with SMS ticked, and the reply to HELP. Everything a crew
+ * receives comes from one of these paths — nothing is sent on a timer.
+ */
 export const SAMPLE_MESSAGES = [
-  "Vantara IQ: New work assigned — Tall Lewis, 704152839. Due Fri 08/28. Reply STOP to opt out.",
-  "Vantara IQ: Your daily for 08/26 was returned — as-built missing. Reply STOP to opt out.",
-  "Vantara IQ: Invoice 8 accepted, $8,508.85, NET 21. Reply STOP to opt out.",
+  "Vantara IQ: Tall Lewis — 2026-08-26 approved — It will appear on your next pay statement. Reply STOP to opt out.",
+  "Vantara IQ: Tall Lewis — 2026-08-26 sent back — As-built photo is missing. Check the sheet and file it again. Reply STOP to opt out.",
+  "Vantara IQ: Pay statement PS-0042 is ready — Check it against your sheets, then accept it or tell us what is wrong. Reply STOP to opt out.",
+  "Vantara IQ: BFO48 reel 11427 has been issued to your crew — 4,500 ft picked up by J. Bates. Count it before you start. Reply STOP to opt out.",
+  "Vantara IQ (Fortitude Infrastructure LLC) job alerts. Msg&data rates may apply. Reply STOP to opt out. Help: (864) 365-1521 or sean.fogelson@fortitude-infra.com",
 ];
 
 /**
