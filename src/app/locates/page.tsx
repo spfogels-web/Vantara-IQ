@@ -52,6 +52,7 @@ export default async function LocatesPage({
           overview={overview}
           projects={pickers.projects}
           crews={pickers.crews}
+          users={pickers.users}
           canManage={staff}
           providerReady={provider.ready()}
           providerDetail={provider.readyDetail()}

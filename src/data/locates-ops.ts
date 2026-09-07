@@ -70,7 +70,10 @@ export interface LocateRow {
   projectName: string;
   crewId: string | null;
   crewName: string;
+  assignedToId: string | null;
   assignedToName: string;
+  /** Free text — who sent the ticket in and what it covers. */
+  notes: string;
 
   external: ExternalReadiness;
   field: FieldReadiness;
@@ -196,7 +199,9 @@ function toRow(t: TicketWithRelations): LocateRow {
     projectName: t.project?.name ?? "",
     crewId: t.crew?.id ?? null,
     crewName: t.crew?.company ?? "",
+    assignedToId: t.assignedToId,
     assignedToName: t.assignedTo?.name || t.assignedTo?.email || "",
+    notes: t.notes,
     external: r.external,
     field: r.field,
     lifecycle: r.lifecycle,

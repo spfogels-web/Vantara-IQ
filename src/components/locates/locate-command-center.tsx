@@ -29,7 +29,14 @@ import {
   type ExternalReadiness,
   type FieldReadiness,
 } from "@/lib/locate-readiness";
-import { addLocateTickets, importLocatePaste, refreshLocateTicket } from "@/app/locates/locate-actions";
+import {
+  addLocateTickets,
+  assignLocateTicket,
+  bulkAssignLocates,
+  importLocatePaste,
+  refreshLocateTicket,
+  setLocateNote,
+} from "@/app/locates/locate-actions";
 
 /**
  * The locate board.
@@ -67,6 +74,7 @@ export function LocateCommandCenter({
   canManage,
   providerReady,
   providerDetail,
+  users,
   initialProject = "",
   initialCrew = "",
   initialQuick = "",
@@ -75,6 +83,7 @@ export function LocateCommandCenter({
   overview: LocateOverview;
   projects: { id: string; name: string }[];
   crews: { id: string; company: string }[];
+  users: { id: string; name: string }[];
   canManage: boolean;
   providerReady: boolean;
   providerDetail: string;
@@ -93,6 +102,8 @@ export function LocateCommandCenter({
   const [crew, setCrew] = React.useState(initialCrew);
   const [openId, setOpenId] = React.useState<string | null>(null);
   const [adding, setAdding] = React.useState(false);
+  const [picked, setPicked] = React.useState<Set<string>>(new Set());
+  const [byCrew, setByCrew] = React.useState(false);
 
   const shown = React.useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -150,6 +161,15 @@ export function LocateCommandCenter({
         .includes(q);
     });
   }, [rows, quick, query, project, crew]);
+
+  function togglePick(id: string) {
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -247,6 +267,17 @@ export function LocateCommandCenter({
           ))}
 
           <div className="ml-auto flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setByCrew((v) => !v)}
+              aria-pressed={byCrew}
+              className={cn(
+                "focus-ring rounded-full px-2.5 py-1 text-[11.5px] font-medium transition-colors",
+                byCrew ? "bg-brand text-white" : "bg-foreground/[0.04] text-muted-foreground hover:text-foreground",
+              )}
+            >
+              By crew
+            </button>
             <select
               value={project}
               onChange={(e) => setProject(e.target.value)}
@@ -272,6 +303,17 @@ export function LocateCommandCenter({
           </div>
         </div>
 
+        {canManage && picked.size > 0 ? (
+          <FileToCrew
+            count={picked.size}
+            ids={[...picked]}
+            projects={projects}
+            crews={crews}
+            users={users}
+            onDone={() => setPicked(new Set())}
+          />
+        ) : null}
+
         {shown.length === 0 ? (
           <div className="px-4 py-14 text-center">
             <MapPin className="mx-auto size-7 text-muted-foreground/40" />
@@ -283,6 +325,44 @@ export function LocateCommandCenter({
                 ? "Add ticket numbers, or paste a ticket to bring its dates and utility responses in with it."
                 : "Try a different filter."}
             </p>
+          </div>
+        ) : byCrew ? (
+          <div className="flex flex-col">
+            {groupByCrew(shown).map(([crewName, list]) => (
+              <section key={crewName}>
+                <div className="flex items-center gap-2 border-b border-border/70 bg-foreground/[0.03] px-3 py-1.5">
+                  <Users className="size-3.5 text-muted-foreground" />
+                  <p className="text-[12px] font-semibold text-foreground">{crewName}</p>
+                  <span className="num text-[11.5px] text-muted-foreground">{list.length}</span>
+                  <span className="ml-auto text-[11.5px] text-muted-foreground">
+                    {list.filter((x) => x.field === "FIELD_READY").length} field ready
+                  </span>
+                </div>
+                <ul className="flex flex-col">
+                  {list.map((r) => (
+                    <li
+                      key={r.id}
+                      className={cn(
+                        "border-b border-border/50",
+                        openId === r.id && "bg-foreground/[0.02]",
+                      )}
+                    >
+                      <Row
+                        row={r}
+                        open={openId === r.id}
+                        picked={picked.has(r.id)}
+                        canManage={canManage}
+                        onPick={() => togglePick(r.id)}
+                        onToggle={() => setOpenId(openId === r.id ? null : r.id)}
+                      />
+                      {openId === r.id ? (
+                        <Expanded row={r} canManage={canManage} projects={projects} crews={crews} users={users} />
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ))}
           </div>
         ) : (
           <ul className="flex flex-col">
@@ -297,9 +377,14 @@ export function LocateCommandCenter({
                 <Row
                   row={r}
                   open={openId === r.id}
+                  picked={picked.has(r.id)}
+                  canManage={canManage}
+                  onPick={() => togglePick(r.id)}
                   onToggle={() => setOpenId(openId === r.id ? null : r.id)}
                 />
-                {openId === r.id ? <Expanded row={r} canManage={canManage} /> : null}
+                {openId === r.id ? (
+                  <Expanded row={r} canManage={canManage} projects={projects} crews={crews} users={users} />
+                ) : null}
               </li>
             ))}
           </ul>
@@ -370,7 +455,21 @@ function Badge({
   );
 }
 
-function Row({ row: r, open, onToggle }: { row: LocateRow; open: boolean; onToggle: () => void }) {
+function Row({
+  row: r,
+  open,
+  picked,
+  canManage,
+  onPick,
+  onToggle,
+}: {
+  row: LocateRow;
+  open: boolean;
+  picked: boolean;
+  canManage: boolean;
+  onPick: () => void;
+  onToggle: () => void;
+}) {
   const where = [r.street, r.crossStreet].filter(Boolean).join(" · ") || "No street on the ticket";
   const expiry =
     r.urgency === "expired"
@@ -380,11 +479,21 @@ function Row({ row: r, open, onToggle }: { row: LocateRow; open: boolean; onTogg
         : `${r.daysToExpiry}d left`;
 
   return (
+    <div className="flex items-center gap-2 pl-3">
+      {canManage ? (
+        <input
+          type="checkbox"
+          checked={picked}
+          onChange={onPick}
+          aria-label={`Select ticket ${r.number}`}
+          className="focus-ring size-3.5 shrink-0 accent-[var(--brand,#818CF8)]"
+        />
+      ) : null}
     <button
       type="button"
       onClick={onToggle}
       aria-expanded={open}
-      className="focus-ring flex w-full items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-foreground/[0.03]"
+      className="focus-ring flex w-full items-center gap-3 py-3 pr-3 text-left transition-colors hover:bg-foreground/[0.03]"
     >
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-1.5">
@@ -434,13 +543,157 @@ function Row({ row: r, open, onToggle }: { row: LocateRow; open: boolean; onTogg
         className={cn("size-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")}
       />
     </button>
+    </div>
   );
 }
 
-function Expanded({ row: r, canManage }: { row: LocateRow; canManage: boolean }) {
+/**
+ * Tickets under the crew they belong to.
+ *
+ * Unfiled first and named as such. A ticket nobody has assigned is the one
+ * that gets worked on by somebody who never saw it, so it goes at the top
+ * rather than sorting quietly to the bottom under an empty heading.
+ */
+function groupByCrew(rows: LocateRow[]): [string, LocateRow[]][] {
+  const map = new Map<string, LocateRow[]>();
+  for (const r of rows) {
+    const key = r.crewName || "Not filed to a crew";
+    const list = map.get(key) ?? [];
+    list.push(r);
+    map.set(key, list);
+  }
+  return [...map.entries()].sort(([a], [b]) => {
+    if (a === "Not filed to a crew") return -1;
+    if (b === "Not filed to a crew") return 1;
+    return a.localeCompare(b);
+  });
+}
+
+/**
+ * File a batch to a crew.
+ *
+ * The shape the work arrives in: a subcontractor sends the week's tickets in
+ * one message, and filing them one at a time is how they end up not filed.
+ */
+function FileToCrew({
+  count,
+  ids,
+  projects,
+  crews,
+  users,
+  onDone,
+}: {
+  count: number;
+  ids: string[];
+  projects: { id: string; name: string }[];
+  crews: { id: string; company: string }[];
+  users: { id: string; name: string }[];
+  onDone: () => void;
+}) {
+  const router = useRouter();
+  const [crewId, setCrewId] = React.useState("");
+  const [projectId, setProjectId] = React.useState("");
+  const [ownerId, setOwnerId] = React.useState("");
+  const [note, setNote] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState<string | null>(null);
+
+  return (
+    <div className="flex flex-wrap items-end gap-1.5 border-b border-border/70 bg-brand/[0.05] px-3 py-2.5">
+      <p className="text-[12.5px] font-semibold text-foreground">
+        {count} ticket{count === 1 ? "" : "s"} selected
+      </p>
+      <select
+        value={crewId}
+        onChange={(e) => setCrewId(e.target.value)}
+        aria-label="File to crew"
+        className="focus-ring h-8 rounded-lg border border-border bg-background px-2 text-[12px] text-foreground"
+      >
+        <option value="">Crew — leave as is</option>
+        <option value="__clear">Clear the crew</option>
+        {crews.map((c) => (
+          <option key={c.id} value={c.id}>{c.company}</option>
+        ))}
+      </select>
+      <select
+        value={projectId}
+        onChange={(e) => setProjectId(e.target.value)}
+        aria-label="File to project"
+        className="focus-ring h-8 rounded-lg border border-border bg-background px-2 text-[12px] text-foreground"
+      >
+        <option value="">Job — leave as is</option>
+        {projects.map((x) => (
+          <option key={x.id} value={x.id}>{x.name}</option>
+        ))}
+      </select>
+      <select
+        value={ownerId}
+        onChange={(e) => setOwnerId(e.target.value)}
+        aria-label="Owner"
+        className="focus-ring h-8 rounded-lg border border-border bg-background px-2 text-[12px] text-foreground"
+      >
+        <option value="">Owner — leave as is</option>
+        {users.map((x) => (
+          <option key={x.id} value={x.id}>{x.name}</option>
+        ))}
+      </select>
+      <input
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        placeholder="Note — who sent these, and when"
+        className="focus-ring h-8 w-[240px] rounded-lg border border-border bg-background px-2 text-[12px] text-foreground"
+      />
+      <button
+        type="button"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          setErr(null);
+          const res = await bulkAssignLocates({
+            ticketIds: ids,
+            ...(crewId ? { crewId: crewId === "__clear" ? null : crewId } : {}),
+            ...(projectId ? { projectId } : {}),
+            ...(ownerId ? { assignedToId: ownerId } : {}),
+            note,
+          });
+          setBusy(false);
+          if (!res.ok) return setErr(res.error);
+          onDone();
+          router.refresh();
+        }}
+        className="focus-ring inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand px-3 text-[12px] font-semibold text-white hover:bg-brand/90 disabled:opacity-50"
+      >
+        {busy ? <Loader2 className="size-3.5 animate-spin" /> : null} File them
+      </button>
+      <button
+        type="button"
+        onClick={onDone}
+        className="focus-ring h-8 rounded-lg px-2.5 text-[12px] text-muted-foreground hover:text-foreground"
+      >
+        Clear selection
+      </button>
+      {err ? <p className="w-full text-[12px] text-critical">{err}</p> : null}
+    </div>
+  );
+}
+
+function Expanded({
+  row: r,
+  canManage,
+  projects,
+  crews,
+  users,
+}: {
+  row: LocateRow;
+  canManage: boolean;
+  projects: { id: string; name: string }[];
+  crews: { id: string; company: string }[];
+  users: { id: string; name: string }[];
+}) {
   const router = useRouter();
   const [busy, setBusy] = React.useState(false);
   const [msg, setMsg] = React.useState<string | null>(null);
+  const [note, setNote] = React.useState(r.notes);
 
   return (
     <div className="border-t border-border/60 bg-background/40 px-3 py-3">
@@ -528,6 +781,88 @@ function Expanded({ row: r, canManage }: { row: LocateRow; canManage: boolean })
             {r.contractorOutstanding.join(", ")} must be located and signed off before excavation.
           </p>
         </div>
+      ) : null}
+
+      {canManage ? (
+        <div className="mt-3 rounded-lg border border-border bg-foreground/[0.02] p-3">
+          <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+            Filed to
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <select
+              value={r.crewId ?? ""}
+              onChange={(e) =>
+                void assignLocateTicket({ ticketId: r.id, crewId: e.target.value || null }).then(() =>
+                  router.refresh(),
+                )
+              }
+              aria-label="Crew"
+              className="focus-ring h-8 rounded-lg border border-border bg-transparent px-2 text-[12px] text-foreground"
+            >
+              <option value="">No crew</option>
+              {crews.map((c) => (
+                <option key={c.id} value={c.id}>{c.company}</option>
+              ))}
+            </select>
+            <select
+              value={r.projectId ?? ""}
+              onChange={(e) =>
+                void assignLocateTicket({ ticketId: r.id, projectId: e.target.value || null }).then(() =>
+                  router.refresh(),
+                )
+              }
+              aria-label="Job"
+              className="focus-ring h-8 rounded-lg border border-border bg-transparent px-2 text-[12px] text-foreground"
+            >
+              <option value="">No job</option>
+              {projects.map((x) => (
+                <option key={x.id} value={x.id}>{x.name}</option>
+              ))}
+            </select>
+            <select
+              value={r.assignedToId ?? ""}
+              onChange={(e) =>
+                void assignLocateTicket({ ticketId: r.id, assignedToId: e.target.value || null }).then(() =>
+                  router.refresh(),
+                )
+              }
+              aria-label="Owner"
+              className="focus-ring h-8 rounded-lg border border-border bg-transparent px-2 text-[12px] text-foreground"
+            >
+              <option value="">Nobody owns it</option>
+              {users.map((x) => (
+                <option key={x.id} value={x.id}>{x.name}</option>
+              ))}
+            </select>
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <input
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Note — who sent this ticket in, and what it covers"
+              className="focus-ring h-8 min-w-[260px] flex-1 rounded-lg border border-border bg-transparent px-2 text-[12px] text-foreground"
+            />
+            {note !== r.notes ? (
+              <button
+                type="button"
+                onClick={async () => {
+                  setBusy(true);
+                  await setLocateNote(r.id, note);
+                  setBusy(false);
+                  setMsg("Note saved.");
+                  router.refresh();
+                }}
+                className="focus-ring h-8 rounded-lg bg-brand px-2.5 text-[12px] font-semibold text-white hover:bg-brand/90"
+              >
+                Save note
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : r.notes ? (
+        <p className="mt-3 rounded-lg border border-border bg-foreground/[0.02] px-3 py-2 text-[12.5px] text-foreground">
+          {r.notes}
+        </p>
       ) : null}
 
       {msg ? <p className="mt-2 text-[12px] text-muted-foreground">{msg}</p> : null}

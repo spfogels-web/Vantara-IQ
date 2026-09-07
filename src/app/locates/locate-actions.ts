@@ -971,3 +971,127 @@ export async function rejudgeAllLocates() {
   revalidatePath("/locates");
   return { ok: true as const, tickets: all.length, changed };
 }
+
+/* ------------------------------------------------------------------ *
+ * Filing tickets a crew sent in
+ * ------------------------------------------------------------------ */
+
+/**
+ * A free-text note on a ticket.
+ *
+ * Where a ticket came from and who sent it. When a crew emails twenty numbers
+ * on a Monday, the useful thing six weeks later is not that the ticket exists
+ * but that Bates sent it for the Keener Rd bore, and that is not a field any
+ * schema will ever have.
+ */
+export async function setLocateNote(ticketId: string, note: string) {
+  const me = await requireStaff();
+  const before = await prisma.locateTicket.findUnique({
+    where: { id: ticketId },
+    select: { notes: true },
+  });
+  if (!before) return { ok: false as const, error: "No such ticket." };
+
+  await prisma.locateTicket.update({ where: { id: ticketId }, data: { notes: note } });
+
+  if (before.notes !== note) {
+    await prisma.locateTicketChange.create({
+      data: {
+        ticketId,
+        kind: "TICKET_UPDATED",
+        subject: "Note",
+        fromValue: before.notes,
+        toValue: note,
+        summary: note ? `Note: ${note}` : "Note cleared",
+        actor: me.name || me.email,
+      },
+    });
+  }
+
+  revalidatePath("/locates");
+  revalidatePath(`/locates/${ticketId}`);
+  return { ok: true as const };
+}
+
+/**
+ * Assign a batch of tickets to a crew and a job in one go.
+ *
+ * The shape the work actually arrives in. A subcontractor sends the week's
+ * tickets in one message, and filing them one at a time is how they end up not
+ * filed at all.
+ *
+ * Every ticket is re-judged afterwards, because assigning a job is what brings
+ * that job's locate rules to bear — a ticket that read "waiting on Windstream"
+ * unassigned becomes "811 ready, our locate required" the moment it lands on a
+ * Windstream build.
+ */
+export async function bulkAssignLocates(input: {
+  ticketIds: string[];
+  projectId?: string | null;
+  crewId?: string | null;
+  assignedToId?: string | null;
+  note?: string;
+}) {
+  const me = await requireStaff();
+  const ids = [...new Set(input.ticketIds.filter(Boolean))];
+  if (ids.length === 0) return { ok: false as const, error: "Pick at least one ticket." };
+
+  const touchesSomething =
+    input.projectId !== undefined ||
+    input.crewId !== undefined ||
+    input.assignedToId !== undefined ||
+    (input.note ?? "").trim().length > 0;
+  if (!touchesSomething) {
+    return { ok: false as const, error: "Choose a crew, a job or an owner to set." };
+  }
+
+  const before = await prisma.locateTicket.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, crewId: true, crew: { select: { company: true } } },
+  });
+  const priorCrew = new Map(before.map((b) => [b.id, b.crew?.company ?? ""] as const));
+
+  await prisma.locateTicket.updateMany({
+    where: { id: { in: ids } },
+    data: {
+      ...(input.projectId !== undefined ? { projectId: input.projectId || null } : {}),
+      ...(input.crewId !== undefined ? { crewId: input.crewId || null } : {}),
+      ...(input.assignedToId !== undefined ? { assignedToId: input.assignedToId || null } : {}),
+      ...(input.note?.trim() ? { notes: input.note.trim() } : {}),
+    },
+  });
+
+  const crew = input.crewId
+    ? await prisma.subcontractor.findUnique({
+        where: { id: input.crewId },
+        select: { company: true },
+      })
+    : null;
+
+  for (const id of ids) {
+    // Who a ticket belongs to is worth a line in its history. A ticket that
+    // moved between crews and cannot say when is a ticket nobody will trust.
+    if (input.crewId !== undefined) {
+      const was = priorCrew.get(id) ?? "";
+      const now = crew?.company ?? "";
+      if (was !== now) {
+        await prisma.locateTicketChange.create({
+          data: {
+            ticketId: id,
+            kind: "TICKET_UPDATED",
+            subject: "Crew",
+            fromValue: was,
+            toValue: now,
+            summary: now ? `Filed to ${now}` : "Crew cleared",
+            actor: me.name || me.email,
+          },
+        });
+      }
+    }
+    await ensureContractorLocates(id);
+    await syncReadiness(id, { actor: me.name || me.email });
+  }
+
+  revalidatePath("/locates");
+  return { ok: true as const, updated: ids.length };
+}
