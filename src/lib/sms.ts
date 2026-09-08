@@ -307,3 +307,71 @@ export async function applyOptOut(from: string, keyword: "STOP" | "START"): Prom
 
   return subHit.length + userHit.length + contactHit.length;
 }
+
+/**
+ * Text a crew — the company, and everybody the owner has invited under it.
+ *
+ * A crew is not one handset. The owner signs the contract, but the foreman is
+ * the one standing on the job when a task lands, and the project manager is
+ * who chases it. Sending only to the company number means work assigned at
+ * 6am reaches whoever happens to be holding the office phone.
+ *
+ * One message per person, never a group. Each is a separate consent, a
+ * separate STOP, and a separate row in the audit — a group MMS would be one
+ * thread that nobody individually agreed to and that no one person can leave.
+ *
+ * Deduplicated on the normalised number, because the owner's mobile is very
+ * often also the company number, and getting the same task twice is how
+ * somebody decides these messages are noise.
+ *
+ * Consent is checked per person by the send paths themselves. Somebody who has
+ * not agreed is skipped without failing anything: a foreman who never opted in
+ * simply does not get the text, and the rest of the crew still does.
+ */
+export async function textCrewPeople(
+  subcontractorId: string,
+  body: string,
+): Promise<{ sent: number; skipped: number }> {
+  const [sub, people] = await Promise.all([
+    prisma.subcontractor.findUnique({
+      where: { id: subcontractorId },
+      select: { company: true, phone: true, smsConsentAt: true, smsOptOutAt: true },
+    }),
+    prisma.user.findMany({
+      where: { subcontractorId },
+      select: { id: true, name: true, phone: true, smsConsentAt: true, smsOptOutAt: true },
+    }),
+  ]);
+  if (!sub) return { sent: 0, skipped: 0 };
+
+  const seen = new Set<string>();
+  let sent = 0;
+  let skipped = 0;
+
+  // The company number first, so that where the owner's mobile is the same
+  // number it is the company record that is credited with the send.
+  const companyTo = toE164(sub.phone);
+  if (companyTo && sub.smsConsentAt && !sub.smsOptOutAt) {
+    seen.add(companyTo);
+    const res = await post(companyTo, body);
+    if (res.sent) sent++;
+    else skipped++;
+  } else if (companyTo) {
+    skipped++;
+  }
+
+  for (const p of people) {
+    const to = toE164(p.phone);
+    if (!to || seen.has(to)) continue;
+    if (!p.smsConsentAt || p.smsOptOutAt) {
+      skipped++;
+      continue;
+    }
+    seen.add(to);
+    const res = await post(to, body);
+    if (res.sent) sent++;
+    else skipped++;
+  }
+
+  return { sent, skipped };
+}

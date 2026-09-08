@@ -1,7 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
-import { textCrew, textUser } from "@/lib/sms";
+import { textCrewPeople, textUser } from "@/lib/sms";
 
 /**
  * Recording that something happened, for whoever needs to know.
@@ -111,15 +111,19 @@ export async function notifyCrew(
     })
     .catch(() => undefined);
 
-  // Best-effort, exactly like the notification above it. textCrew checks
-  // consent and opt-out itself and never throws, so a crew with no phone or no
-  // consent simply does not get a text — it cannot fail the thing being
-  // reported.
+  // Best-effort, exactly like the notification above it. textCrewPeople
+  // checks consent and opt-out per person and never throws, so somebody with
+  // no number or no agreement is simply skipped — it cannot fail the thing
+  // being reported, and the rest of the crew still hears about it.
   if (input.sms) {
     // Signed with the brand the consent box named. A reviewer compares the
     // opt-in wording against a sample message, and "Fortitude" on one and
     // "Vantara IQ" on the other reads as two different senders.
     const line = input.detail ? `${input.title} — ${input.detail}` : input.title;
-    await textCrew(subcontractorId, `Vantara IQ: ${line}`.slice(0, 320)).catch(() => undefined);
+    // Everybody at the crew, not just whoever holds the office phone. A task
+    // assigned at 6am has to reach the foreman standing on the job.
+    await textCrewPeople(subcontractorId, `Vantara IQ: ${line}`.slice(0, 320)).catch(
+      () => undefined,
+    );
   }
 }
