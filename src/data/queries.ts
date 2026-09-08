@@ -2210,6 +2210,18 @@ export async function getNavBadges(): Promise<Record<string, number>> {
       }),
     ]);
 
+    // Tasks assigned to this crew and not finished.
+    //
+    // The rail carried dailies, badges and messages and not this, so a task
+    // assigned to a crew appeared nowhere until somebody thought to open the
+    // page. An assignment nobody is told about is not an assignment.
+    const openTasks = await prisma.task.count({
+      where: {
+        assigneeSubId: user.subcontractorId,
+        status: { notIn: ["DONE", "CANCELLED"] },
+      },
+    });
+
     // No badges at all is itself outstanding: nobody can collect material.
     const anyBadges = await prisma.crewBadge.count({
       where: { subcontractorId: user.subcontractorId },
@@ -2217,6 +2229,7 @@ export async function getNavBadges(): Promise<Record<string, number>> {
 
     const badges: Record<string, number> = {};
     if (mine > 0) badges["/dailies"] = mine;
+    if (openTasks > 0) badges["/tasks"] = openTasks;
     if (anyBadges === 0) badges["/badges"] = 1;
     else if (badgesOutstanding > 0) badges["/badges"] = badgesOutstanding;
     const unread = await getUnreadMessageCount();

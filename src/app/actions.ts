@@ -5016,6 +5016,73 @@ async function assertTaskAccess(taskId: string) {
   throw new NotAuthorizedError("That task isn't assigned to you.");
 }
 
+/**
+ * Tell whoever a task landed on.
+ *
+ * Assignment only — creating a task and moving it to somebody else. Editing
+ * a title or nudging a due date is not a new instruction and must not text
+ * anybody a second time; a crew that gets a message every time the office
+ * tidies a record stops reading the messages that matter.
+ *
+ * A crew is a company, so the text goes to the company number. A named
+ * person gets it at theirs. Both paths check consent and opt-out downstream
+ * — this function never decides who may be texted, only what to say.
+ */
+async function announceTaskAssignment(taskId: string, actor: string) {
+  const t = await prisma.task.findUnique({
+    where: { id: taskId },
+    select: {
+      title: true,
+      dueDate: true,
+      priority: true,
+      assigneeUserId: true,
+      assigneeSubId: true,
+      project: { select: { name: true } },
+    },
+  });
+  if (!t) return;
+
+  // Everything a person needs to decide whether to open it: what, where,
+  // and by when. A task text that says only "you have a new task" makes
+  // somebody go and look, which is the thing the message was meant to save.
+  const where = t.project?.name ? ` · ${t.project.name}` : "";
+  const due = t.dueDate ? ` — due ${t.dueDate}` : "";
+  const urgent = t.priority === "URGENT" || t.priority === "HIGH";
+  const detail = `${t.title}${where}${due}`;
+
+  if (t.assigneeSubId) {
+    await notifyCrew(t.assigneeSubId, {
+      title: urgent ? `New ${t.priority.toLowerCase()} task` : "New task assigned",
+      detail,
+      href: "/tasks",
+      category: "crew",
+      tone: urgent ? "warning" : "info",
+      actor,
+      // Work assigned to a crew is the thing the consent box names first.
+      sms: true,
+    }).catch(() => undefined);
+    return;
+  }
+
+  if (t.assigneeUserId) {
+    await prisma.notification
+      .create({
+        data: {
+          audience: "STAFF",
+          title: urgent ? `New ${t.priority.toLowerCase()} task` : "New task assigned",
+          detail,
+          href: "/tasks",
+          category: "crew",
+          tone: urgent ? "warning" : "info",
+          actor,
+        },
+      })
+      .catch(() => undefined);
+    await textUser(t.assigneeUserId, `Vantara IQ: New task — ${detail}. Reply STOP to opt out.`)
+      .catch(() => undefined);
+  }
+}
+
 export async function createTask(input: {
   title: string;
   detail?: string;
@@ -5062,6 +5129,10 @@ export async function createTask(input: {
     select: { id: true },
   });
 
+  if (input.assigneeUserId || input.assigneeSubId) {
+    await announceTaskAssignment(task.id, user.name || user.email);
+  }
+
   revalidatePath("/tasks");
   return { ok: true as const, id: task.id };
 }
@@ -5078,10 +5149,16 @@ export async function updateTask(
     projectId?: string | null;
   },
 ) {
-  await requireStaff();
+  const actor = await requireStaff();
   if (patch.assigneeUserId && patch.assigneeSubId) {
     return { ok: false as const, error: "Assign it to a person or a crew, not both." };
   }
+
+  // Who had it before, so a reassignment can be told apart from an edit.
+  const before = await prisma.task.findUnique({
+    where: { id },
+    select: { assigneeUserId: true, assigneeSubId: true },
+  });
 
   await prisma.task.update({
     where: { id },
@@ -5099,6 +5176,21 @@ export async function updateTask(
       ...(patch.projectId !== undefined ? { projectId: patch.projectId || null } : {}),
     },
   });
+
+  // Only when it actually moved to somebody new. Saving the same assignee
+  // again is an edit, and re-texting on an edit is how a useful alert turns
+  // into one people mute.
+  const after = await prisma.task.findUnique({
+    where: { id },
+    select: { assigneeUserId: true, assigneeSubId: true },
+  });
+  const moved =
+    after &&
+    (after.assigneeUserId !== before?.assigneeUserId ||
+      after.assigneeSubId !== before?.assigneeSubId) &&
+    (after.assigneeUserId || after.assigneeSubId);
+  if (moved) await announceTaskAssignment(id, actor.name || actor.email);
+
   revalidatePath("/tasks");
   return { ok: true as const };
 }
