@@ -48,7 +48,22 @@ export function smsSender(): { MessagingServiceSid: string } | { From: string } 
   return null;
 }
 
+/**
+ * Whether this environment may send at all.
+ *
+ * SMS_ENABLED is in here and was not, which was a real hole rather than a
+ * tidiness point. Two send paths exist — this one, which every notification
+ * uses, and the messaging hub, which asks sms-provider. The hub honoured
+ * SMS_ENABLED and this one did not, so adding Twilio credentials to an
+ * environment would have started texting crews whether or not the switch we
+ * documented as "the whole deployment" had ever been set.
+ *
+ * Absent the variable, off. A messaging path that starts texting people
+ * because somebody forgot to set something is the failure worth designing out,
+ * and it is the same rule sms-provider already applied.
+ */
 export function smsReady(): boolean {
+  if ((process.env.SMS_ENABLED ?? "").toLowerCase() !== "true") return false;
   return Boolean(
     process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && smsSender(),
   );

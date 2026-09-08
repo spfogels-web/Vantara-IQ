@@ -12,6 +12,7 @@ import { prisma } from "@/lib/prisma";
  * switch is worth more than three lines to avoid.
  */
 function provisionedNow(): boolean {
+  if ((process.env.SMS_ENABLED ?? "").toLowerCase() !== "true") return false;
   return Boolean(
     process.env.TWILIO_ACCOUNT_SID &&
       process.env.TWILIO_AUTH_TOKEN &&
