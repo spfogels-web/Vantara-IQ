@@ -56,12 +56,44 @@ export async function recordSmsOptIn(input: {
     },
   });
 
-  // A number that had replied STOP and is now opting in again has changed its
-  // mind, and that is the one thing that lifts an opt-out.
-  await prisma.crewContact.updateMany({
-    where: { phone },
-    data: { smsConsentAt: new Date(), smsOptOutAt: null },
-  });
+  // Grant the consent on every record carrying this number.
+  //
+  // Two bugs lived here. It looked only at CrewContact, so somebody opting in
+  // on this page never became textable as a crew or as a staff login — the
+  // sending paths read Subcontractor.smsConsentAt and User.smsConsentAt, and
+  // neither was touched. And it matched the column exactly, against an E.164
+  // number, while the numbers in this database are typed the way people type
+  // them: "678-682-5902", "8706374292". The match never succeeded.
+  //
+  // So it is normalised and it covers all three, which is what applyOptOut
+  // already did for STOP. Starting has to be at least as reliable as stopping,
+  // or a crew agrees to alerts on this page and then never hears anything.
+  //
+  // Still no lookup and still nothing read back: the same result is returned
+  // for a number we know and one we do not, so this cannot be used to find out
+  // who Fortitude works with.
+  const grant = { smsConsentAt: new Date(), smsOptOutAt: null };
+  const [subs, users, contacts] = await Promise.all([
+    prisma.subcontractor.findMany({ select: { id: true, phone: true } }),
+    prisma.user.findMany({ select: { id: true, phone: true } }),
+    prisma.crewContact.findMany({ select: { id: true, phone: true } }),
+  ]);
+  const subHit = subs.filter((x) => toE164(x.phone) === phone).map((x) => x.id);
+  const userHit = users.filter((x) => toE164(x.phone) === phone).map((x) => x.id);
+  const contactHit = contacts.filter((x) => toE164(x.phone) === phone).map((x) => x.id);
+
+  await Promise.all([
+    subHit.length ? prisma.subcontractor.updateMany({ where: { id: { in: subHit } }, data: grant }) : null,
+    userHit.length
+      ? prisma.user.updateMany({
+          where: { id: { in: userHit } },
+          // The wording as it read today, kept beside the date. This is what an
+          // audit asks for and the settings path already stores it.
+          data: { ...grant, smsConsentText: SMS_CONSENT_TEXT },
+        })
+      : null,
+    contactHit.length ? prisma.crewContact.updateMany({ where: { id: { in: contactHit } }, data: grant }) : null,
+  ]);
 
   // Best-effort. The consent is recorded either way — a text that fails to
   // send is not a reason to lose the agreement it was confirming.
