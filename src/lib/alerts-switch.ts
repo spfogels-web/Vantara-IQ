@@ -11,13 +11,20 @@ import { prisma } from "@/lib/prisma";
  * duplication is three lines — a cycle between the send path and its own kill
  * switch is worth more than three lines to avoid.
  */
-function provisionedNow(): boolean {
-  if ((process.env.SMS_ENABLED ?? "").toLowerCase() !== "true") return false;
+function credentialsPresent(): boolean {
   return Boolean(
     process.env.TWILIO_ACCOUNT_SID &&
       process.env.TWILIO_AUTH_TOKEN &&
       (process.env.TWILIO_MESSAGING_SERVICE_SID || process.env.TWILIO_FROM_NUMBER),
   );
+}
+
+function enabledFlag(): boolean {
+  return (process.env.SMS_ENABLED ?? "").toLowerCase() === "true";
+}
+
+function provisionedNow(): boolean {
+  return enabledFlag() && credentialsPresent();
 }
 
 /**
@@ -47,6 +54,17 @@ const KEY = "alerts.live";
 export interface AlertsState {
   /** Is the environment able to send at all? */
   provisioned: boolean;
+  /**
+   * The two halves of that, separately.
+   *
+   * Kept apart because the panel has to say which gate is shut. It read "this
+   * environment has no carrier account" to somebody who had just finished
+   * adding one — the credentials were in and SMS_ENABLED was not, and being
+   * told the wrong thing at that moment sends a person back to Twilio to look
+   * for a problem that is not there.
+   */
+  credentials: boolean;
+  enabled: boolean;
   /** Has a person switched alerts off? */
   switchedOn: boolean;
   /** Both together — the only thing a send path should ask. */
@@ -65,6 +83,8 @@ export async function alertsState(): Promise<AlertsState> {
   const switchedOn = row ? row.value === "true" : true;
   return {
     provisioned,
+    credentials: credentialsPresent(),
+    enabled: enabledFlag(),
     switchedOn,
     live: provisioned && switchedOn,
     updatedBy: row?.updatedBy ?? "",

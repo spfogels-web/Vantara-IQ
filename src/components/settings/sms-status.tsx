@@ -22,12 +22,25 @@ import { sendTestText } from "@/app/actions";
  */
 export function SmsStatus({
   ready,
+  credentials,
+  enabled,
   sender,
   webhook,
   hasNumber,
 }: {
-  /** Credentials and a sender are both present. */
+  /** Everything needed to send: credentials, a sender, and the switch. */
   ready: boolean;
+  /**
+   * The two halves of `ready`, separately.
+   *
+   * This panel used to derive "credentials are missing" from `ready`, and
+   * once `ready` started requiring SMS_ENABLED it told somebody who had
+   * just finished adding their Twilio credentials that they were missing.
+   * A diagnostics panel that names the wrong gate sends a person back to
+   * the provider to hunt for a problem that is not there.
+   */
+  credentials: boolean;
+  enabled: boolean;
   /** What sends are attributed to — a Messaging Service, or a bare number. */
   sender: string;
   /** The inbound URL as configured, or null if SMS_WEBHOOK_URL is unset. */
@@ -56,12 +69,25 @@ export function SmsStatus({
   return (
     <div className="flex flex-col gap-2.5 px-3 py-3">
       <Line
-        ok={ready}
-        label={ready ? "Twilio credentials are set" : "Twilio credentials are missing"}
+        ok={credentials}
+        label={credentials ? "Twilio credentials are set" : "Twilio credentials are missing"}
         detail={
-          ready
+          credentials
             ? undefined
             : "TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN need setting in this environment."
+        }
+      />
+
+      {/* Named separately from the credentials, because these fail for
+          different reasons and are fixed in different places. */}
+      <Line
+        ok={enabled}
+        warn={!enabled}
+        label={enabled ? "Sending is switched on for this environment" : "SMS_ENABLED is not set"}
+        detail={
+          enabled
+            ? undefined
+            : "Credentials alone do not send. Set SMS_ENABLED=true and redeploy — until then nothing leaves, which is the safe state before a campaign is approved."
         }
       />
 

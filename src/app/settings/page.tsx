@@ -141,6 +141,8 @@ export default async function SettingsPage() {
             />
             <SmsStatus
               ready={smsReady()}
+              credentials={alerts.credentials}
+              enabled={alerts.enabled}
               sender={smsSenderLabel()}
               webhook={process.env.SMS_WEBHOOK_URL ?? null}
               hasNumber={Boolean(myAlerts.phone && myAlerts.consented)}

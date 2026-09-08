@@ -54,7 +54,7 @@ export function AlertsSwitchPanel({ state }: { state: AlertsState }) {
             </span>
             {!state.provisioned ? (
               <span className="rounded-full border border-border bg-foreground/[0.04] px-2.5 py-[3px] text-[11.5px] text-muted-foreground">
-                Carrier not configured
+                {state.credentials ? "Sending not switched on" : "Carrier not configured"}
               </span>
             ) : null}
           </div>
@@ -64,7 +64,9 @@ export function AlertsSwitchPanel({ state }: { state: AlertsState }) {
               ? "Text messages are going out to crews and staff who have agreed to them. Turning this off stops every outbound text immediately — including the welcome message somebody gets when they opt in."
               : state.provisioned
                 ? "Nothing is being texted. Messages still appear inside Vantara IQ; they just do not leave as SMS."
-                : "This environment has no carrier account, so nothing can be texted whatever this switch says. Set the Twilio credentials and SMS_ENABLED, then turn this on."}
+                : state.credentials
+                  ? "The Twilio credentials are in place, but SMS_ENABLED is not set in this environment, so nothing can leave whatever this switch says. Set SMS_ENABLED=true, redeploy, then turn this on."
+                  : "This environment has no carrier account, so nothing can be texted whatever this switch says. Set the Twilio credentials and SMS_ENABLED, then turn this on."}
           </p>
 
           {state.updatedAt ? (
@@ -110,7 +112,13 @@ export function AlertsSwitchPanel({ state }: { state: AlertsState }) {
               type="button"
               disabled={!state.provisioned}
               onClick={() => setConfirming(true)}
-              title={state.provisioned ? undefined : "No carrier account in this environment."}
+              title={
+                state.provisioned
+                  ? undefined
+                  : state.credentials
+                    ? "SMS_ENABLED is not set in this environment."
+                    : "No carrier account in this environment."
+              }
               className="focus-ring inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand px-3 text-[12.5px] font-semibold text-white hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-40"
             >
               Turn alerts on
