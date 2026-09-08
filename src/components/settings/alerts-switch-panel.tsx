@@ -119,7 +119,17 @@ export function AlertsSwitchPanel({ state }: { state: AlertsState }) {
                     ? "SMS_ENABLED is not set in this environment."
                     : "No carrier account in this environment."
               }
-              className="focus-ring inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand px-3 text-[12.5px] font-semibold text-white hover:bg-brand/90 disabled:cursor-not-allowed disabled:opacity-40"
+              className={cn(
+                "focus-ring inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-semibold transition-colors",
+                state.provisioned
+                  ? "bg-brand text-white hover:bg-brand/90"
+                  : // Disabled, not invisible. At 40% opacity a filled button on
+                    // a dark panel reads as nothing at all, and somebody hunting
+                    // for a control that is right in front of them concludes the
+                    // feature is missing. An outline that stays legible says
+                    // "here, but not yet" — which is the actual state.
+                    "cursor-not-allowed border border-border bg-transparent text-muted-foreground",
+              )}
             >
               Turn alerts on
             </button>
