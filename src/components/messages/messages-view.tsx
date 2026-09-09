@@ -351,7 +351,18 @@ function Thread({
 }) {
   const router = useRouter();
   const [body, setBody] = React.useState("");
-  const [withSms, setWithSms] = React.useState(false);
+  // Texting is the default, not an extra step.
+  //
+  // It started off because the A2P campaign was pending and every send was a
+  // no-op. Now that it is approved, a message typed to a crew is meant to reach
+  // them on the job — leaving it off meant somebody wrote to a foreman, saw it
+  // sitting in the app, and had no idea it had gone nowhere.
+  //
+  // Still a toggle rather than fixed behaviour: an internal note, or anything
+  // written at eleven at night, is worth being able to keep in the app. It
+  // simply is not the default any more. Off wherever SMS is unavailable, so
+  // the composer never claims something it cannot do.
+  const [withSms, setWithSms] = React.useState(d.smsAvailable);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [note, setNote] = React.useState<string | null>(null);
@@ -367,6 +378,13 @@ function Thread({
   React.useEffect(() => {
     void markRead(d.id).then(() => router.refresh());
   }, [d.id, router]);
+
+  // Follow the conversation. Moving to a crew that can be texted turns it on;
+  // moving to one that cannot must not leave the toggle reading "Vantara + SMS"
+  // from the previous thread.
+  React.useEffect(() => {
+    setWithSms(d.smsAvailable);
+  }, [d.id, d.smsAvailable]);
 
   React.useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
