@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { useLiveMessages } from "@/components/messages/use-live-messages";
 import { formatWhen } from "@/lib/format";
 import { Panel } from "@/components/common/panel";
 import type { ConversationRow, ConversationDetail } from "@/data/messages";
@@ -84,6 +85,10 @@ export function MessagesView({
   const router = useRouter();
   const params = useSearchParams();
   const selectedId = params.get("c");
+
+  // A reply arriving by text should appear without anybody reloading. The hook
+  // asks whether the newest message changed and re-renders only when it did.
+  useLiveMessages();
 
   const [tab, setTab] = React.useState<string>("ALL");
   const [query, setQuery] = React.useState("");
