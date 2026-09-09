@@ -155,42 +155,54 @@ export function TasksView({
           count={shown.length}
           icon={<ClipboardList className="size-3.5" />}
         >
-          {/* Four ways to narrow, because "everything that needs attention"
-              is only useful if you can get to the part that is yours. */}
-          <label className="relative">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search tasks…"
-              aria-label="Search tasks"
-              className="focus-ring h-8 w-[170px] rounded-lg bg-foreground/[0.05] pl-7 pr-2.5 text-[12px] text-foreground outline-none placeholder:text-muted-foreground/70"
-            />
-          </label>
-          <Picker value={status} onChange={setStatus} label="Status" options={[
-            ["OPEN", `Open ${counts.open}`], ["DUE_TODAY", "Due today"], ["OVERDUE", "Overdue"],
-            ["BLOCKED", "Blocked"], ["DONE", "Done"], ["ALL", `All ${tasks.length}`],
-          ]} />
-          <Picker value={priority} onChange={setPriority} label="Priority" options={[
-            ["ALL", "Any priority"], ["URGENT", "Urgent"], ["HIGH", "High"], ["NORMAL", "Normal"], ["LOW", "Low"],
-          ]} />
-          {projects.length > 1 ? (
-            <Picker value={project} onChange={setProject} label="Project"
-              options={[["ALL", "Any project"], ...projects.map((p) => [p, p] as [string, string])]} />
-          ) : null}
-          {people.length > 1 ? (
-            <Picker value={assignee} onChange={setAssignee} label="Assignee"
-              options={[["ALL", "Anyone"], ...people.map((p) => [p, p] as [string, string])]} />
-          ) : null}
-          {canManage ? (
-            <button
-              type="button"
-              onClick={() => setAdding((v) => !v)}
-              className="focus-ring inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand px-2.5 text-[12px] font-semibold text-white hover:bg-brand-bright"
-            >
-              <Plus className="size-3.5" /> New task
-            </button>
-          ) : null}
+          {/* Six controls, which is three too many for a phone in one row.
+
+              They are one group rather than six siblings: on a phone the
+              group takes the whole width and wraps inside itself, and from
+              sm up it sits inline exactly as it did. Loose in the header they
+              were each free to push the next one along, and New task — last
+              in the row and the only thing on this page somebody came here to
+              press — went off the edge in both orientations. */}
+          <div className="flex w-full flex-wrap items-center gap-1.5 sm:w-auto">
+            {canManage ? (
+              // First on a phone, last on a desktop. The primary action should
+              // not be something you scroll or hunt for on the device where
+              // most tasks actually get raised — standing on a job, one hand.
+              <button
+                type="button"
+                onClick={() => setAdding((v) => !v)}
+                className="focus-ring order-first inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-brand px-3 text-[12.5px] font-semibold text-white hover:bg-brand-bright sm:order-last sm:h-8 sm:px-2.5 sm:text-[12px]"
+              >
+                <Plus className="size-4 sm:size-3.5" /> New task
+              </button>
+            ) : null}
+
+            <label className="relative min-w-0 flex-1 sm:flex-none">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search tasks…"
+                aria-label="Search tasks"
+                className="focus-ring h-8 w-full min-w-0 rounded-lg bg-foreground/[0.05] pl-7 pr-2.5 text-[12px] text-foreground outline-none placeholder:text-muted-foreground/70 sm:w-[170px]"
+              />
+            </label>
+            <Picker value={status} onChange={setStatus} label="Status" options={[
+              ["OPEN", `Open ${counts.open}`], ["DUE_TODAY", "Due today"], ["OVERDUE", "Overdue"],
+              ["BLOCKED", "Blocked"], ["DONE", "Done"], ["ALL", `All ${tasks.length}`],
+            ]} />
+            <Picker value={priority} onChange={setPriority} label="Priority" options={[
+              ["ALL", "Any priority"], ["URGENT", "Urgent"], ["HIGH", "High"], ["NORMAL", "Normal"], ["LOW", "Low"],
+            ]} />
+            {projects.length > 1 ? (
+              <Picker value={project} onChange={setProject} label="Project"
+                options={[["ALL", "Any project"], ...projects.map((p) => [p, p] as [string, string])]} />
+            ) : null}
+            {people.length > 1 ? (
+              <Picker value={assignee} onChange={setAssignee} label="Assignee"
+                options={[["ALL", "Anyone"], ...people.map((p) => [p, p] as [string, string])]} />
+            ) : null}
+          </div>
         </PanelHeader>
 
         {adding && assignees ? (

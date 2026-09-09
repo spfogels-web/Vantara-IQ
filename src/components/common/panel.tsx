@@ -52,7 +52,14 @@ export function PanelHeader({
   return (
     <header
       className={cn(
-        "flex items-center gap-3 border-b border-border/70 px-4 py-3 sm:px-5",
+        // Wraps. Without it a header with several controls in it pushed the
+        // last one off the right edge of a phone — not clipped and not
+        // scrollable, simply gone, which is how the New task button became
+        // unreachable on mobile in both orientations.
+        //
+        // gap-y is tighter than gap-x on purpose: a control that has dropped to
+        // its own line should read as the same group, not as a new section.
+        "flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border/70 px-4 py-3 sm:px-5",
         className,
       )}
     >
