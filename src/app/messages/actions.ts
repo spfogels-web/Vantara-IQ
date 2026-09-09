@@ -69,6 +69,7 @@ export async function sendMessage(input: {
     smsSent: res.smsSent,
     smsFailed: res.smsFailed,
     smsSkipped: res.smsSkipped,
+    recipients: res.recipients,
   };
 }
 

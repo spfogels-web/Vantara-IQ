@@ -415,10 +415,19 @@ function Thread({
     }
     setBody("");
     setFiles([]);
-    if (res.smsFailed > 0) {
+    if (res.recipients === 0) {
+      // Nobody but the sender is in this thread, so the message went to no
+      // one. It was silent before — the message appeared in the column and
+      // looked exactly like one that had been delivered.
+      setNote(
+        "Saved, but there is nobody else on this thread — add somebody, or start the message from the crew or person you meant.",
+      );
+    } else if (res.smsFailed > 0) {
       setNote(`${res.smsFailed} text${res.smsFailed === 1 ? "" : "s"} failed to send.`);
     } else if (withSms && res.smsSkipped > 0 && res.smsSent === 0) {
       setNote("Kept in Vantara — nobody on this thread can be texted yet.");
+    } else if (withSms && res.smsSent > 0) {
+      setNote(`Texted ${res.smsSent} ${res.smsSent === 1 ? "person" : "people"}.`);
     }
     router.refresh();
   }

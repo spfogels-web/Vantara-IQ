@@ -155,6 +155,15 @@ export interface SendResult {
   smsSent: number;
   smsFailed: number;
   smsSkipped: number;
+  /**
+   * How many people the message was actually for.
+   *
+   * Zero is a real answer and a common one — a thread somebody started with
+   * only themselves in it — and it has to reach the screen. A message that
+   * went to nobody and said nothing about it is the worst outcome here,
+   * because it looks exactly like one that was delivered.
+   */
+  recipients: number;
 }
 
 /**
@@ -222,13 +231,13 @@ export async function postMessage(input: {
         providerMessageId: input.providerMessageId ?? null,
       },
     });
-    return { messageId: message.id, smsSent: 0, smsFailed: 0, smsSkipped: 0 };
+    return { messageId: message.id, smsSent: 0, smsFailed: 0, smsSkipped: 0, recipients: 0 };
   }
 
   // System notes are recorded, never texted. Nobody's phone needs to know a
   // participant was added.
   if (kind === "SYSTEM") {
-    return { messageId: message.id, smsSent: 0, smsFailed: 0, smsSkipped: 0 };
+    return { messageId: message.id, smsSent: 0, smsFailed: 0, smsSkipped: 0, recipients: 0 };
   }
 
   const recipients = await eligibleRecipients(input.conversationId, input.senderUserId ?? null);
@@ -315,7 +324,17 @@ export async function postMessage(input: {
   }
 
   await logEvent(input.conversationId, "message_sent", input.body.slice(0, 120), input.senderName);
-  return { messageId: message.id, smsSent: sent, smsFailed: failed, smsSkipped: skipped };
+  return {
+    messageId: message.id,
+    smsSent: sent,
+    smsFailed: failed,
+    smsSkipped: skipped,
+    // How many people this was actually for. Zero is a real answer and a
+    // common one — a thread somebody started with only themselves in it —
+    // and it has to reach the screen. A message that went to nobody and
+    // said nothing about it is the worst outcome here: it looks sent.
+    recipients: recipients.length,
+  };
 }
 
 export interface Recipient {
@@ -351,12 +370,18 @@ export async function eligibleRecipients(
       contact: {
         select: { id: true, name: true, phoneE164: true, consent: true, optOutAt: true },
       },
-      subcontractor: { select: { id: true, company: true } },
+      subcontractor: {
+        select: { id: true, company: true, phone: true, smsConsentAt: true, smsOptOutAt: true },
+      },
     },
   });
 
   const out: Recipient[] = [];
   const seen = new Set<string>();
+  // Numbers already spoken for. An owner's mobile is very often also the
+  // company number, and two copies of the same message is how somebody decides
+  // this system is noisy.
+  const numbers = new Set<string>();
 
   const pushUser = (u: {
     id: string;
@@ -369,6 +394,10 @@ export async function eligibleRecipients(
     if (u.id === excludeUserId || seen.has(`u:${u.id}`)) return;
     seen.add(`u:${u.id}`);
     const phone = toE164(u.phone);
+    if (phone) {
+      if (numbers.has(phone)) return;
+      numbers.add(phone);
+    }
     out.push({
       userId: u.id,
       name: u.name || u.email,
@@ -403,6 +432,33 @@ export async function eligibleRecipients(
 
     // A company seat fans out to its people. One text each.
     if (s.subcontractorId) {
+      // The company's own number first.
+      //
+      // It was missing, and that is where a crew's consent actually lives:
+      // J&P Cable had agreed to texts with a number on the company record,
+      // and every message to them went in-app only because the fan-out
+      // looked at the people under the company and never at the company. The
+      // office wrote to a crew that had opted in and the crew heard nothing.
+      const co = s.subcontractor;
+      const coPhone = co ? toE164(co.phone) : null;
+      if (co && !seen.has(`s:${co.id}`)) {
+        seen.add(`s:${co.id}`);
+        if (!coPhone || !numbers.has(coPhone)) {
+          if (coPhone) numbers.add(coPhone);
+          out.push({
+            name: co.company.trim() || "Crew",
+            phone: coPhone,
+            smsBlockedReason: !coPhone
+              ? "No mobile number on the company record."
+              : co.smsOptOutAt
+                ? "They replied STOP."
+                : !co.smsConsentAt
+                  ? "They have not agreed to texts."
+                  : null,
+          });
+        }
+      }
+
       const [users, contacts] = await Promise.all([
         prisma.user.findMany({
           where: { subcontractorId: s.subcontractorId },
@@ -417,6 +473,10 @@ export async function eligibleRecipients(
       for (const c of contacts) {
         if (seen.has(`c:${c.id}`)) continue;
         seen.add(`c:${c.id}`);
+        if (c.phoneE164) {
+          if (numbers.has(c.phoneE164)) continue;
+          numbers.add(c.phoneE164);
+        }
         out.push({
           contactId: c.id,
           name: c.name || c.phoneE164,
