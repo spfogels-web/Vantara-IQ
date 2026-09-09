@@ -623,6 +623,14 @@ function Bubble({
   const [retrying, setRetrying] = React.useState(false);
   const sms = m.delivery.find((x) => x.channel === "SMS");
   const failed = sms?.status === "FAILED";
+  // A message that arrived from a handset is not one we sent.
+  //
+  // The label fell through to "Sent via SMS" for every status that was not
+  // failed, skipped or delivered — and RECEIVED is one of those. So a text
+  // somebody sent us was captioned as a text we had sent them, which is
+  // exactly the wrong way round when the question being asked is "did my
+  // reply go out".
+  const inbound = sms?.status === "RECEIVED";
 
   return (
     <div className={cn("flex", mine ? "justify-end" : "justify-start")}>
@@ -676,17 +684,25 @@ function Bubble({
           <p
             className={cn(
               "mt-0.5 flex items-center gap-1.5 text-[10.5px]",
-              failed ? "text-critical" : sms.status === "SKIPPED" ? "text-muted-foreground" : "text-success",
+              failed
+                ? "text-critical"
+                : sms.status === "SKIPPED" || inbound
+                  ? "text-muted-foreground"
+                  : "text-success",
             )}
           >
             {failed ? <TriangleAlert className="size-3" /> : <Check className="size-3" />}
             {failed
               ? "SMS failed"
-              : sms.status === "SKIPPED"
-                ? "Kept in Vantara"
-                : sms.status === "DELIVERED"
-                  ? "Delivered via SMS"
-                  : "Sent via SMS"}
+              : inbound
+                ? "Received by text"
+                : sms.status === "SKIPPED"
+                  ? "Kept in Vantara"
+                  : sms.status === "DELIVERED"
+                    ? "Delivered via SMS"
+                    : sms.status === "QUEUED"
+                      ? "Queued for SMS"
+                      : "Sent via SMS"}
             {failed ? (
               <button
                 type="button"
