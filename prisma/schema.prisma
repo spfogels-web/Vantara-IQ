@@ -95,6 +95,17 @@ model User {
   locatesAssigned    ContractorLocate[]  @relation("ContractorLocateAssignee")
   locatesWalked      ContractorLocate[]  @relation("ContractorLocateLocator")
   locateChecks       LocateTicketCheck[] @relation("LocateCheckRequester")
+
+  /// How many times this person has signed in, and when they last did.
+  ///
+  /// Counted rather than derived from a session log because the question the
+  /// office actually asks is "is this crew using the system at all" — and a
+  /// crew whose owner signed in once in June and never again is a crew filing
+  /// dailies on paper. A count with no date cannot tell you that, and a date
+  /// with no count cannot tell you whether it was a habit or a single look.
+  loginCount  Int       @default(0)
+  lastLoginAt DateTime?
+
   createdAt       DateTime       @default(now())
 }
 

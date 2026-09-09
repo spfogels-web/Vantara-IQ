@@ -50,6 +50,18 @@ export async function login(_prev: unknown, formData: FormData) {
     return { error: "Couldn't start a session. Check the server configuration and try again." };
   }
   await setSessionCookie(token);
+
+  // Count it, and stamp when. Best-effort: a counter that failed to write is
+  // not a reason to refuse somebody a session they have correctly earned, and
+  // this number is an operational signal rather than a security record — the
+  // session itself is the security record.
+  await prisma.user
+    .update({
+      where: { id: user.id },
+      data: { loginCount: { increment: 1 }, lastLoginAt: new Date() },
+    })
+    .catch(() => undefined);
+
   redirect("/");
 }
 

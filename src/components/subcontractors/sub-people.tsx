@@ -14,6 +14,9 @@ export type SubUser = {
   subUserRole: string;
   /** Whether they have set a password yet. */
   active: boolean;
+  /** How many times they have signed in, and when they last did. */
+  loginCount: number;
+  lastLoginAt: string | null;
 };
 
 export type SubUserInviteRow = {

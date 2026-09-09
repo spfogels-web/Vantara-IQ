@@ -258,16 +258,37 @@ export function SubcontractorsView({
                     </span>
                   </span>
 
-                  {/* Who is on the account. The roster could not answer this at
-                      all — a crew was one login and the name on it was whoever
-                      happened to do the onboarding. */}
+                  {/* Who is on the account, and whether they actually use it.
+
+                      The count of accounts alone said nothing about that — a
+                      crew with one login who signed in once in June and never
+                      came back reads identically to one that signs in every
+                      morning, and those are opposite situations. */}
                   <span className="flex w-[150px] shrink-0 flex-col">
                     <span className="num text-[15px] font-semibold leading-none text-foreground">
                       {crew.users.length}
                     </span>
                     <span className="mt-1 text-[9.5px] font-bold uppercase tracking-[0.09em] text-muted-foreground">
-                      {crew.users.length === 1 ? "login" : "logins"}
+                      {crew.users.length === 1 ? "account" : "accounts"}
                       {crew.invites.length > 0 ? ` · ${crew.invites.length} invited` : ""}
+                    </span>
+                  </span>
+
+                  {/* Sign-ins, and the last one. Never signed in is said in
+                      words rather than shown as a zero — a crew that has never
+                      opened the system is the one worth ringing, and a 0 in a
+                      column of numbers is easy to read past. */}
+                  <span className="hidden w-[130px] shrink-0 flex-col md:flex">
+                    <span
+                      className={cn(
+                        "num text-[15px] font-semibold leading-none",
+                        signIns(crew) === 0 ? "text-muted-foreground" : "text-foreground",
+                      )}
+                    >
+                      {signIns(crew)}
+                    </span>
+                    <span className="mt-1 truncate text-[9.5px] font-bold uppercase tracking-[0.09em] text-muted-foreground">
+                      {signIns(crew) === 0 ? "never signed in" : lastSeen(crew)}
                     </span>
                   </span>
 
@@ -883,6 +904,33 @@ function Score({ label, value, tone }: { label: string; value: string; tone?: st
       <p className={cn("num mt-1 text-[17px] font-semibold tracking-[-0.02em] text-foreground", tone)}>{value}</p>
     </div>
   );
+}
+
+/** Sign-ins across everybody on the account. */
+function signIns(crew: { users: { loginCount: number }[] }): number {
+  return crew.users.reduce((n, u) => n + u.loginCount, 0);
+}
+
+/**
+ * When anybody on the account was last in, in words.
+ *
+ * Relative rather than a date, because the question is how long it has been
+ * and not which Tuesday it was. "Today" and "41d ago" both answer it at a
+ * glance; 2026-07-29 makes somebody do arithmetic.
+ */
+function lastSeen(crew: { users: { lastLoginAt: string | null }[] }): string {
+  const times = crew.users
+    .map((u) => u.lastLoginAt)
+    .filter((x): x is string => Boolean(x))
+    .map((x) => new Date(x).getTime());
+  if (times.length === 0) return "no date on file";
+
+  const days = Math.floor((Date.now() - Math.max(...times)) / 86_400_000);
+  if (days <= 0) return "last in today";
+  if (days === 1) return "last in yesterday";
+  if (days < 30) return `last in ${days}d ago`;
+  const months = Math.floor(days / 30);
+  return `last in ${months}mo ago`;
 }
 
 function Stars({ rating }: { rating: number }) {

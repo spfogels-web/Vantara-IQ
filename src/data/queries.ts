@@ -4512,7 +4512,16 @@ export async function getSubPeople(): Promise<
   Record<
     string,
     {
-      users: { id: string; name: string; email: string; subUserRole: string; active: boolean }[];
+      users: {
+        id: string;
+        name: string;
+        email: string;
+        subUserRole: string;
+        active: boolean;
+        /** How many times they have signed in, and when they last did. */
+        loginCount: number;
+        lastLoginAt: string | null;
+      }[];
       invites: {
         token: string;
         email: string;
@@ -4536,6 +4545,8 @@ export async function getSubPeople(): Promise<
         subUserRole: true,
         subcontractorId: true,
         passwordHash: true,
+        loginCount: true,
+        lastLoginAt: true,
       },
       orderBy: [{ subUserRole: "asc" }, { name: "asc" }],
     }),
@@ -4557,6 +4568,8 @@ export async function getSubPeople(): Promise<
       // Whether they ever finished setting up. The hash itself never leaves
       // the server — only whether there is one.
       active: Boolean(u.passwordHash),
+      loginCount: u.loginCount,
+      lastLoginAt: u.lastLoginAt?.toISOString() ?? null,
     });
   }
   for (const i of invites) {
