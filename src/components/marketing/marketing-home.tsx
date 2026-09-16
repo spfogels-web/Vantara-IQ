@@ -22,6 +22,8 @@ import {
 } from "lucide-react";
 
 import { BrandLogo } from "@/components/common/brand-logo";
+import { LanguageToggle } from "@/components/layout/language-toggle";
+import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { DemoRequestForm } from "@/components/marketing/demo-request-form";
 import {
   AssistantShot,
@@ -64,16 +66,77 @@ import {
  *   who buys on a promise finds out in week one.
  */
 
-const INK = "#f4f7fb";
-const BODY = "#c7d2e1";
-const MUTED = "#93a3b8";
-const GOLD = "#e0a82e";
-const HAIR = "rgba(255,255,255,0.09)";
-const CARD = "rgba(255,255,255,0.032)";
+const INK = "var(--mk-ink)";
+const BODY = "var(--mk-body)";
+const MUTED = "var(--mk-muted)";
+const GOLD = "var(--mk-gold)";
+const HAIR = "var(--mk-hair)";
+const CARD = "var(--mk-card)";
+/** Filled gold stays gold in both inks; only the text on it changes. */
+const GOLD_FILL = "var(--mk-gold-fill)";
+const ON_GOLD = "var(--mk-on-gold)";
 
 export function MarketingHome() {
   return (
-    <div style={{ background: "#060b14", color: INK }} className="min-h-svh">
+    <div className="mk min-h-svh" style={{ background: "var(--mk-bg)", color: INK }}>
+      {/* The palette, in both inks.
+
+          It was literal and dark-only, on the reasoning that a stranger on an
+          unknown machine should see one thing. That holds for a carrier
+          vetting a compliance page; it does not hold for a sales page a
+          customer opens on a laptop set to light, where a black page reads as
+          somebody else's website.
+
+          Scoped to .mk so nothing here can be changed by a token edit
+          elsewhere in the application, and both halves are measured rather
+          than eyeballed. Light is the default because an unset browser is
+          light; .dark wins when the reader has asked for it. */}
+      <style>{`
+        .mk {
+          --mk-bg: #f7f9fc;
+          --mk-surface: #ffffff;
+          --mk-card: rgba(15,23,42,0.035);
+          --mk-hair: rgba(15,23,42,0.12);
+          --mk-line: rgba(15,23,42,0.14);
+          --mk-ink: #0b1220;
+          --mk-body: #33415a;
+          --mk-muted: #55647c;
+          --mk-gold: #8a5d0a;
+          --mk-gold-fill: #e0a82e;
+          --mk-on-gold: #1a1204;
+          --mk-brand: #4338ca;
+          --mk-ok: #047857;
+          --mk-warn: #a45c05;
+          --mk-bad: #b91c1c;
+          --mk-h1-from: #0b1220;
+          --mk-h1-to: #44536b;
+          --mk-grid: rgba(15,23,42,0.05);
+          --mk-wash-a: rgba(79,140,255,0.14);
+          --mk-wash-b: rgba(224,168,46,0.16);
+        }
+        .dark .mk {
+          --mk-bg: #060b14;
+          --mk-surface: #0b1220;
+          --mk-card: rgba(255,255,255,0.032);
+          --mk-hair: rgba(255,255,255,0.09);
+          --mk-line: rgba(255,255,255,0.09);
+          --mk-ink: #f4f7fb;
+          --mk-body: #c7d2e1;
+          --mk-muted: #93a3b8;
+          --mk-gold: #e0a82e;
+          --mk-gold-fill: #e0a82e;
+          --mk-on-gold: #0a1220;
+          --mk-brand: #818CF8;
+          --mk-ok: #34D399;
+          --mk-warn: #F59E0B;
+          --mk-bad: #F87171;
+          --mk-h1-from: #ffffff;
+          --mk-h1-to: #a9bdd8;
+          --mk-grid: rgba(255,255,255,0.03);
+          --mk-wash-a: rgba(79,140,255,0.26);
+          --mk-wash-b: rgba(224,168,46,0.16);
+        }
+      `}</style>
       <Header />
       <Hero />
       <Lifecycle />
@@ -103,7 +166,7 @@ function Header() {
   return (
     <header
       className="sticky top-0 z-30 border-b backdrop-blur-md"
-      style={{ borderColor: HAIR, background: "rgba(6,11,20,0.85)" }}
+      style={{ borderColor: HAIR, background: "color-mix(in srgb, var(--mk-bg) 85%, transparent)" }}
     >
       <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3 sm:px-6">
         <BrandLogo height={30} />
@@ -123,19 +186,29 @@ function Header() {
               {label}
             </a>
           ))}
+          {/* Theme and language, the same controls the application uses rather
+              than a second pair that can drift from them. A contractor whose
+              crews work in Spanish should be able to read the page that sells
+              it to them in Spanish, and a laptop set to light should not be
+              handed a black page. */}
+          <span className="flex items-center gap-0.5">
+            <LanguageToggle />
+            <ThemeToggle />
+          </span>
+
           {/* The door for everybody who already has an account, and there are
               more of those every week than there are new prospects. */}
           <Link
             href="/login"
-            className="inline-flex h-9 items-center rounded-lg border px-3.5 text-[13px] font-semibold text-white transition-colors hover:bg-white/10"
-            style={{ borderColor: "rgba(255,255,255,0.22)" }}
+            className="inline-flex h-9 items-center rounded-lg border px-3.5 text-[13px] font-semibold transition-colors hover:bg-[color-mix(in_srgb,var(--mk-ink)_10%,transparent)]"
+            style={{ borderColor: "var(--mk-line)", color: INK }}
           >
             Sign in
           </Link>
           <a
             href="#demo"
-            className="inline-flex h-9 items-center rounded-lg px-3.5 text-[13px] font-semibold text-[#0a1220] transition-transform hover:-translate-y-px"
-            style={{ background: GOLD, boxShadow: "0 8px 24px -10px rgba(224,168,46,0.7)" }}
+            className="inline-flex h-9 items-center rounded-lg px-3.5 text-[13px] font-semibold transition-transform hover:-translate-y-px"
+            style={{ background: GOLD_FILL, color: ON_GOLD, boxShadow: "0 8px 24px -10px rgba(224,168,46,0.55)" }}
           >
             Request a demo
           </a>
@@ -153,8 +226,8 @@ function Hero() {
         className="pointer-events-none absolute inset-0 -z-10"
         style={{
           backgroundImage:
-            "radial-gradient(1000px 520px at 8% -12%, rgba(79,140,255,0.26), transparent 62%)," +
-            "radial-gradient(820px 460px at 96% 4%, rgba(224,168,46,0.16), transparent 58%)",
+            "radial-gradient(1000px 520px at 8% -12%, var(--mk-wash-a), transparent 62%)," +
+            "radial-gradient(820px 460px at 96% 4%, var(--mk-wash-b), transparent 58%)",
         }}
       />
       <div
@@ -162,8 +235,8 @@ function Hero() {
         className="pointer-events-none absolute inset-0 -z-10"
         style={{
           backgroundImage:
-            "linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px)," +
-            "linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)",
+            "linear-gradient(var(--mk-grid) 1px, transparent 1px)," +
+            "linear-gradient(90deg, var(--mk-grid) 1px, transparent 1px)",
           backgroundSize: "56px 56px",
           maskImage: "radial-gradient(72% 58% at 50% 0%, black, transparent 78%)",
           WebkitMaskImage: "radial-gradient(72% 58% at 50% 0%, black, transparent 78%)",
@@ -182,7 +255,7 @@ function Hero() {
           <h1
             className="mt-5 text-[38px] font-bold leading-[1.04] tracking-[-0.025em] sm:text-[56px]"
             style={{
-              backgroundImage: "linear-gradient(180deg, #ffffff 34%, #a9bdd8 100%)",
+              backgroundImage: "linear-gradient(180deg, var(--mk-h1-from) 34%, var(--mk-h1-to) 100%)",
               WebkitBackgroundClip: "text",
               backgroundClip: "text",
               color: "transparent",
@@ -203,15 +276,15 @@ function Hero() {
           <div className="mt-8 flex flex-wrap items-center gap-2.5">
             <a
               href="#demo"
-              className="inline-flex h-12 items-center gap-2 rounded-xl px-6 text-[15px] font-semibold text-[#0a1220] transition-transform hover:-translate-y-px"
-              style={{ background: GOLD, boxShadow: "0 14px 34px -12px rgba(224,168,46,0.75)" }}
+              className="inline-flex h-12 items-center gap-2 rounded-xl px-6 text-[15px] font-semibold transition-transform hover:-translate-y-px"
+              style={{ background: GOLD_FILL, color: ON_GOLD, boxShadow: "0 14px 34px -12px rgba(224,168,46,0.6)" }}
             >
               Request a demo <ArrowRight className="size-4" />
             </a>
             <a
               href="#platform"
-              className="inline-flex h-12 items-center rounded-xl border px-6 text-[15px] font-semibold text-white transition-colors hover:bg-white/[0.07]"
-              style={{ borderColor: "rgba(255,255,255,0.2)" }}
+              className="inline-flex h-12 items-center rounded-xl border px-6 text-[15px] font-semibold transition-colors hover:bg-[color-mix(in_srgb,var(--mk-ink)_7%,transparent)]"
+              style={{ borderColor: "var(--mk-line)", color: INK }}
             >
               Explore the platform
             </a>
@@ -249,14 +322,14 @@ function Hero() {
 function Lifecycle() {
   const phases: [string, string, string[]][] = [
     ["Win it", GOLD, ["Opportunity", "Estimate", "Award"]],
-    ["Plan it", "#818CF8", ["Project", "Engineering", "Locates", "Materials"]],
-    ["Build it", "#34D399", ["Crew", "Daily", "Redline / as-built", "Approval"]],
-    ["Get paid", "#4F8CFF", ["Customer billing", "Subcontractor pay", "Retainage"]],
-    ["Know where you stand", "#F59E0B", ["Project margin", "Executive intelligence"]],
+    ["Plan it", "var(--mk-brand)", ["Project", "Engineering", "Locates", "Materials"]],
+    ["Build it", "var(--mk-ok)", ["Crew", "Daily", "Redline / as-built", "Approval"]],
+    ["Get paid", "var(--mk-brand)", ["Customer billing", "Subcontractor pay", "Retainage"]],
+    ["Know where you stand", "var(--mk-warn)", ["Project margin", "Executive intelligence"]],
   ];
 
   return (
-    <section className="border-t" style={{ borderColor: HAIR, background: "rgba(255,255,255,0.018)" }}>
+    <section className="border-t" style={{ borderColor: HAIR, background: "var(--mk-card)" }}>
       <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
         <h2 className="max-w-2xl text-[27px] font-bold tracking-[-0.015em] sm:text-[36px]">
           One system. From field production to financial performance.
@@ -369,7 +442,7 @@ function Assistant() {
 
 function OpsCenter() {
   return (
-    <section id="platform" className="border-t" style={{ borderColor: HAIR, background: "rgba(255,255,255,0.018)" }}>
+    <section id="platform" className="border-t" style={{ borderColor: HAIR, background: "var(--mk-card)" }}>
       <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
         <h2 className="max-w-2xl text-[27px] font-bold tracking-[-0.015em] sm:text-[36px]">
           Your entire operation. One screen.
@@ -473,7 +546,7 @@ function FieldToInvoice() {
  */
 function Accountability() {
   return (
-    <section className="border-t" style={{ borderColor: HAIR, background: "rgba(255,255,255,0.018)" }}>
+    <section className="border-t" style={{ borderColor: HAIR, background: "var(--mk-card)" }}>
       <div className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-10 px-4 py-16 sm:px-6 sm:py-24 lg:grid-cols-[1fr_1.05fr]">
         <div>
           <span
@@ -526,7 +599,7 @@ function Accountability() {
 
 function Locates() {
   return (
-    <section className="border-t" style={{ borderColor: HAIR, background: "rgba(255,255,255,0.018)" }}>
+    <section className="border-t" style={{ borderColor: HAIR, background: "var(--mk-card)" }}>
       <div className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-10 px-4 py-16 sm:px-6 sm:py-24 lg:grid-cols-[1fr_1.05fr]">
         <div>
           <span
@@ -546,11 +619,11 @@ function Locates() {
 
           <div className="mt-6 flex flex-wrap gap-1.5">
             {[
-              ["Expiring soon", "#F59E0B"],
-              ["Response pending", "#F59E0B"],
-              ["Re-mark required", "#F87171"],
-              ["Your locate required", "#F59E0B"],
-              ["Ready to excavate", "#34D399"],
+              ["Expiring soon", "var(--mk-warn)"],
+              ["Response pending", "var(--mk-warn)"],
+              ["Re-mark required", "var(--mk-bad)"],
+              ["Your locate required", "var(--mk-warn)"],
+              ["Ready to excavate", "var(--mk-ok)"],
             ].map(([label, colour]) => (
               <span
                 key={label}
@@ -606,7 +679,7 @@ function Materials() {
 
 function Subs() {
   return (
-    <section className="border-t" style={{ borderColor: HAIR, background: "rgba(255,255,255,0.018)" }}>
+    <section className="border-t" style={{ borderColor: HAIR, background: "var(--mk-card)" }}>
       <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
         <h2 className="max-w-2xl text-[27px] font-bold tracking-[-0.015em] sm:text-[36px]">
           Manage every subcontractor without losing control of your numbers.
@@ -651,7 +724,7 @@ function Subs() {
 
         <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
           <div className="rounded-2xl border p-5" style={{ borderColor: "rgba(52,211,153,0.35)", background: "rgba(52,211,153,0.05)" }}>
-            <p className="text-[11px] font-bold uppercase tracking-[0.1em]" style={{ color: "#34D399" }}>
+            <p className="text-[11px] font-bold uppercase tracking-[0.1em]" style={{ color: "var(--mk-ok)" }}>
               What a subcontractor sees
             </p>
             <ul className="mt-3 space-y-1.5">
@@ -662,7 +735,7 @@ function Subs() {
                 "Locate tickets filed to their company",
               ].map((x) => (
                 <li key={x} className="flex items-start gap-2 text-[13.5px]" style={{ color: BODY }}>
-                  <CheckCircle2 className="mt-0.5 size-3.5 shrink-0" style={{ color: "#34D399" }} />
+                  <CheckCircle2 className="mt-0.5 size-3.5 shrink-0" style={{ color: "var(--mk-ok)" }} />
                   {x}
                 </li>
               ))}
@@ -670,7 +743,7 @@ function Subs() {
           </div>
 
           <div className="rounded-2xl border p-5" style={{ borderColor: "rgba(248,113,113,0.3)", background: "rgba(248,113,113,0.045)" }}>
-            <p className="text-[11px] font-bold uppercase tracking-[0.1em]" style={{ color: "#F87171" }}>
+            <p className="text-[11px] font-bold uppercase tracking-[0.1em]" style={{ color: "var(--mk-bad)" }}>
               What they never see
             </p>
             <ul className="mt-3 space-y-1.5">
@@ -681,7 +754,7 @@ function Subs() {
                 "Rate cards that are not their own",
               ].map((x) => (
                 <li key={x} className="flex items-start gap-2 text-[13.5px]" style={{ color: BODY }}>
-                  <Lock className="mt-0.5 size-3.5 shrink-0" style={{ color: "#F87171" }} />
+                  <Lock className="mt-0.5 size-3.5 shrink-0" style={{ color: "var(--mk-bad)" }} />
                   {x}
                 </li>
               ))}
@@ -800,7 +873,7 @@ function Modules() {
           {items.map(([icon, title, body]) => (
             <div
               key={title}
-              className="rounded-2xl border p-5 transition-colors hover:border-white/20"
+              className="rounded-2xl border p-5 transition-colors"
               style={{ borderColor: HAIR, background: CARD }}
             >
               <span
@@ -833,7 +906,7 @@ function Industries() {
   ];
 
   return (
-    <section id="industries" className="border-t" style={{ borderColor: HAIR, background: "rgba(255,255,255,0.018)" }}>
+    <section id="industries" className="border-t" style={{ borderColor: HAIR, background: "var(--mk-card)" }}>
       <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
         <h2 className="text-[24px] font-bold tracking-[-0.015em] sm:text-[30px]">Who it is for</h2>
         <p className="mt-3 max-w-2xl text-[15px] leading-relaxed" style={{ color: BODY }}>
@@ -920,7 +993,7 @@ function Difference() {
 
 function Security() {
   return (
-    <section className="border-t" style={{ borderColor: HAIR, background: "rgba(255,255,255,0.018)" }}>
+    <section className="border-t" style={{ borderColor: HAIR, background: "var(--mk-card)" }}>
       <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
         <span
           className="grid size-10 place-items-center rounded-xl"
@@ -997,7 +1070,7 @@ function Roadmap() {
 
 function Pricing() {
   return (
-    <section id="pricing" className="border-t" style={{ borderColor: HAIR, background: "rgba(255,255,255,0.018)" }}>
+    <section id="pricing" className="border-t" style={{ borderColor: HAIR, background: "var(--mk-card)" }}>
       <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
         <h2 className="text-[27px] font-bold tracking-[-0.015em] sm:text-[36px]">
           One package. No tiers to work out.

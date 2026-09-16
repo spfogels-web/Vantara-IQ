@@ -14,28 +14,29 @@
  * Partners is not a customer, and neither is anybody else named here.
  */
 
-export const INK = "#eef2f8";
-export const BODY = "#c3d0e0";
-export const MUTED = "#8fa0b6";
-export const GOLD = "#e0a82e";
-export const BRAND = "#818CF8";
-export const OK = "#34D399";
-export const WARN = "#F59E0B";
-export const BAD = "#F87171";
+export const INK = "var(--mk-ink)";
+export const BODY = "var(--mk-body)";
+export const MUTED = "var(--mk-muted)";
+export const GOLD = "var(--mk-gold)";
+export const BRAND = "var(--mk-brand)";
+export const OK = "var(--mk-ok)";
+export const WARN = "var(--mk-warn)";
+export const BAD = "var(--mk-bad)";
 
-const CARD = "rgba(255,255,255,0.035)";
-const LINE = "rgba(255,255,255,0.09)";
+const CARD = "var(--mk-card)";
+const LINE = "var(--mk-line)";
+const SURFACE = "var(--mk-surface)";
 
 /** A window the mockups sit in, so they read as an application. */
 function Frame({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div
       className="overflow-hidden rounded-2xl border shadow-2xl"
-      style={{ borderColor: "rgba(255,255,255,0.12)", background: "#0b1220" }}
+      style={{ borderColor: LINE, background: SURFACE }}
     >
       <div
         className="flex items-center gap-2 border-b px-3 py-2.5"
-        style={{ borderColor: LINE, background: "rgba(255,255,255,0.03)" }}
+        style={{ borderColor: LINE, background: CARD }}
       >
         <span className="flex gap-1.5">
           {["#ff5f57", "#febc2e", "#28c840"].map((c) => (
@@ -44,13 +45,13 @@ function Frame({ label, children }: { label: string; children: React.ReactNode }
         </span>
         <span
           className="ml-2 truncate rounded-md px-2 py-0.5 text-[10.5px]"
-          style={{ background: "rgba(255,255,255,0.06)", color: MUTED }}
+          style={{ background: "var(--mk-card)", color: MUTED }}
         >
           {label}
         </span>
         <span
           className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold"
-          style={{ background: "rgba(52,211,153,0.14)", color: OK }}
+          style={{ background: "color-mix(in srgb, var(--mk-ok) 14%, transparent)", color: OK }}
         >
           <span className="size-1.5 rounded-full" style={{ background: OK }} />
           Live
@@ -167,7 +168,7 @@ export function OpsCenterShot() {
                       {pct}%
                     </span>
                   </div>
-                  <div className="mt-1 h-1.5 overflow-hidden rounded-full" style={{ background: "rgba(255,255,255,0.08)" }}>
+                  <div className="mt-1 h-1.5 overflow-hidden rounded-full" style={{ background: "var(--mk-hair)" }}>
                     <div
                       className="h-full rounded-full"
                       style={{ width: `${pct}%`, background: String(colour) }}
@@ -247,7 +248,7 @@ function Bubble({ side, children }: { side: "left" | "right"; children: React.Re
     <div className={side === "right" ? "flex justify-end" : "flex justify-start"}>
       <span
         className="max-w-[80%] rounded-xl rounded-br-sm px-3 py-2 text-[11.5px] font-medium"
-        style={{ background: "rgba(129,140,248,0.16)", color: INK }}
+        style={{ background: "color-mix(in srgb, var(--mk-brand) 16%, transparent)", color: INK }}
       >
         {children}
       </span>
@@ -272,7 +273,7 @@ export function DailyShot() {
           </p>
           <span
             className="ml-auto rounded-md px-1.5 py-0.5 text-[8.5px] font-bold uppercase"
-            style={{ background: "rgba(52,211,153,0.16)", color: OK }}
+            style={{ background: "color-mix(in srgb, var(--mk-ok) 16%, transparent)", color: OK }}
           >
             Approved
           </span>
@@ -340,13 +341,13 @@ export function LocateShot() {
           </span>
           <span
             className="rounded-md px-1.5 py-0.5 text-[8.5px] font-bold uppercase"
-            style={{ background: "rgba(52,211,153,0.16)", color: OK }}
+            style={{ background: "color-mix(in srgb, var(--mk-ok) 16%, transparent)", color: OK }}
           >
             811 ready
           </span>
           <span
             className="rounded-md px-1.5 py-0.5 text-[8.5px] font-bold uppercase"
-            style={{ background: "rgba(245,158,11,0.16)", color: WARN }}
+            style={{ background: "color-mix(in srgb, var(--mk-warn) 16%, transparent)", color: WARN }}
           >
             Your locate required
           </span>
@@ -465,7 +466,7 @@ export function SpreadShot() {
             <p className="text-[11px] tabular-nums" style={{ color: MUTED }}>
               {detail}
             </p>
-            <div className="mt-1.5 h-2 overflow-hidden rounded-full" style={{ background: "rgba(255,255,255,0.07)" }}>
+            <div className="mt-1.5 h-2 overflow-hidden rounded-full" style={{ background: "var(--mk-hair)" }}>
               <div className="h-full rounded-full" style={{ width: `${pct}%`, background: String(colour) }} />
             </div>
           </div>
@@ -547,10 +548,10 @@ export function MobileShot() {
   return (
     <div
       className="mx-auto w-[236px] overflow-hidden rounded-[2rem] border-[6px] shadow-2xl"
-      style={{ borderColor: "#1a2436", background: "#0b1220" }}
+      style={{ borderColor: "var(--mk-line)", background: SURFACE }}
     >
       <div className="flex items-center justify-center py-1.5">
-        <span className="h-1 w-14 rounded-full" style={{ background: "rgba(255,255,255,0.18)" }} />
+        <span className="h-1 w-14 rounded-full" style={{ background: "var(--mk-hair)" }} />
       </div>
       <div className="px-3 pb-4">
         <p className="text-[9px] font-bold uppercase tracking-[0.14em]" style={{ color: GOLD }}>
@@ -563,7 +564,7 @@ export function MobileShot() {
         {/* Pre-work, before anything else. The one thing that must stop a crew. */}
         <div
           className="mt-2.5 rounded-lg border px-2.5 py-2"
-          style={{ borderColor: "rgba(245,158,11,0.4)", background: "rgba(245,158,11,0.08)" }}
+          style={{ borderColor: "color-mix(in srgb, var(--mk-warn) 40%, transparent)", background: "color-mix(in srgb, var(--mk-warn) 9%, transparent)" }}
         >
           <p className="text-[8.5px] font-bold uppercase tracking-[0.1em]" style={{ color: WARN }}>
             Pre-work required
@@ -608,7 +609,7 @@ export function MobileShot() {
 
         <div
           className="mt-2.5 rounded-lg py-2.5 text-center text-[11.5px] font-semibold"
-          style={{ background: GOLD, color: "#0a1220" }}
+          style={{ background: "var(--mk-gold-fill)", color: "var(--mk-on-gold)" }}
         >
           Submit daily
         </div>
@@ -644,7 +645,7 @@ function PhotoSlot({ label, caption, tone }: { label: string; caption: string; t
         className="grid h-[86px] place-items-center"
         style={{
           background:
-            "repeating-linear-gradient(45deg, rgba(255,255,255,0.028) 0 8px, rgba(255,255,255,0.012) 8px 16px)",
+            "repeating-linear-gradient(45deg, var(--mk-card) 0 8px, transparent 8px 16px)",
         }}
       >
         <span className="text-[9.5px]" style={{ color: MUTED }}>
@@ -662,7 +663,7 @@ export function TaskShot() {
         <div className="flex flex-wrap items-center gap-1.5">
           <span
             className="rounded-md px-1.5 py-0.5 text-[8.5px] font-bold uppercase"
-            style={{ background: "rgba(248,113,113,0.16)", color: BAD }}
+            style={{ background: "color-mix(in srgb, var(--mk-bad) 16%, transparent)", color: BAD }}
           >
             High
           </span>
@@ -671,7 +672,7 @@ export function TaskShot() {
           </span>
           <span
             className="ml-auto rounded-md px-1.5 py-0.5 text-[8.5px] font-bold uppercase"
-            style={{ background: "rgba(245,158,11,0.16)", color: WARN }}
+            style={{ background: "color-mix(in srgb, var(--mk-warn) 16%, transparent)", color: WARN }}
           >
             In progress
           </span>
@@ -741,7 +742,7 @@ export function CapabilityShot() {
           </span>
           <span
             className="rounded-md px-1.5 py-0.5 text-[8.5px] font-bold uppercase"
-            style={{ background: "rgba(129,140,248,0.16)", color: BRAND }}
+            style={{ background: "color-mix(in srgb, var(--mk-brand) 16%, transparent)", color: BRAND }}
           >
             Prequalified
           </span>
