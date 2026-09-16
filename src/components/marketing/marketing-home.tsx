@@ -6,7 +6,9 @@ import {
   CheckCircle2,
   ClipboardCheck,
   ClipboardList,
+  FileSignature,
   FileText,
+  Image as ImageIcon,
   Layers,
   Lock,
   MapPin,
@@ -609,11 +611,43 @@ function Subs() {
         </h2>
         <p className="mt-4 max-w-2xl text-[15.5px] leading-relaxed" style={{ color: BODY }}>
           W-9, insurance, signed agreements, ACH and yard badges, chased by the system until the
-          file is complete — a crew cannot be assigned work until it is. Then their own rate card,
-          their statements, their retainage and their payment history in one place.
+          file is complete — a crew cannot be assigned work until it is. The packet stays on your
+          side of the fence: you hold the record, not a folder on somebody&rsquo;s laptop.
         </p>
 
-        <div className="mt-8 grid grid-cols-1 gap-3 lg:grid-cols-2">
+        {/* The half a prime usually underestimates: the crew is doing work in
+            here too, which is what stops the office re-keying it. */}
+        <div className="mt-9 rounded-2xl border p-6" style={{ borderColor: HAIR, background: CARD }}>
+          <h3 className="text-[19px] font-semibold tracking-[-0.01em]">
+            Every crew gets a login of their own
+          </h3>
+          <p className="mt-2 max-w-2xl text-[14.5px] leading-relaxed" style={{ color: BODY }}>
+            Assign them a project and they work inside it — which is what stops your office
+            re-typing what they have already written down.
+          </p>
+          <div className="mt-5 grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2">
+            {[
+              ["File their own dailies", "Production on your customer's form, from the truck."],
+              ["Redline the map and attach the as-built", "Marked on the job's own map, tied to that day's production."],
+              ["Check and accept their statement", "Or dispute it with a reason, which comes back to your office."],
+              ["Take the remittance advice", "Their own payment record, downloadable, nobody else's."],
+              ["Invite their own people", "Owner, office admin, project manager, supervisor, foreman — each with their own access."],
+              ["Send in their locate tickets", "Filed to their company, and they see the clock on each one."],
+            ].map(([t, d]) => (
+              <div key={t} className="flex gap-2.5">
+                <CheckCircle2 className="mt-0.5 size-4 shrink-0" style={{ color: GOLD }} />
+                <span className="min-w-0">
+                  <span className="block text-[14px] font-semibold">{t}</span>
+                  <span className="block text-[13px] leading-relaxed" style={{ color: MUTED }}>
+                    {d}
+                  </span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
           <div className="rounded-2xl border p-5" style={{ borderColor: "rgba(52,211,153,0.35)", background: "rgba(52,211,153,0.05)" }}>
             <p className="text-[11px] font-bold uppercase tracking-[0.1em]" style={{ color: "#34D399" }}>
               What a subcontractor sees
@@ -671,6 +705,8 @@ function Modules() {
     [<MessageSquare key="g" className="size-4" />, "Messaging", "Assignments, approvals and pay notices reaching a foreman by text, with consent handled to carrier rules."],
     [<FileText key="doc" className="size-4" />, "Documents", "Contracts, COIs, W-9s, permits and as-builts filed against the company or project they belong to."],
     [<Radio key="c" className="size-4" />, "Pipeline", "Opportunities, estimates and bids before a project exists — awarded ones become projects."],
+    [<ImageIcon key="p" className="size-4" />, "The job's own record", "Aerials, field photographs, the engineering map and every document filed against the project they belong to — not a shared drive."],
+    [<FileSignature key="rs" className="size-4" />, "Rate sheets in one click", "A priced rate sheet for a project or a crew, generated as a PDF with your company's logo on it, from the rates already on file."],
   ];
 
   return (
