@@ -122,10 +122,41 @@ async function ActivitySection() {
 export async function generateMetadata() {
   const user = await getCurrentUser();
   if (user) return {};
+  // Written for the search that a contractor actually types, without
+  // stuffing the visible copy: the words below appear in the page itself
+  // because they describe the product, not because they are keywords.
+  const title = "Vantara IQ — the operating system for infrastructure construction";
+  const description =
+    "Construction operations software for telecom, fibre, power, gas, water and civil contractors. " +
+    "Digital dailies, redlines and as-builts, 811 locate management, material custody, subcontractor " +
+    "management and pay, automated billing and project margin — connected in one platform.";
+
   return {
-    title: "Vantara IQ — field operations for prime contractors",
-    description:
-      "Run subcontractor crews end to end: dailies that bill themselves, invoices and crew pay from one set of numbers, 811 locates, material custody and onboarding. Built on live underground fibre jobs.",
+    title,
+    description,
+    keywords: [
+      "infrastructure construction software",
+      "telecom construction management software",
+      "fiber construction management",
+      "underground utility construction software",
+      "aerial fiber construction software",
+      "fiber daily reporting software",
+      "construction redline software",
+      "811 locate management software",
+      "subcontractor management software",
+      "utility construction management",
+      "FTTH construction software",
+      "broadband construction management",
+    ],
+    alternates: { canonical: "https://www.vantaraiq.com/" },
+    openGraph: {
+      title,
+      description,
+      url: "https://www.vantaraiq.com/",
+      siteName: "Vantara IQ",
+      type: "website",
+    },
+    twitter: { card: "summary_large_image", title, description },
   };
 }
 
