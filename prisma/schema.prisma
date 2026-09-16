@@ -3064,3 +3064,44 @@ model AppSetting {
 
   @@index([updatedAt])
 }
+
+/// Somebody asking to see Vantara IQ.
+///
+/// A sales lead for the product, which is a different thing from a Prospect —
+/// that table is Fortitude's pipeline of crews and primes to work with, and
+/// mixing the two would put the software's buyers into a construction
+/// recruiting board. It also keeps them apart for the day each customer runs
+/// on their own instance: a tenant's database has no business holding the
+/// names of other companies evaluating the product.
+model DemoRequest {
+  id String @id @default(cuid())
+
+  name    String
+  company String
+  email   String
+  phone   String @default("")
+  /// What they do there — owner, operations manager, PM. Free text because
+  /// every contractor titles these differently.
+  role    String @default("")
+  /// Roughly how many crews they run. Their own estimate, kept as typed.
+  crews   String @default("")
+  message String @default("")
+
+  /// Where they came from, for judging what is worth doing more of.
+  source    String @default("website")
+  /// First hop only. The rest is our own infrastructure and worth nothing.
+  ip        String @default("")
+  userAgent String @default("")
+
+  /// NEW | CONTACTED | DEMOED | WON | LOST
+  status String    @default("NEW")
+  note   String    @default("")
+  handledBy String @default("")
+  handledAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, createdAt])
+  @@index([createdAt])
+}

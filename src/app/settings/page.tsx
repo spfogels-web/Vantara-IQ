@@ -1,5 +1,5 @@
 ﻿import Link from "next/link";
-import { Building2, Plug, Radio, ShieldCheck, Smartphone } from "lucide-react";
+import { Building2, Plug, Radio, Receipt, ShieldCheck, Smartphone } from "lucide-react";
 
 import { getOrganization, getOrganizationLogo } from "@/data/queries";
 import { PageShell } from "@/components/common/page-shell";
@@ -13,6 +13,8 @@ import { smsReady, smsSenderLabel } from "@/lib/sms";
 import { getMyAlertSettings } from "@/app/actions";
 import { SMS_CONSENT_TEXT } from "@/lib/sms-consent";
 import { alertsState } from "@/lib/alerts-switch";
+import { planBilling } from "@/lib/plan";
+import { PlanPanel } from "@/components/settings/plan-panel";
 import { AlertsSwitchPanel } from "@/components/settings/alerts-switch-panel";
 import { getCurrentUser, isStaff } from "@/lib/auth";
 
@@ -91,6 +93,9 @@ export default async function SettingsPage() {
   ]);
 
   const staff = !!me && isStaff(me.role);
+  // Only the office sees what the company pays. A crew login has no business
+  // knowing the customer's software bill any more than its rate card.
+  const billing = staff ? await planBilling() : null;
 
   return (
     <PageShell eyebrow="Workspace" title="Settings" description="Organization, team and the integrations that keep billing and pay in sync.">
@@ -106,6 +111,17 @@ export default async function SettingsPage() {
       ) : null}
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        {staff && billing ? (
+          <Panel className="lg:col-span-2">
+            <PanelHeader
+              title="Your plan"
+              description="The enterprise package, and what it comes to this month."
+              icon={<Receipt className="size-3.5 text-gold" />}
+            />
+            <PlanPanel billing={billing} company={org?.name ?? "Your company"} />
+          </Panel>
+        ) : null}
+
         {/* The master switch first. Everything below it is somebody's own
             number and their own consent; this is whether any of it leaves
             the building at all, so it reads first and it is staff only. */}

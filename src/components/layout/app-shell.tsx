@@ -100,7 +100,12 @@ export function AppShell({
    * somebody who has no business seeing it.
    */
   const bare = ["/invite", "/login", "/sms", "/privacy", "/terms"];
-  if (bare.some((r) => pathname === r || pathname?.startsWith(`${r}/`))) {
+  // The root is bare for a visitor and the full application for a user.
+  // Wrapping the marketing site in the internal navigation would put the
+  // shape of the product in front of somebody who has not bought it, and
+  // read as a screenshot rather than a homepage.
+  const marketingRoot = pathname === "/" && !user;
+  if (marketingRoot || bare.some((r) => pathname === r || pathname?.startsWith(`${r}/`))) {
     return (
       <TooltipProvider delayDuration={300} skipDelayDuration={200}>
         <div className="aurora relative min-h-svh">{children}</div>

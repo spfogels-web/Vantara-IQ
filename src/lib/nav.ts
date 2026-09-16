@@ -33,6 +33,9 @@ export const navSections: NavSection[] = [
     title: "Intelligence",
     items: [
       { label: "Locates", href: "/locates", icon: "alert" },
+      // Vantara IQ's own sales pipeline, not Fortitude's. Kept out of Prospects
+      // deliberately: that board is crews and primes to work with.
+      { label: "Demo requests", href: "/demo-requests", icon: "sparkles" },
       { label: "AI assistant", href: "/assistant", icon: "sparkles", shortcut: "A" },
       { label: "Reports", href: "/reports", icon: "reports" },
       { label: "Integrations", href: "/integrations", icon: "plug" },

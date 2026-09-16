@@ -89,6 +89,11 @@ const SUB_ALLOWED_PREFIXES = [
 const SUB_DENIED_PATTERNS = [/^\/projects\/new$/, /^\/projects\/[^/]+\/edit$/];
 
 function isPublic(pathname: string) {
+  // The root, and only the root. An exact match rather than a prefix,
+  // because "/" as a prefix is every page in the application — the
+  // marketing site is public, the Operations Center underneath it is not,
+  // and the page itself decides which of the two a visitor gets.
+  if (pathname === "/") return true;
   return PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 

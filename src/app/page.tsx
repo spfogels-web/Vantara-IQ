@@ -16,7 +16,10 @@ import {
 } from "@/data/queries";
 
 import { PageHeader } from "@/components/dashboard/page-header";
-import { getCurrentUser } from "@/lib/auth";
+import { redirect } from "next/navigation";
+
+import { getCurrentUser, isStaff } from "@/lib/auth";
+import { MarketingHome } from "@/components/marketing/marketing-home";
 import { KpiRow } from "@/components/dashboard/kpi-row";
 import { ProjectHealth } from "@/components/dashboard/project-health";
 import { AiBrief } from "@/components/dashboard/ai-brief";
@@ -107,11 +110,46 @@ async function ActivitySection() {
   return <NotificationsPanel notifications={notifications} />;
 }
 
+/**
+ * Title and description follow whoever is asking, for the same reason the page
+ * does.
+ *
+ * The layout default is "Operations Center · Vantara IQ", which is right for
+ * the dashboard and wrong for the front door — a stranger's browser tab, a
+ * shared link and a search result would all have announced the inside of a
+ * product they have not bought.
+ */
+export async function generateMetadata() {
+  const user = await getCurrentUser();
+  if (user) return {};
+  return {
+    title: "Vantara IQ — field operations for prime contractors",
+    description:
+      "Run subcontractor crews end to end: dailies that bill themselves, invoices and crew pay from one set of numbers, 811 locates, material custody and onboarding. Built on live underground fibre jobs.",
+  };
+}
+
+/**
+ * The root, which is two pages depending on who is asking.
+ *
+ * A stranger gets the marketing site: until now they got a sign-in form,
+ * which tells somebody evaluating the product nothing at all. Anyone signed
+ * in still lands on the Operations Center exactly as before.
+ *
+ * The check happens before any of the dashboard queries, so a visitor with
+ * no account never causes a portfolio summary to be computed.
+ */
 export default async function OperationsCenterPage() {
-  const [currentUser, portfolioSummary] = await Promise.all([
-    getCurrentUser(),
-    getPortfolioSummary(),
-  ]);
+  const currentUser = await getCurrentUser();
+
+  if (!currentUser) return <MarketingHome />;
+
+  // A crew has no Operations Center. The middleware sends them to their
+  // dailies everywhere else; the root is public now, so it has to say so
+  // here too or a foreman signing in lands on the office dashboard.
+  if (!isStaff(currentUser.role)) redirect("/dailies");
+
+  const portfolioSummary = await getPortfolioSummary();
 
   return (
     <div className="mx-auto w-full max-w-[1600px] px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
