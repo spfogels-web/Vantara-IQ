@@ -19,6 +19,7 @@ import { PageHeader } from "@/components/dashboard/page-header";
 import { redirect } from "next/navigation";
 
 import { getCurrentUser, isStaff } from "@/lib/auth";
+import { getT } from "@/lib/i18n-server";
 import { MarketingHome } from "@/components/marketing/marketing-home";
 import { KpiRow } from "@/components/dashboard/kpi-row";
 import { ProjectHealth } from "@/components/dashboard/project-health";
@@ -125,11 +126,18 @@ export async function generateMetadata() {
   // Written for the search that a contractor actually types, without
   // stuffing the visible copy: the words below appear in the page itself
   // because they describe the product, not because they are keywords.
-  const title = "Vantara IQ — the operating system for infrastructure construction";
-  const description =
+  //
+  // Title and description follow the reader's language; the keywords do not.
+  // A crawler arrives without the cookie and so always reads the English,
+  // which is what those search terms are aimed at — translating them would
+  // only mean bidding on phrases nobody in this trade types.
+  const t = await getT();
+  const title = t("Vantara IQ — the operating system for infrastructure construction");
+  const description = t(
     "Construction operations software for telecom, fibre, power, gas, water and civil contractors. " +
-    "Digital dailies, redlines and as-builts, 811 locate management, material custody, subcontractor " +
-    "management and pay, automated billing and project margin — connected in one platform.";
+      "Digital dailies, redlines and as-builts, 811 locate management, material custody, subcontractor " +
+      "management and pay, automated billing and project margin — connected in one platform.",
+  );
 
   return {
     title,

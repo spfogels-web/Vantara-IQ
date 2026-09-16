@@ -1,3 +1,5 @@
+import type { T } from "@/lib/i18n";
+
 /**
  * The product, drawn rather than photographed.
  *
@@ -12,6 +14,12 @@
  *
  * Every name, street, ticket and figure below is invented. Ridgeline Utility
  * Partners is not a customer, and neither is anybody else named here.
+ *
+ * Each shot takes the translator, because a Spanish reader shown English
+ * screenshots is being told the product is English. The labels and the prose
+ * translate; the invented street names, job numbers, unit codes and dollar
+ * figures do not — those are what a US job actually looks like on the screen,
+ * and a translated unit code would be a lie about the customer's own form.
  */
 
 export const INK = "var(--mk-ink)";
@@ -28,7 +36,7 @@ const LINE = "var(--mk-line)";
 const SURFACE = "var(--mk-surface)";
 
 /** A window the mockups sit in, so they read as an application. */
-function Frame({ label, children }: { label: string; children: React.ReactNode }) {
+function Frame({ label, t, children }: { label: string; t: T; children: React.ReactNode }) {
   return (
     <div
       className="overflow-hidden rounded-2xl border shadow-2xl"
@@ -47,14 +55,14 @@ function Frame({ label, children }: { label: string; children: React.ReactNode }
           className="ml-2 truncate rounded-md px-2 py-0.5 text-[10.5px]"
           style={{ background: "var(--mk-card)", color: MUTED }}
         >
-          {label}
+          {t(label)}
         </span>
         <span
           className="ml-auto inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold"
           style={{ background: "color-mix(in srgb, var(--mk-ok) 14%, transparent)", color: OK }}
         >
           <span className="size-1.5 rounded-full" style={{ background: OK }} />
-          Live
+          {t("Live")}
         </span>
       </div>
       {children}
@@ -94,22 +102,22 @@ function Tile({
  * Operations Center — the executive screen, and the hero image.
  * ------------------------------------------------------------------ */
 
-export function OpsCenterShot() {
+export function OpsCenterShot({ t }: { t: T }) {
   return (
-    <Frame label="vantaraiq.com · operations">
+    <Frame label="vantaraiq.com · operations" t={t}>
       <div className="p-3 sm:p-4">
         <p className="text-[9px] font-bold uppercase tracking-[0.16em]" style={{ color: GOLD }}>
-          Overview
+          {t("Overview")}
         </p>
         <p className="text-[15px] font-bold" style={{ color: INK }}>
-          Operations Center
+          {t("Operations Center")}
         </p>
 
         <div className="mt-3 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
-          <Tile label="Active projects" value="12" sub="3 markets" />
-          <Tile label="Installed this week" value="47,820" tone={GOLD} sub="linear feet" />
-          <Tile label="Ready to bill" value="$184,250" tone={OK} sub="approved production" />
-          <Tile label="Est. gross margin" value="31%" tone={OK} sub="production spread" />
+          <Tile label={t("Active projects")} value="12" sub={t("3 markets")} />
+          <Tile label={t("Installed this week")} value="47,820" tone={GOLD} sub={t("linear feet")} />
+          <Tile label={t("Ready to bill")} value="$184,250" tone={OK} sub={t("approved production")} />
+          <Tile label={t("Est. gross margin")} value="31%" tone={OK} sub={t("production spread")} />
         </div>
 
         {/* Exceptions, not a wall of green. The point of the screen is what
@@ -120,7 +128,7 @@ export function OpsCenterShot() {
               className="border-b px-2.5 py-1.5 text-[8.5px] font-bold uppercase tracking-[0.12em]"
               style={{ borderColor: LINE, color: MUTED, background: CARD }}
             >
-              Needs attention
+              {t("Needs attention")}
             </p>
             {[
               ["Locate expires today", "ATL-204 · Keener Rd", BAD],
@@ -136,10 +144,10 @@ export function OpsCenterShot() {
               >
                 <span className="size-1.5 shrink-0 rounded-full" style={{ background: String(colour) }} />
                 <span className="min-w-0 flex-1 truncate text-[10.5px] font-medium" style={{ color: INK }}>
-                  {what}
+                  {t(String(what))}
                 </span>
                 <span className="hidden truncate text-[9.5px] sm:block" style={{ color: MUTED }}>
-                  {where}
+                  {t(String(where))}
                 </span>
               </div>
             ))}
@@ -150,7 +158,7 @@ export function OpsCenterShot() {
               className="border-b px-2.5 py-1.5 text-[8.5px] font-bold uppercase tracking-[0.12em]"
               style={{ borderColor: LINE, color: MUTED, background: CARD }}
             >
-              Project health
+              {t("Project health")}
             </p>
             <div className="p-2.5">
               {[
@@ -181,7 +189,7 @@ export function OpsCenterShot() {
         </div>
 
         <p className="mt-2.5 text-[9px]" style={{ color: MUTED }}>
-          Ridgeline Utility Partners · week ending 12 June
+          Ridgeline Utility Partners · {t("week ending 12 June")}
         </p>
       </div>
     </Frame>
@@ -192,34 +200,46 @@ export function OpsCenterShot() {
  * The assistant.
  * ------------------------------------------------------------------ */
 
-export function AssistantShot() {
+export function AssistantShot({ t }: { t: T }) {
   return (
-    <Frame label="vantaraiq.com · assistant">
+    <Frame label="vantaraiq.com · assistant" t={t}>
       <div className="space-y-2.5 p-3 sm:p-4">
-        <Bubble side="right">What needs my attention right now?</Bubble>
+        <Bubble side="right">{t("What needs my attention right now?")}</Bubble>
 
         <div
           className="rounded-xl rounded-bl-sm border p-3"
           style={{ borderColor: LINE, background: CARD }}
         >
           <p className="text-[11.5px] leading-relaxed" style={{ color: BODY }}>
-            Four things, worst first.
+            {t("Four things, worst first.")}
           </p>
           <ul className="mt-2 space-y-1.5">
             {[
-              ["Locate 260904-001234 expires today", "Keener Rd, ATL-204. Pace Boring is scheduled there tomorrow.", BAD],
-              ["GA-118 is 8% behind target", "Needs 1,950 ft a day to finish on the contract date; running 1,790.", WARN],
+              [
+                "Locate 260904-001234 expires today",
+                "Keener Rd, ATL-204. Pace Boring is scheduled there tomorrow.",
+                BAD,
+              ],
+              [
+                "GA-118 is 8% behind target",
+                "Needs 1,950 ft a day to finish on the contract date; running 1,790.",
+                WARN,
+              ],
               ["Two dailies missing", "Pace Boring, Tuesday and Wednesday.", WARN],
-              ["$184,250 ready to bill", "Approved production across 3 projects, none invoiced yet.", OK],
-            ].map(([t, d, c]) => (
-              <li key={String(t)} className="flex gap-2">
+              [
+                "$184,250 ready to bill",
+                "Approved production across 3 projects, none invoiced yet.",
+                OK,
+              ],
+            ].map(([label, d, c]) => (
+              <li key={String(label)} className="flex gap-2">
                 <span className="mt-[5px] size-1.5 shrink-0 rounded-full" style={{ background: String(c) }} />
                 <span className="min-w-0">
                   <span className="block text-[11px] font-semibold" style={{ color: INK }}>
-                    {t}
+                    {t(String(label))}
                   </span>
                   <span className="block text-[10.5px] leading-relaxed" style={{ color: MUTED }}>
-                    {d}
+                    {t(String(d))}
                   </span>
                 </span>
               </li>
@@ -227,15 +247,16 @@ export function AssistantShot() {
           </ul>
         </div>
 
-        <Bubble side="right">Break down GA-118.</Bubble>
+        <Bubble side="right">{t("Break down GA-118.")}</Bubble>
 
         <div
           className="rounded-xl rounded-bl-sm border p-3"
           style={{ borderColor: LINE, background: CARD }}
         >
           <p className="text-[11.5px] leading-relaxed" style={{ color: BODY }}>
-            18,400 of 31,000 ft in the ground, 59% complete. Two crews on it. The slip started three
-            weeks ago when Hollis moved to SC-072 and has not been made up since.
+            {t(
+              "18,400 of 31,000 ft in the ground, 59% complete. Two crews on it. The slip started three weeks ago when Hollis moved to SC-072 and has not been made up since.",
+            )}
           </p>
         </div>
       </div>
@@ -260,9 +281,9 @@ function Bubble({ side, children }: { side: "left" | "right"; children: React.Re
  * A daily, and what it turns into.
  * ------------------------------------------------------------------ */
 
-export function DailyShot() {
+export function DailyShot({ t }: { t: T }) {
   return (
-    <Frame label="vantaraiq.com · dailies">
+    <Frame label="vantaraiq.com · dailies" t={t}>
       <div className="p-3 sm:p-4">
         <div className="flex flex-wrap items-baseline gap-x-2">
           <p className="text-[13px] font-bold" style={{ color: INK }}>
@@ -275,10 +296,13 @@ export function DailyShot() {
             className="ml-auto rounded-md px-1.5 py-0.5 text-[8.5px] font-bold uppercase"
             style={{ background: "color-mix(in srgb, var(--mk-ok) 16%, transparent)", color: OK }}
           >
-            Approved
+            {t("Approved")}
           </span>
         </div>
 
+        {/* The unit codes are the customer's own and stay in their own
+            spelling in every language — a translated code is a code that does
+            not match the form it is billed against. */}
         <div className="mt-2.5 overflow-hidden rounded-lg border" style={{ borderColor: LINE }}>
           {[
             ["BFOV(12.7)(2W) 12IN", "1,450 ft", "$4,205"],
@@ -303,24 +327,24 @@ export function DailyShot() {
           ))}
         </div>
 
-        <div className="mt-2.5 flex gap-1.5">
+        <div className="mt-2.5 flex flex-wrap gap-1.5">
           {["Redline", "6 photos", "As-built"].map((x) => (
             <span
               key={x}
               className="rounded-md border px-1.5 py-0.5 text-[9px]"
               style={{ borderColor: LINE, color: MUTED }}
             >
-              {x}
+              {t(x)}
             </span>
           ))}
         </div>
 
         {/* The point: one filing, four outcomes. */}
         <div className="mt-3 grid grid-cols-2 gap-1.5">
-          <Tile label="Billed to customer" value="$7,105" tone={GOLD} />
-          <Tile label="Crew earns" value="$5,015" tone={BRAND} />
-          <Tile label="Production spread" value="$2,090" tone={OK} />
-          <Tile label="Retainage held" value="$355" sub="5%" />
+          <Tile label={t("Billed to customer")} value="$7,105" tone={GOLD} />
+          <Tile label={t("Crew earns")} value="$5,015" tone={BRAND} />
+          <Tile label={t("Production spread")} value="$2,090" tone={OK} />
+          <Tile label={t("Retainage held")} value="$355" sub="5%" />
         </div>
       </div>
     </Frame>
@@ -331,9 +355,9 @@ export function DailyShot() {
  * Locates — the distinction nothing else draws.
  * ------------------------------------------------------------------ */
 
-export function LocateShot() {
+export function LocateShot({ t }: { t: T }) {
   return (
-    <Frame label="vantaraiq.com · locates">
+    <Frame label="vantaraiq.com · locates" t={t}>
       <div className="p-3 sm:p-4">
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-[11.5px] font-semibold tabular-nums" style={{ color: BRAND }}>
@@ -343,16 +367,16 @@ export function LocateShot() {
             className="rounded-md px-1.5 py-0.5 text-[8.5px] font-bold uppercase"
             style={{ background: "color-mix(in srgb, var(--mk-ok) 16%, transparent)", color: OK }}
           >
-            811 ready
+            {t("811 ready")}
           </span>
           <span
             className="rounded-md px-1.5 py-0.5 text-[8.5px] font-bold uppercase"
             style={{ background: "color-mix(in srgb, var(--mk-warn) 16%, transparent)", color: WARN }}
           >
-            Your locate required
+            {t("Your locate required")}
           </span>
           <span className="ml-auto text-[10px] tabular-nums" style={{ color: MUTED }}>
-            18d left
+            {t("18d left")}
           </span>
         </div>
 
@@ -370,18 +394,19 @@ export function LocateShot() {
               style={{ borderTop: i === 0 ? "none" : `1px solid ${LINE}` }}
             >
               <span className="min-w-0 flex-1 truncate text-[10.5px]" style={{ color: BODY }}>
-                {who}
+                {t(String(who))}
               </span>
               <span className="text-[10px] font-semibold" style={{ color: String(colour) }}>
-                {state}
+                {t(String(state))}
               </span>
             </div>
           ))}
         </div>
 
         <p className="mt-2 text-[10px] leading-relaxed" style={{ color: MUTED }}>
-          Every public utility has cleared. The locate this contractor performs on its own plant has
-          not been signed off, so the crew&rsquo;s own sheet says so before they break ground.
+          {t(
+            "Every public utility has cleared. The locate this contractor performs on its own plant has not been signed off, so the crew’s own sheet says so before they break ground.",
+          )}
         </p>
       </div>
     </Frame>
@@ -392,14 +417,14 @@ export function LocateShot() {
  * Materials.
  * ------------------------------------------------------------------ */
 
-export function MaterialShot() {
+export function MaterialShot({ t }: { t: T }) {
   return (
-    <Frame label="vantaraiq.com · materials">
+    <Frame label="vantaraiq.com · materials" t={t}>
       <div className="p-3 sm:p-4">
         <div className="grid grid-cols-3 gap-1.5">
-          <Tile label="On hand" value="184,200" sub="feet, 3 yards" />
-          <Tile label="With crews" value="22,450" tone={BRAND} sub="issued, not installed" />
-          <Tile label="Variance" value="1.4%" tone={WARN} sub="over tolerance" />
+          <Tile label={t("On hand")} value="184,200" sub={t("feet, 3 yards")} />
+          <Tile label={t("With crews")} value="22,450" tone={BRAND} sub={t("issued, not installed")} />
+          <Tile label={t("Variance")} value="1.4%" tone={WARN} sub={t("over tolerance")} />
         </div>
 
         <div className="mt-3 overflow-hidden rounded-lg border" style={{ borderColor: LINE }}>
@@ -407,7 +432,7 @@ export function MaterialShot() {
             className="border-b px-2.5 py-1.5 text-[8.5px] font-bold uppercase tracking-[0.12em]"
             style={{ borderColor: LINE, color: MUTED, background: CARD }}
           >
-            Reel R-88142 · 144ct single mode
+            {t("Reel R-88142 · 144ct single mode")}
           </p>
           {[
             ["Received", "Bellwood yard", "24,000 ft", OK],
@@ -421,10 +446,10 @@ export function MaterialShot() {
               style={{ borderTop: i === 0 ? "none" : `1px solid ${LINE}` }}
             >
               <span className="w-[62px] shrink-0 text-[10px] font-semibold" style={{ color: String(colour) }}>
-                {stage}
+                {t(String(stage))}
               </span>
               <span className="min-w-0 flex-1 truncate text-[10px]" style={{ color: MUTED }}>
-                {where}
+                {t(String(where))}
               </span>
               <span className="shrink-0 text-[10.5px] font-semibold tabular-nums" style={{ color: INK }}>
                 {qty}
@@ -441,11 +466,11 @@ export function MaterialShot() {
  * The spread — the number a prime actually runs on.
  * ------------------------------------------------------------------ */
 
-export function SpreadShot() {
+export function SpreadShot({ t }: { t: T }) {
   return (
     <div className="rounded-2xl border p-5" style={{ borderColor: LINE, background: CARD }}>
       <p className="text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: MUTED }}>
-        One approved daily, both sides of the book
+        {t("One approved daily, both sides of the book")}
       </p>
 
       <div className="mt-4 space-y-3">
@@ -457,14 +482,14 @@ export function SpreadShot() {
           <div key={String(label)}>
             <div className="flex flex-wrap items-baseline justify-between gap-x-2">
               <span className="text-[12.5px] font-semibold" style={{ color: INK }}>
-                {label}
+                {t(String(label))}
               </span>
               <span className="text-[15px] font-bold tabular-nums" style={{ color: String(colour) }}>
                 {amount}
               </span>
             </div>
             <p className="text-[11px] tabular-nums" style={{ color: MUTED }}>
-              {detail}
+              {t(String(detail))}
             </p>
             <div className="mt-1.5 h-2 overflow-hidden rounded-full" style={{ background: "var(--mk-hair)" }}>
               <div className="h-full rounded-full" style={{ width: `${pct}%`, background: String(colour) }} />
@@ -474,8 +499,9 @@ export function SpreadShot() {
       </div>
 
       <p className="mt-4 text-[11.5px] leading-relaxed" style={{ color: MUTED }}>
-        Both numbers come off the same approved daily at each side&rsquo;s own rate card, so the invoice
-        and the crew&rsquo;s statement cannot drift apart. Figures are an illustration.
+        {t(
+          "Both numbers come off the same approved daily at each side’s own rate card, so the invoice and the crew’s statement cannot drift apart. Figures are an illustration.",
+        )}
       </p>
     </div>
   );
@@ -485,9 +511,9 @@ export function SpreadShot() {
  * The pipeline before a project exists.
  * ------------------------------------------------------------------ */
 
-export function CrmShot() {
+export function CrmShot({ t }: { t: T }) {
   return (
-    <Frame label="vantaraiq.com · pipeline">
+    <Frame label="vantaraiq.com · pipeline" t={t}>
       <div className="p-3 sm:p-4">
         <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
           {[
@@ -498,7 +524,7 @@ export function CrmShot() {
           ].map(([s, n, c]) => (
             <div key={String(s)} className="rounded-lg border px-2.5 py-2" style={{ borderColor: LINE, background: CARD }}>
               <p className="truncate text-[8px] font-bold uppercase tracking-[0.1em]" style={{ color: MUTED }}>
-                {s}
+                {t(String(s))}
               </p>
               <p className="text-[16px] font-semibold tabular-nums" style={{ color: String(c) }}>
                 {n}
@@ -523,7 +549,7 @@ export function CrmShot() {
                   {name}
                 </span>
                 <span className="block text-[9.5px]" style={{ color: String(colour) }}>
-                  {stage}
+                  {t(String(stage))}
                 </span>
               </span>
               <span className="hidden shrink-0 text-[10px] tabular-nums sm:block" style={{ color: MUTED }}>
@@ -544,10 +570,10 @@ export function CrmShot() {
  * The phone, which is where a daily is actually filed.
  * ------------------------------------------------------------------ */
 
-export function MobileShot() {
+export function MobileShot({ t }: { t: T }) {
   return (
     <div
-      className="mx-auto w-[236px] overflow-hidden rounded-[2rem] border-[6px] shadow-2xl"
+      className="mx-auto w-[236px] max-w-full overflow-hidden rounded-[2rem] border-[6px] shadow-2xl"
       style={{ borderColor: "var(--mk-line)", background: SURFACE }}
     >
       <div className="flex items-center justify-center py-1.5">
@@ -555,7 +581,7 @@ export function MobileShot() {
       </div>
       <div className="px-3 pb-4">
         <p className="text-[9px] font-bold uppercase tracking-[0.14em]" style={{ color: GOLD }}>
-          Daily
+          {t("Daily")}
         </p>
         <p className="text-[13px] font-bold" style={{ color: INK }}>
           Keener Rd
@@ -567,10 +593,10 @@ export function MobileShot() {
           style={{ borderColor: "color-mix(in srgb, var(--mk-warn) 40%, transparent)", background: "color-mix(in srgb, var(--mk-warn) 9%, transparent)" }}
         >
           <p className="text-[8.5px] font-bold uppercase tracking-[0.1em]" style={{ color: WARN }}>
-            Pre-work required
+            {t("Pre-work required")}
           </p>
           <p className="mt-0.5 text-[10px] leading-snug" style={{ color: WARN }}>
-            Your own locate is not signed off on this street.
+            {t("Your own locate is not signed off on this street.")}
           </p>
         </div>
 
@@ -582,13 +608,13 @@ export function MobileShot() {
           ].map(([a, b]) => (
             <div
               key={String(a)}
-              className="flex items-center justify-between rounded-lg border px-2.5 py-2"
+              className="flex items-center justify-between gap-2 rounded-lg border px-2.5 py-2"
               style={{ borderColor: LINE, background: CARD }}
             >
-              <span className="text-[10.5px]" style={{ color: BODY }}>
-                {a}
+              <span className="min-w-0 truncate text-[10.5px]" style={{ color: BODY }}>
+                {t(String(a))}
               </span>
-              <span className="text-[11px] font-semibold tabular-nums" style={{ color: GOLD }}>
+              <span className="shrink-0 text-[11px] font-semibold tabular-nums" style={{ color: GOLD }}>
                 {b}
               </span>
             </div>
@@ -599,10 +625,10 @@ export function MobileShot() {
           {["Photo", "Redline", "Notes"].map((x) => (
             <span
               key={x}
-              className="rounded-lg border py-2 text-center text-[9.5px]"
+              className="truncate rounded-lg border py-2 text-center text-[9.5px]"
               style={{ borderColor: LINE, color: MUTED }}
             >
-              {x}
+              {t(x)}
             </span>
           ))}
         </div>
@@ -611,7 +637,7 @@ export function MobileShot() {
           className="mt-2.5 rounded-lg py-2.5 text-center text-[11.5px] font-semibold"
           style={{ background: "var(--mk-gold-fill)", color: "var(--mk-on-gold)" }}
         >
-          Submit daily
+          {t("Submit daily")}
         </div>
       </div>
     </div>
@@ -635,7 +661,7 @@ function PhotoSlot({ label, caption, tone }: { label: string; caption: string; t
     <div className="overflow-hidden rounded-lg border" style={{ borderColor: LINE }}>
       <div
         className="flex items-center justify-between px-2 py-1"
-        style={{ background: `${tone}1a` }}
+        style={{ background: `color-mix(in srgb, ${tone} 10%, transparent)` }}
       >
         <span className="text-[8.5px] font-bold uppercase tracking-[0.12em]" style={{ color: tone }}>
           {label}
@@ -656,38 +682,38 @@ function PhotoSlot({ label, caption, tone }: { label: string; caption: string; t
   );
 }
 
-export function TaskShot() {
+export function TaskShot({ t }: { t: T }) {
   return (
-    <Frame label="vantaraiq.com · tasks">
+    <Frame label="vantaraiq.com · tasks" t={t}>
       <div className="p-3 sm:p-4">
         <div className="flex flex-wrap items-center gap-1.5">
           <span
             className="rounded-md px-1.5 py-0.5 text-[8.5px] font-bold uppercase"
             style={{ background: "color-mix(in srgb, var(--mk-bad) 16%, transparent)", color: BAD }}
           >
-            High
+            {t("High")}
           </span>
           <span className="text-[13px] font-bold" style={{ color: INK }}>
-            Pedestal 1847 not installed
+            {t("Pedestal 1847 not installed")}
           </span>
           <span
             className="ml-auto rounded-md px-1.5 py-0.5 text-[8.5px] font-bold uppercase"
             style={{ background: "color-mix(in srgb, var(--mk-warn) 16%, transparent)", color: WARN }}
           >
-            In progress
+            {t("In progress")}
           </span>
         </div>
 
         <div className="mt-1 flex flex-wrap gap-x-3 text-[9.5px]" style={{ color: MUTED }}>
           <span>Ridgeline · ATL-204</span>
-          <span style={{ color: BRAND }}>Pace Boring · Crew 7</span>
-          <span>Due today, 3:00 PM</span>
+          <span style={{ color: BRAND }}>Pace Boring · {t("Crew")} 7</span>
+          <span>{t("Due today, 3:00 PM")}</span>
         </div>
 
         {/* The proof, side by side. This is the part that settles arguments. */}
         <div className="mt-3 grid grid-cols-2 gap-2">
-          <PhotoSlot label="Before" caption="Reported 9:12 AM" tone={BAD} />
-          <PhotoSlot label="After" caption="Attached 1:47 PM" tone={OK} />
+          <PhotoSlot label={t("Before")} caption={t("Reported 9:12 AM")} tone={BAD} />
+          <PhotoSlot label={t("After")} caption={t("Attached 1:47 PM")} tone={OK} />
         </div>
 
         {/* Office and field, in one place, against the job. */}
@@ -696,7 +722,7 @@ export function TaskShot() {
             className="border-b px-2.5 py-1.5 text-[8.5px] font-bold uppercase tracking-[0.12em]"
             style={{ borderColor: LINE, color: MUTED, background: CARD }}
           >
-            Activity
+            {t("Activity")}
           </p>
           {[
             ["10:42", "Office", "Raised with photo, assigned to Crew 7", MUTED],
@@ -705,20 +731,20 @@ export function TaskShot() {
             ["12:32", "Foreman", "Need another pedestal from the yard", INK],
             ["12:34", "Office", "Materials on the way", INK],
             ["1:47", "Foreman", "Photo attached, marked done", OK],
-          ].map(([t, who, what, colour], i) => (
+          ].map(([at, who, what, colour], i) => (
             <div
-              key={String(t) + String(what)}
+              key={String(at) + String(what)}
               className="flex gap-2 px-2.5 py-[6px]"
               style={{ borderTop: i === 0 ? "none" : `1px solid ${LINE}` }}
             >
               <span className="w-[34px] shrink-0 text-[9px] tabular-nums" style={{ color: MUTED }}>
-                {t}
+                {at}
               </span>
               <span className="w-[48px] shrink-0 text-[9px] font-semibold" style={{ color: MUTED }}>
-                {who}
+                {t(String(who))}
               </span>
               <span className="min-w-0 flex-1 text-[10px]" style={{ color: String(colour) }}>
-                {what}
+                {t(String(what))}
               </span>
             </div>
           ))}
@@ -732,9 +758,9 @@ export function TaskShot() {
  * A crew you have not hired yet, and what you know about them.
  * ------------------------------------------------------------------ */
 
-export function CapabilityShot() {
+export function CapabilityShot({ t }: { t: T }) {
   return (
-    <Frame label="vantaraiq.com · prospects">
+    <Frame label="vantaraiq.com · prospects" t={t}>
       <div className="p-3 sm:p-4">
         <div className="flex flex-wrap items-center gap-1.5">
           <span className="text-[13px] font-bold" style={{ color: INK }}>
@@ -744,19 +770,19 @@ export function CapabilityShot() {
             className="rounded-md px-1.5 py-0.5 text-[8.5px] font-bold uppercase"
             style={{ background: "color-mix(in srgb, var(--mk-brand) 16%, transparent)", color: BRAND }}
           >
-            Prequalified
+            {t("Prequalified")}
           </span>
           <span className="ml-auto text-right">
             <span className="block text-[15px] font-bold tabular-nums" style={{ color: OK }}>
               78
             </span>
             <span className="block text-[8px] font-bold uppercase tracking-[0.1em]" style={{ color: MUTED }}>
-              Score
+              {t("Score")}
             </span>
           </span>
         </div>
         <p className="mt-0.5 text-[9.5px]" style={{ color: MUTED }}>
-          3 crews free · available now · works GA, SC
+          {t("3 crews free · available now · works GA, SC")}
         </p>
 
         {/* The score, shown as its parts. A number on its own is a number
@@ -766,7 +792,7 @@ export function CapabilityShot() {
             className="border-b px-2.5 py-1.5 text-[8.5px] font-bold uppercase tracking-[0.12em]"
             style={{ borderColor: LINE, color: MUTED, background: CARD }}
           >
-            Why 78
+            {t("Why 78")}
           </p>
           {[
             ["Capacity", "20/20", "3 crews they say are free", OK],
@@ -781,14 +807,14 @@ export function CapabilityShot() {
               className="flex items-center gap-2 px-2.5 py-[6px]"
               style={{ borderTop: i === 0 ? "none" : `1px solid ${LINE}` }}
             >
-              <span className="w-[74px] shrink-0 text-[10px] font-medium" style={{ color: INK }}>
-                {what}
+              <span className="w-[74px] shrink-0 truncate text-[10px] font-medium" style={{ color: INK }}>
+                {t(String(what))}
               </span>
               <span className="w-[38px] shrink-0 text-[10px] font-semibold tabular-nums" style={{ color: String(colour) }}>
                 {score}
               </span>
               <span className="min-w-0 flex-1 truncate text-[9.5px]" style={{ color: MUTED }}>
-                {why}
+                {t(String(why))}
               </span>
             </div>
           ))}
@@ -797,23 +823,27 @@ export function CapabilityShot() {
         <div className="mt-2.5 grid grid-cols-2 gap-2">
           <div className="rounded-lg border p-2.5" style={{ borderColor: LINE, background: CARD }}>
             <p className="text-[8px] font-bold uppercase tracking-[0.1em]" style={{ color: MUTED }}>
-              Equipment
+              {t("Equipment")}
             </p>
             {[["Directional drill", "2 owned"], ["Plough", "1 owned"], ["Vac trailer", "rented"]].map(([a, bq]) => (
-              <p key={String(a)} className="mt-1 flex justify-between text-[9.5px]" style={{ color: BODY }}>
-                <span>{a}</span>
-                <span style={{ color: MUTED }}>{bq}</span>
+              <p key={String(a)} className="mt-1 flex justify-between gap-2 text-[9.5px]" style={{ color: BODY }}>
+                <span className="min-w-0 truncate">{t(a)}</span>
+                <span className="shrink-0" style={{ color: MUTED }}>
+                  {t(bq)}
+                </span>
               </p>
             ))}
           </div>
           <div className="rounded-lg border p-2.5" style={{ borderColor: LINE, background: CARD }}>
             <p className="text-[8px] font-bold uppercase tracking-[0.1em]" style={{ color: MUTED }}>
-              What they run
+              {t("What they run")}
             </p>
             {[["Directional bore", "900 ft/day"], ["Plough", "2,400 ft/day"], ["Splicing", "occasional"]].map(([a, bq]) => (
-              <p key={String(a)} className="mt-1 flex justify-between text-[9.5px]" style={{ color: BODY }}>
-                <span>{a}</span>
-                <span style={{ color: GOLD }}>{bq}</span>
+              <p key={String(a)} className="mt-1 flex justify-between gap-2 text-[9.5px]" style={{ color: BODY }}>
+                <span className="min-w-0 truncate">{t(a)}</span>
+                <span className="shrink-0" style={{ color: GOLD }}>
+                  {t(bq)}
+                </span>
               </p>
             ))}
           </div>

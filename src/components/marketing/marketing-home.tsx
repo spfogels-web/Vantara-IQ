@@ -37,6 +37,8 @@ import {
   SpreadShot,
   TaskShot,
 } from "@/components/marketing/shots";
+import { getT } from "@/lib/i18n-server";
+import type { T } from "@/lib/i18n";
 
 /**
  * The public site.
@@ -64,6 +66,12 @@ import {
  *   a photograph have no models behind them, so they sit under a heading that
  *   says they are not built yet rather than among the features. A contractor
  *   who buys on a promise finds out in week one.
+ *
+ * Every English sentence goes through `t()` rather than being written inline.
+ * The crews these contractors run are largely Spanish-speaking, and a page that
+ * sells a Spanish product in English only is arguing against itself. Keyed by
+ * the English sentence, so an untranslated one reads as English rather than as
+ * a missing key — see `src/lib/i18n-marketing.ts`.
  */
 
 const INK = "var(--mk-ink)";
@@ -76,7 +84,9 @@ const CARD = "var(--mk-card)";
 const GOLD_FILL = "var(--mk-gold-fill)";
 const ON_GOLD = "var(--mk-on-gold)";
 
-export function MarketingHome() {
+export async function MarketingHome() {
+  const t = await getT();
+
   return (
     <div className="mk min-h-svh" style={{ background: "var(--mk-bg)", color: INK }}>
       {/* The palette, in both inks.
@@ -101,13 +111,24 @@ export function MarketingHome() {
           --mk-ink: #0b1220;
           --mk-body: #33415a;
           --mk-muted: #55647c;
-          --mk-gold: #8a5d0a;
+          /* Gold text on light is a deeper bronze than the gold on dark, and
+             deeper again than it looks like it needs to be: the small uppercase
+             labels sit on a 12% wash of gold itself, so the text and its own
+             background move together and the gap has to be opened deliberately.
+             The filled buttons below are a separate token and stay bright. */
+          --mk-gold: #6f4a06;
           --mk-gold-fill: #e0a82e;
           --mk-on-gold: #1a1204;
           --mk-brand: #4338ca;
-          --mk-ok: #047857;
-          --mk-warn: #a45c05;
-          --mk-bad: #b91c1c;
+          /* The status colours are darker on light than the palette a designer
+             would pick for a swatch, because they are never used on plain
+             white — the badges in the mockups print them on an 8–16% wash of
+             themselves, at 8.5px, uppercase. Measured against that composited
+             background rather than against the page, which is the mistake that
+             let them ship at 3.5:1. */
+          --mk-ok: #05603f;
+          --mk-warn: #6e3f05;
+          --mk-bad: #a01212;
           --mk-h1-from: #0b1220;
           --mk-h1-to: #44536b;
           --mk-grid: rgba(15,23,42,0.05);
@@ -137,32 +158,32 @@ export function MarketingHome() {
           --mk-wash-b: rgba(224,168,46,0.16);
         }
       `}</style>
-      <Header />
-      <Hero />
-      <Lifecycle />
-      <Assistant />
-      <OpsCenter />
-      <FieldToInvoice />
-      <Accountability />
-      <Locates />
-      <Materials />
-      <Subs />
-      <Pipeline />
-      <Modules />
-      <Industries />
-      <Difference />
-      <Security />
-      <Roadmap />
-      <Pricing />
-      <Demo />
-      <Footer />
+      <Header t={t} />
+      <Hero t={t} />
+      <Lifecycle t={t} />
+      <Assistant t={t} />
+      <OpsCenter t={t} />
+      <FieldToInvoice t={t} />
+      <Accountability t={t} />
+      <Locates t={t} />
+      <Materials t={t} />
+      <Subs t={t} />
+      <Pipeline t={t} />
+      <Modules t={t} />
+      <Industries t={t} />
+      <Difference t={t} />
+      <Security t={t} />
+      <Roadmap t={t} />
+      <Pricing t={t} />
+      <Demo t={t} />
+      <Footer t={t} />
     </div>
   );
 }
 
 /* ------------------------------------------------------------------ */
 
-function Header() {
+function Header({ t }: { t: T }) {
   return (
     <header
       className="sticky top-0 z-30 border-b backdrop-blur-md"
@@ -183,7 +204,7 @@ function Header() {
               className="hidden rounded-lg px-2.5 py-1.5 text-[13px] font-medium transition-colors hover:text-white md:inline-flex"
               style={{ color: BODY }}
             >
-              {label}
+              {t(label)}
             </a>
           ))}
           {/* Theme and language, the same controls the application uses rather
@@ -203,14 +224,21 @@ function Header() {
             className="inline-flex h-9 items-center rounded-lg border px-3.5 text-[13px] font-semibold transition-colors hover:bg-[color-mix(in_srgb,var(--mk-ink)_10%,transparent)]"
             style={{ borderColor: "var(--mk-line)", color: INK }}
           >
-            Sign in
+            {t("Sign in")}
           </Link>
+          {/* Off the header on a phone.
+              The logo, both toggles, Sign in and this button do not fit in
+              390px — the row ran 29px off the screen in English and 75px in
+              Spanish, which is a sideways scroll on the first thing a
+              prospect sees. The hero's own Request a demo sits a few hundred
+              pixels below it and says the same thing, so the header keeps the
+              control an existing customer needs and drops the duplicate. */}
           <a
             href="#demo"
-            className="inline-flex h-9 items-center rounded-lg px-3.5 text-[13px] font-semibold transition-transform hover:-translate-y-px"
+            className="hidden h-9 items-center rounded-lg px-3.5 text-[13px] font-semibold transition-transform hover:-translate-y-px sm:inline-flex"
             style={{ background: GOLD_FILL, color: ON_GOLD, boxShadow: "0 8px 24px -10px rgba(224,168,46,0.55)" }}
           >
-            Request a demo
+            {t("Request a demo")}
           </a>
         </nav>
       </div>
@@ -218,7 +246,7 @@ function Header() {
   );
 }
 
-function Hero() {
+function Hero({ t }: { t: T }) {
   return (
     <section className="relative overflow-hidden">
       <div
@@ -249,7 +277,7 @@ function Hero() {
             className="inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11.5px] font-bold uppercase tracking-[0.13em]"
             style={{ borderColor: "rgba(224,168,46,0.35)", background: "rgba(224,168,46,0.08)", color: GOLD }}
           >
-            Built for infrastructure contractors
+            {t("Built for infrastructure contractors")}
           </p>
 
           <h1
@@ -261,16 +289,18 @@ function Hero() {
               color: "transparent",
             }}
           >
-            The operating system for infrastructure construction
+            {t("The operating system for infrastructure construction")}
           </h1>
 
           <p className="mt-5 max-w-2xl text-[16.5px] leading-relaxed sm:text-[19px]" style={{ color: BODY }}>
-            Vantara IQ connects your projects, crews, dailies, redlines, locates, materials, billing,
-            subcontractors and financial intelligence in one platform.
+            {t(
+              "Vantara IQ connects your projects, crews, dailies, redlines, locates, materials, billing, subcontractors and financial intelligence in one platform.",
+            )}
           </p>
           <p className="mt-3 max-w-2xl text-[15px] leading-relaxed" style={{ color: MUTED }}>
-            From underground and aerial fibre to power, gas, water and civil infrastructure — know
-            exactly what is happening across your operation.
+            {t(
+              "From underground and aerial fibre to power, gas, water and civil infrastructure — know exactly what is happening across your operation.",
+            )}
           </p>
 
           <div className="mt-8 flex flex-wrap items-center gap-2.5">
@@ -279,14 +309,14 @@ function Hero() {
               className="inline-flex h-12 items-center gap-2 rounded-xl px-6 text-[15px] font-semibold transition-transform hover:-translate-y-px"
               style={{ background: GOLD_FILL, color: ON_GOLD, boxShadow: "0 14px 34px -12px rgba(224,168,46,0.6)" }}
             >
-              Request a demo <ArrowRight className="size-4" />
+              {t("Request a demo")} <ArrowRight className="size-4 shrink-0" />
             </a>
             <a
               href="#platform"
               className="inline-flex h-12 items-center rounded-xl border px-6 text-[15px] font-semibold transition-colors hover:bg-[color-mix(in_srgb,var(--mk-ink)_7%,transparent)]"
               style={{ borderColor: "var(--mk-line)", color: INK }}
             >
-              Explore the platform
+              {t("Explore the platform")}
             </a>
           </div>
         </div>
@@ -297,17 +327,17 @@ function Hero() {
             className="absolute -inset-6 -z-10 rounded-[2rem] opacity-70 blur-2xl"
             style={{ background: "radial-gradient(55% 55% at 50% 40%, rgba(79,140,255,0.26), transparent 70%)" }}
           />
-          <OpsCenterShot />
+          <OpsCenterShot t={t} />
         </div>
 
         <div className="mt-8 flex flex-wrap items-center gap-x-2 gap-y-2">
-          {["Underground", "Aerial", "Fibre", "Telecom", "Power", "Gas", "Water", "Civil"].map((t) => (
+          {["Underground", "Aerial", "Fibre", "Telecom", "Power", "Gas", "Water", "Civil"].map((x) => (
             <span
-              key={t}
+              key={x}
               className="rounded-full border px-3 py-1 text-[12px] font-medium"
               style={{ borderColor: HAIR, color: MUTED, background: CARD }}
             >
-              {t}
+              {t(x)}
             </span>
           ))}
         </div>
@@ -319,7 +349,7 @@ function Hero() {
 /* ------------------------------------------------------------------ */
 
 /** The chain, which is the whole argument. */
-function Lifecycle() {
+function Lifecycle({ t }: { t: T }) {
   const phases: [string, string, string[]][] = [
     ["Win it", GOLD, ["Opportunity", "Estimate", "Award"]],
     ["Plan it", "var(--mk-brand)", ["Project", "Engineering", "Locates", "Materials"]],
@@ -332,13 +362,12 @@ function Lifecycle() {
     <section className="border-t" style={{ borderColor: HAIR, background: "var(--mk-card)" }}>
       <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
         <h2 className="max-w-2xl text-[27px] font-bold tracking-[-0.015em] sm:text-[36px]">
-          One system. From field production to financial performance.
+          {t("One system. From field production to financial performance.")}
         </h2>
         <p className="mt-4 max-w-2xl text-[15.5px] leading-relaxed" style={{ color: BODY }}>
-          Most infrastructure contractors run on paper dailies, PDFs, spreadsheets, text messages,
-          an 811 portal, accounting software, a separate inventory list, rate sheets, engineering
-          maps and subcontractor invoices. Every handoff between them is somewhere a number gets
-          retyped, and every retyped number is somewhere the story stops matching.
+          {t(
+            "Most infrastructure contractors run on paper dailies, PDFs, spreadsheets, text messages, an 811 portal, accounting software, a separate inventory list, rate sheets, engineering maps and subcontractor invoices. Every handoff between them is somewhere a number gets retyped, and every retyped number is somewhere the story stops matching.",
+          )}
         </p>
 
         <div className="mt-10 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -350,9 +379,12 @@ function Lifecycle() {
             >
               <span
                 className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.09em]"
-                style={{ background: `${colour}1f`, color: colour }}
+                // color-mix, not a hex alpha suffix: these colours are CSS
+                // variables now, and `var(--mk-gold)1f` is not a colour — it
+                // parses as nothing and the tint silently disappears.
+                style={{ background: `color-mix(in srgb, ${colour} 12%, transparent)`, color: colour }}
               >
-                {String(i + 1).padStart(2, "0")} · {phase}
+                {String(i + 1).padStart(2, "0")} · {t(phase)}
               </span>
               <ul className="mt-3 space-y-1.5">
                 {steps.map((s) => (
@@ -361,7 +393,7 @@ function Lifecycle() {
                       className="mt-[7px] size-1 shrink-0 rounded-full"
                       style={{ background: colour }}
                     />
-                    {s}
+                    {t(s)}
                   </li>
                 ))}
               </ul>
@@ -371,7 +403,7 @@ function Lifecycle() {
                 <span
                   aria-hidden
                   className="absolute -right-[7px] top-1/2 hidden size-3 -translate-y-1/2 rotate-45 border-r border-t lg:block"
-                  style={{ borderColor: "rgba(255,255,255,0.2)", background: "#0a1019" }}
+                  style={{ borderColor: "var(--mk-line)", background: "var(--mk-bg)" }}
                 />
               ) : null}
             </div>
@@ -379,9 +411,9 @@ function Lifecycle() {
         </div>
 
         <p className="mt-6 max-w-3xl text-[14.5px] leading-relaxed" style={{ color: MUTED }}>
-          Each step feeds the next. The footage a crew files becomes the invoice to your customer,
-          the crew&rsquo;s own pay statement and the project&rsquo;s margin — off one filing, at each side&rsquo;s own
-          rate card, with a trail back from any figure to the daily it came from.
+          {t(
+            "Each step feeds the next. The footage a crew files becomes the invoice to your customer, the crew’s own pay statement and the project’s margin — off one filing, at each side’s own rate card, with a trail back from any figure to the daily it came from.",
+          )}
         </p>
       </div>
     </section>
@@ -390,7 +422,7 @@ function Lifecycle() {
 
 /* ------------------------------------------------------------------ */
 
-function Assistant() {
+function Assistant({ t }: { t: T }) {
   return (
     <section id="ai" className="border-t" style={{ borderColor: HAIR }}>
       <div className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-10 px-4 py-16 sm:px-6 sm:py-24 lg:grid-cols-[1fr_1.1fr]">
@@ -402,12 +434,12 @@ function Assistant() {
             <Brain className="size-5" />
           </span>
           <h2 className="mt-4 text-[27px] font-bold tracking-[-0.015em] sm:text-[36px]">
-            Ask your operation anything.
+            {t("Ask your operation anything.")}
           </h2>
           <p className="mt-4 text-[15.5px] leading-relaxed" style={{ color: BODY }}>
-            Your operational data should not just sit in a database. Ask it what happened today,
-            which projects are behind, which crews have not filed, what is ready to bill — and get an
-            answer built from your own records rather than a guess.
+            {t(
+              "Your operational data should not just sit in a database. Ask it what happened today, which projects are behind, which crews have not filed, what is ready to bill — and get an answer built from your own records rather than a guess.",
+            )}
           </p>
 
           <ul className="mt-6 space-y-2">
@@ -423,35 +455,35 @@ function Assistant() {
                 className="rounded-lg border px-3 py-2 text-[13.5px]"
                 style={{ borderColor: HAIR, background: CARD, color: BODY }}
               >
-                &ldquo;{q}&rdquo;
+                &ldquo;{t(q)}&rdquo;
               </li>
             ))}
           </ul>
 
           <p className="mt-5 text-[13px] leading-relaxed" style={{ color: MUTED }}>
-            It answers from the records it is given and says when it has none. It will not call a
-            street clear because the sentence would read better that way.
+            {t(
+              "It answers from the records it is given and says when it has none. It will not call a street clear because the sentence would read better that way.",
+            )}
           </p>
         </div>
 
-        <AssistantShot />
+        <AssistantShot t={t} />
       </div>
     </section>
   );
 }
 
-function OpsCenter() {
+function OpsCenter({ t }: { t: T }) {
   return (
     <section id="platform" className="border-t" style={{ borderColor: HAIR, background: "var(--mk-card)" }}>
       <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
         <h2 className="max-w-2xl text-[27px] font-bold tracking-[-0.015em] sm:text-[36px]">
-          Your entire operation. One screen.
+          {t("Your entire operation. One screen.")}
         </h2>
         <p className="mt-4 max-w-2xl text-[15.5px] leading-relaxed" style={{ color: BODY }}>
-          Production today, this week and this month. What is approved and ready to bill. Which
-          projects are behind, which locates are blocking crews, which dailies never arrived. Then
-          drill from the company down to a market, a project, a crew, a day, a single line of
-          production.
+          {t(
+            "Production today, this week and this month. What is approved and ready to bill. Which projects are behind, which locates are blocking crews, which dailies never arrived. Then drill from the company down to a market, a project, a crew, a day, a single line of production.",
+          )}
         </p>
 
         <div className="mt-10 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -460,14 +492,14 @@ function OpsCenter() {
             ["Market", "How a region is performing against target"],
             ["Project", "Rates, crews, margin, documents, locates"],
             ["Crew · Daily · Line", "Down to the individual production item"],
-          ].map(([t, d], i) => (
-            <div key={t} className="rounded-2xl border p-4" style={{ borderColor: HAIR, background: CARD }}>
+          ].map(([label, d], i) => (
+            <div key={label} className="rounded-2xl border p-4" style={{ borderColor: HAIR, background: CARD }}>
               <p className="text-[10px] font-bold uppercase tracking-[0.1em]" style={{ color: MUTED }}>
-                Level {i + 1}
+                {t("Level")} {i + 1}
               </p>
-              <p className="mt-1.5 text-[14.5px] font-semibold">{t}</p>
+              <p className="mt-1.5 text-[14.5px] font-semibold">{t(label)}</p>
               <p className="mt-1 text-[12.5px] leading-relaxed" style={{ color: MUTED }}>
-                {d}
+                {t(d)}
               </p>
             </div>
           ))}
@@ -477,25 +509,25 @@ function OpsCenter() {
   );
 }
 
-function FieldToInvoice() {
+function FieldToInvoice({ t }: { t: T }) {
   return (
     <section className="border-t" style={{ borderColor: HAIR }}>
       <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
         <h2 className="max-w-2xl text-[27px] font-bold tracking-[-0.015em] sm:text-[36px]">
-          One daily drives the entire workflow.
+          {t("One daily drives the entire workflow.")}
         </h2>
         <p className="mt-4 max-w-2xl text-[15.5px] leading-relaxed" style={{ color: BODY }}>
-          A crew files production from the truck with the redlined map and the photos attached. A
-          supervisor reviews it. From that one approval comes the customer invoice, the crew&rsquo;s pay
-          statement, the retainage held on both sides, and the project&rsquo;s margin.
+          {t(
+            "A crew files production from the truck with the redlined map and the photos attached. A supervisor reviews it. From that one approval comes the customer invoice, the crew’s pay statement, the retainage held on both sides, and the project’s margin.",
+          )}
         </p>
 
         <div className="mt-10 grid grid-cols-1 items-start gap-8 lg:grid-cols-[1fr_1fr]">
-          <DailyShot />
+          <DailyShot t={t} />
           <div className="grid grid-cols-1 gap-8 sm:grid-cols-[1fr_auto] lg:grid-cols-1">
-            <SpreadShot />
+            <SpreadShot t={t} />
             <div className="lg:hidden">
-              <MobileShot />
+              <MobileShot t={t} />
             </div>
           </div>
         </div>
@@ -509,20 +541,21 @@ function FieldToInvoice() {
               <Smartphone className="size-5" />
             </span>
             <h3 className="mt-4 text-[21px] font-semibold tracking-[-0.01em]">
-              Filed from the truck, not the office
+              {t("Filed from the truck, not the office")}
             </h3>
             <p className="mt-2.5 max-w-lg text-[14.5px] leading-relaxed" style={{ color: BODY }}>
-              Big targets, little typing, photographs first. A foreman opens the job, enters what
-              went in the ground, marks the map, attaches the photos and submits — in the time it
-              takes to finish a coffee.
+              {t(
+                "Big targets, little typing, photographs first. A foreman opens the job, enters what went in the ground, marks the map, attaches the photos and submits — in the time it takes to finish a coffee.",
+              )}
             </p>
             <p className="mt-3 max-w-lg text-[14.5px] leading-relaxed" style={{ color: MUTED }}>
-              And if a locate the crew is responsible for has not been signed off, the sheet says so
-              before they start, not after.
+              {t(
+                "And if a locate the crew is responsible for has not been signed off, the sheet says so before they start, not after.",
+              )}
             </p>
           </div>
           <div className="hidden lg:block">
-            <MobileShot />
+            <MobileShot t={t} />
           </div>
         </div>
       </div>
@@ -544,7 +577,7 @@ function FieldToInvoice() {
  * because a contractor shown a verification workflow in a demo will look for
  * it in week one.
  */
-function Accountability() {
+function Accountability({ t }: { t: T }) {
   return (
     <section className="border-t" style={{ borderColor: HAIR, background: "var(--mk-card)" }}>
       <div className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-10 px-4 py-16 sm:px-6 sm:py-24 lg:grid-cols-[1fr_1.05fr]">
@@ -556,29 +589,44 @@ function Accountability() {
             <ClipboardCheck className="size-5" />
           </span>
           <h2 className="mt-4 text-[27px] font-bold tracking-[-0.015em] sm:text-[36px]">
-            When something is wrong in the field, one person owns it.
+            {t("When something is wrong in the field, one person owns it.")}
           </h2>
           <p className="mt-4 text-[15.5px] leading-relaxed" style={{ color: BODY }}>
-            A pedestal that never went in. A handhole left open. A redline nobody sent. Raise it
-            against the job with a photograph of what you found, put one name on it, and the
-            foreman gets a text where he is standing.
+            {t(
+              "A pedestal that never went in. A handhole left open. A redline nobody sent. Raise it against the job with a photograph of what you found, put one name on it, and the foreman gets a text where he is standing.",
+            )}
           </p>
 
           <ul className="mt-6 space-y-2.5">
             {[
-              ["The photograph of the fault, and the photograph of the fix", "Held as two different things and shown side by side. It settles an argument words never will."],
-              ["One owner, never two", "An employee or a crew — the system refuses both, so nobody can assume the other one had it."],
-              ["A text, not an email nobody opens", "Sent the moment it is assigned, to the company number and to every person the crew has invited."],
-              ["The conversation lives on the job", "Office and field talking in one thread against the project, not in somebody's phone."],
+              [
+                "The photograph of the fault, and the photograph of the fix",
+                "Held as two different things and shown side by side. It settles an argument words never will.",
+              ],
+              [
+                "One owner, never two",
+                "An employee or a crew — the system refuses both, so nobody can assume the other one had it.",
+              ],
+              [
+                "A text, not an email nobody opens",
+                "Sent the moment it is assigned, to the company number and to every person the crew has invited.",
+              ],
+              [
+                "The conversation lives on the job",
+                "Office and field talking in one thread against the project, not in somebody's phone.",
+              ],
               ["Blocked needs a reason", "You cannot park a task without saying what it is waiting on."],
-              ["Crews see only their own", "Scoped in the query. One crew cannot read another crew's problems."],
-            ].map(([t, d]) => (
-              <li key={t} className="flex gap-2.5">
+              [
+                "Crews see only their own",
+                "Scoped in the query. One crew cannot read another crew's problems.",
+              ],
+            ].map(([label, d]) => (
+              <li key={label} className="flex gap-2.5">
                 <CheckCircle2 className="mt-0.5 size-4 shrink-0" style={{ color: GOLD }} />
                 <span className="min-w-0">
-                  <span className="block text-[14.5px] font-semibold">{t}</span>
+                  <span className="block text-[14.5px] font-semibold">{t(label)}</span>
                   <span className="block text-[13.5px] leading-relaxed" style={{ color: BODY }}>
-                    {d}
+                    {t(d)}
                   </span>
                 </span>
               </li>
@@ -586,18 +634,19 @@ function Accountability() {
           </ul>
 
           <p className="mt-5 text-[13.5px] leading-relaxed" style={{ color: MUTED }}>
-            Every task stays on that project&rsquo;s record, so the punch list at closeout is the list of
-            what was actually raised and what was actually done about it.
+            {t(
+              "Every task stays on that project’s record, so the punch list at closeout is the list of what was actually raised and what was actually done about it.",
+            )}
           </p>
         </div>
 
-        <TaskShot />
+        <TaskShot t={t} />
       </div>
     </section>
   );
 }
 
-function Locates() {
+function Locates({ t }: { t: T }) {
   return (
     <section className="border-t" style={{ borderColor: HAIR, background: "var(--mk-card)" }}>
       <div className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-10 px-4 py-16 sm:px-6 sm:py-24 lg:grid-cols-[1fr_1.05fr]">
@@ -609,12 +658,12 @@ function Locates() {
             <MapPin className="size-5" />
           </span>
           <h2 className="mt-4 text-[27px] font-bold tracking-[-0.015em] sm:text-[36px]">
-            Know before you dig.
+            {t("Know before you dig.")}
           </h2>
           <p className="mt-4 text-[15.5px] leading-relaxed" style={{ color: BODY }}>
-            Every 811 ticket with its clock, every utility&rsquo;s response, and the one distinction that
-            matters most: a ticket can be entirely clear with 811 and still not safe to open the
-            ground, because the locate on your own plant has not been walked.
+            {t(
+              "Every 811 ticket with its clock, every utility’s response, and the one distinction that matters most: a ticket can be entirely clear with 811 and still not safe to open the ground, because the locate on your own plant has not been walked.",
+            )}
           </p>
 
           <div className="mt-6 flex flex-wrap gap-1.5">
@@ -628,30 +677,35 @@ function Locates() {
               <span
                 key={label}
                 className="rounded-md border px-2 py-1 text-[11.5px] font-semibold"
-                style={{ borderColor: `${colour}59`, background: `${colour}14`, color: colour }}
+                style={{
+                  borderColor: `color-mix(in srgb, ${colour} 35%, transparent)`,
+                  background: `color-mix(in srgb, ${colour} 8%, transparent)`,
+                  color: colour,
+                }}
               >
-                {label}
+                {t(label)}
               </span>
             ))}
           </div>
 
           <p className="mt-5 text-[13.5px] leading-relaxed" style={{ color: MUTED }}>
-            Who performs which locate is set per project, so a utility your own crews walk stops
-            holding up the ticket and starts holding up the dig — which is the truthful way round.
+            {t(
+              "Who performs which locate is set per project, so a utility your own crews walk stops holding up the ticket and starts holding up the dig — which is the truthful way round.",
+            )}
           </p>
         </div>
 
-        <LocateShot />
+        <LocateShot t={t} />
       </div>
     </section>
   );
 }
 
-function Materials() {
+function Materials({ t }: { t: T }) {
   return (
     <section className="border-t" style={{ borderColor: HAIR }}>
       <div className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-10 px-4 py-16 sm:px-6 sm:py-24 lg:grid-cols-[1.05fr_1fr]">
-        <MaterialShot />
+        <MaterialShot t={t} />
         <div>
           <span
             className="grid size-10 place-items-center rounded-xl"
@@ -660,16 +714,17 @@ function Materials() {
             <Boxes className="size-5" />
           </span>
           <h2 className="mt-4 text-[27px] font-bold tracking-[-0.015em] sm:text-[36px]">
-            Know where every reel went.
+            {t("Know where every reel went.")}
           </h2>
           <p className="mt-4 text-[15.5px] leading-relaxed" style={{ color: BODY }}>
-            Receiving, yard, checkout, crew, project, installed. Fibre reels by number, conduit,
-            vaults, handholes, pedestals, hardware — held by yard, so a reel in one yard is
-            never confused with one three counties away.
+            {t(
+              "Receiving, yard, checkout, crew, project, installed. Fibre reels by number, conduit, vaults, handholes, pedestals, hardware — held by yard, so a reel in one yard is never confused with one three counties away.",
+            )}
           </p>
           <p className="mt-3 text-[15px] leading-relaxed" style={{ color: BODY }}>
-            What was issued against what the dailies say went in the ground, with a tolerance. A
-            variance outside it is raised with a reason attached rather than quietly written off.
+            {t(
+              "What was issued against what the dailies say went in the ground, with a tolerance. A variance outside it is raised with a reason attached rather than quietly written off.",
+            )}
           </p>
         </div>
       </div>
@@ -677,44 +732,57 @@ function Materials() {
   );
 }
 
-function Subs() {
+function Subs({ t }: { t: T }) {
   return (
     <section className="border-t" style={{ borderColor: HAIR, background: "var(--mk-card)" }}>
       <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
         <h2 className="max-w-2xl text-[27px] font-bold tracking-[-0.015em] sm:text-[36px]">
-          Manage every subcontractor without losing control of your numbers.
+          {t("Manage every subcontractor without losing control of your numbers.")}
         </h2>
         <p className="mt-4 max-w-2xl text-[15.5px] leading-relaxed" style={{ color: BODY }}>
-          W-9, insurance, signed agreements, ACH and yard badges, chased by the system until the
-          file is complete — a crew cannot be assigned work until it is. The packet stays on your
-          side of the fence: you hold the record, not a folder on somebody&rsquo;s laptop.
+          {t(
+            "W-9, insurance, signed agreements, ACH and yard badges, chased by the system until the file is complete — a crew cannot be assigned work until it is. The packet stays on your side of the fence: you hold the record, not a folder on somebody’s laptop.",
+          )}
         </p>
 
         {/* The half a prime usually underestimates: the crew is doing work in
             here too, which is what stops the office re-keying it. */}
         <div className="mt-9 rounded-2xl border p-6" style={{ borderColor: HAIR, background: CARD }}>
           <h3 className="text-[19px] font-semibold tracking-[-0.01em]">
-            Every crew gets a login of their own
+            {t("Every crew gets a login of their own")}
           </h3>
           <p className="mt-2 max-w-2xl text-[14.5px] leading-relaxed" style={{ color: BODY }}>
-            Assign them a project and they work inside it — which is what stops your office
-            re-typing what they have already written down.
+            {t(
+              "Assign them a project and they work inside it — which is what stops your office re-typing what they have already written down.",
+            )}
           </p>
           <div className="mt-5 grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2">
             {[
               ["File their own dailies", "Production on your customer's form, from the truck."],
-              ["Redline the map and attach the as-built", "Marked on the job's own map, tied to that day's production."],
-              ["Check and accept their statement", "Or dispute it with a reason, which comes back to your office."],
+              [
+                "Redline the map and attach the as-built",
+                "Marked on the job's own map, tied to that day's production.",
+              ],
+              [
+                "Check and accept their statement",
+                "Or dispute it with a reason, which comes back to your office.",
+              ],
               ["Take the remittance advice", "Their own payment record, downloadable, nobody else's."],
-              ["Invite their own people", "Owner, office admin, project manager, supervisor, foreman — each with their own access."],
-              ["Send in their locate tickets", "Filed to their company, and they see the clock on each one."],
-            ].map(([t, d]) => (
-              <div key={t} className="flex gap-2.5">
+              [
+                "Invite their own people",
+                "Owner, office admin, project manager, supervisor, foreman — each with their own access.",
+              ],
+              [
+                "Send in their locate tickets",
+                "Filed to their company, and they see the clock on each one.",
+              ],
+            ].map(([label, d]) => (
+              <div key={label} className="flex gap-2.5">
                 <CheckCircle2 className="mt-0.5 size-4 shrink-0" style={{ color: GOLD }} />
                 <span className="min-w-0">
-                  <span className="block text-[14px] font-semibold">{t}</span>
+                  <span className="block text-[14px] font-semibold">{t(label)}</span>
                   <span className="block text-[13px] leading-relaxed" style={{ color: MUTED }}>
-                    {d}
+                    {t(d)}
                   </span>
                 </span>
               </div>
@@ -725,7 +793,7 @@ function Subs() {
         <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-2">
           <div className="rounded-2xl border p-5" style={{ borderColor: "rgba(52,211,153,0.35)", background: "rgba(52,211,153,0.05)" }}>
             <p className="text-[11px] font-bold uppercase tracking-[0.1em]" style={{ color: "var(--mk-ok)" }}>
-              What a subcontractor sees
+              {t("What a subcontractor sees")}
             </p>
             <ul className="mt-3 space-y-1.5">
               {[
@@ -736,7 +804,7 @@ function Subs() {
               ].map((x) => (
                 <li key={x} className="flex items-start gap-2 text-[13.5px]" style={{ color: BODY }}>
                   <CheckCircle2 className="mt-0.5 size-3.5 shrink-0" style={{ color: "var(--mk-ok)" }} />
-                  {x}
+                  {t(x)}
                 </li>
               ))}
             </ul>
@@ -744,7 +812,7 @@ function Subs() {
 
           <div className="rounded-2xl border p-5" style={{ borderColor: "rgba(248,113,113,0.3)", background: "rgba(248,113,113,0.045)" }}>
             <p className="text-[11px] font-bold uppercase tracking-[0.1em]" style={{ color: "var(--mk-bad)" }}>
-              What they never see
+              {t("What they never see")}
             </p>
             <ul className="mt-3 space-y-1.5">
               {[
@@ -755,12 +823,12 @@ function Subs() {
               ].map((x) => (
                 <li key={x} className="flex items-start gap-2 text-[13.5px]" style={{ color: BODY }}>
                   <Lock className="mt-0.5 size-3.5 shrink-0" style={{ color: "var(--mk-bad)" }} />
-                  {x}
+                  {t(x)}
                 </li>
               ))}
             </ul>
             <p className="mt-3 text-[12.5px] leading-relaxed" style={{ color: MUTED }}>
-              Enforced in the queries that fetch the data, not by hiding a button.
+              {t("Enforced in the queries that fetch the data, not by hiding a button.")}
             </p>
           </div>
         </div>
@@ -782,63 +850,71 @@ function Subs() {
  * back with the sentence that produced it, and missing information costs
  * points and is called unknown rather than unsuitable.
  */
-function Pipeline() {
+function Pipeline({ t }: { t: T }) {
   return (
     <section className="border-t" style={{ borderColor: HAIR }}>
       <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
         <h2 className="max-w-2xl text-[27px] font-bold tracking-[-0.015em] sm:text-[36px]">
-          The work you are chasing, and the crews who could build it.
+          {t("The work you are chasing, and the crews who could build it.")}
         </h2>
         <p className="mt-4 max-w-2xl text-[15.5px] leading-relaxed" style={{ color: BODY }}>
-          Winning the job and being able to staff it are two different problems, and most
-          contractors track them in two different places — a bid list in a spreadsheet, and the
-          crews in somebody&rsquo;s head. Vantara IQ keeps both, because the second decides whether you
-          should bid the first.
+          {t(
+            "Winning the job and being able to staff it are two different problems, and most contractors track them in two different places — a bid list in a spreadsheet, and the crews in somebody’s head. Vantara IQ keeps both, because the second decides whether you should bid the first.",
+          )}
         </p>
 
         <div className="mt-10 grid grid-cols-1 items-start gap-8 lg:grid-cols-2">
           <div>
-            <h3 className="text-[19px] font-semibold tracking-[-0.01em]">Customers and bids</h3>
+            <h3 className="text-[19px] font-semibold tracking-[-0.01em]">{t("Customers and bids")}</h3>
             <p className="mt-2.5 text-[14.5px] leading-relaxed" style={{ color: BODY }}>
-              Primes and customers you are working on, each opportunity with its market, estimated
-              value, probability, bid date and expected award — moving from identified through
-              estimating and bid submitted to awarded or lost. An awarded one becomes a project
-              rather than being typed in again.
+              {t(
+                "Primes and customers you are working on, each opportunity with its market, estimated value, probability, bid date and expected award — moving from identified through estimating and bid submitted to awarded or lost. An awarded one becomes a project rather than being typed in again.",
+              )}
             </p>
             <div className="mt-5">
-              <CrmShot />
+              <CrmShot t={t} />
             </div>
           </div>
 
           <div>
             <h3 className="text-[19px] font-semibold tracking-[-0.01em]">
-              Subcontractors, and what they can actually do
+              {t("Subcontractors, and what they can actually do")}
             </h3>
             <p className="mt-2.5 text-[14.5px] leading-relaxed" style={{ color: BODY }}>
-              Not a contact list. What machines they own or rent, which trades they run and at what
-              production, how many crews are free and from when, the markets they will travel to,
-              their rates, their references, and how much of the prequalification file is in.
+              {t(
+                "Not a contact list. What machines they own or rent, which trades they run and at what production, how many crews are free and from when, the markets they will travel to, their rates, their references, and how much of the prequalification file is in.",
+              )}
             </p>
             <p className="mt-3 text-[14.5px] leading-relaxed" style={{ color: BODY }}>
-              Availability is kept as a history rather than overwritten, because &ldquo;committed through
-              the 20th&rdquo;, said in August, is what tells you in September that they are free.
+              {t(
+                "Availability is kept as a history rather than overwritten, because “committed through the 20th”, said in August, is what tells you in September that they are free.",
+              )}
             </p>
             <div className="mt-5">
-              <CapabilityShot />
+              <CapabilityShot t={t} />
             </div>
           </div>
         </div>
 
         <div className="mt-8 grid grid-cols-1 gap-3.5 sm:grid-cols-3">
           {[
-            ["A score you can argue with", "Every part of it comes back with the sentence that produced it — 16 of 20 on equipment because there is no vac trailer. Missing information costs points and is called unknown, never unsuitable."],
-            ["A follow-up is a real task", "Set one and it raises a task owned by somebody, not a note in a box nobody opens."],
-            ["Ready ones become subcontractors", "Convert a crew and their contacts, equipment and rates carry across. It refuses to create a duplicate of a company you already work with."],
-          ].map(([t, d]) => (
-            <div key={t} className="rounded-2xl border p-5" style={{ borderColor: HAIR, background: CARD }}>
-              <h4 className="text-[15px] font-semibold">{t}</h4>
+            [
+              "A score you can argue with",
+              "Every part of it comes back with the sentence that produced it — 16 of 20 on equipment because there is no vac trailer. Missing information costs points and is called unknown, never unsuitable.",
+            ],
+            [
+              "A follow-up is a real task",
+              "Set one and it raises a task owned by somebody, not a note in a box nobody opens.",
+            ],
+            [
+              "Ready ones become subcontractors",
+              "Convert a crew and their contacts, equipment and rates carry across. It refuses to create a duplicate of a company you already work with.",
+            ],
+          ].map(([label, d]) => (
+            <div key={label} className="rounded-2xl border p-5" style={{ borderColor: HAIR, background: CARD }}>
+              <h4 className="text-[15px] font-semibold">{t(label)}</h4>
               <p className="mt-1.5 text-[13.5px] leading-relaxed" style={{ color: BODY }}>
-                {d}
+                {t(d)}
               </p>
             </div>
           ))}
@@ -848,7 +924,7 @@ function Pipeline() {
   );
 }
 
-function Modules() {
+function Modules({ t }: { t: T }) {
   const items: [React.ReactNode, string, string][] = [
     [<ClipboardList key="d" className="size-4" />, "Dailies", "Production on your customer's own form, with redlines and photos attached."],
     [<Layers key="r" className="size-4" />, "Redlines & as-builts", "Engineering prints, field markups and as-builts tied to the daily and the billing."],
@@ -867,7 +943,7 @@ function Modules() {
     <section className="border-t" style={{ borderColor: HAIR }}>
       <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
         <h2 className="text-[24px] font-bold tracking-[-0.015em] sm:text-[30px]">
-          Everything else it does
+          {t("Everything else it does")}
         </h2>
         <div className="mt-8 grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
           {items.map(([icon, title, body]) => (
@@ -882,20 +958,19 @@ function Modules() {
               >
                 {icon}
               </span>
-              <h3 className="mt-3.5 text-[15.5px] font-semibold tracking-[-0.005em]">{title}</h3>
+              <h3 className="mt-3.5 text-[15.5px] font-semibold tracking-[-0.005em]">{t(title)}</h3>
               <p className="mt-1.5 text-[13.5px] leading-relaxed" style={{ color: BODY }}>
-                {body}
+                {t(body)}
               </p>
             </div>
           ))}
         </div>
-
       </div>
     </section>
   );
 }
 
-function Industries() {
+function Industries({ t }: { t: T }) {
   const rows: [string, string][] = [
     ["Telecom & broadband", "FTTH, backbone, middle-mile and last-mile. Underground, aerial and splicing."],
     ["Electric utilities", "Underground and overhead electrical infrastructure."],
@@ -908,16 +983,16 @@ function Industries() {
   return (
     <section id="industries" className="border-t" style={{ borderColor: HAIR, background: "var(--mk-card)" }}>
       <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
-        <h2 className="text-[24px] font-bold tracking-[-0.015em] sm:text-[30px]">Who it is for</h2>
+        <h2 className="text-[24px] font-bold tracking-[-0.015em] sm:text-[30px]">{t("Who it is for")}</h2>
         <p className="mt-3 max-w-2xl text-[15px] leading-relaxed" style={{ color: BODY }}>
-          Whether you run two crews or two hundred, in one market or across several states.
+          {t("Whether you run two crews or two hundred, in one market or across several states.")}
         </p>
         <div className="mt-8 grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
-          {rows.map(([t, d]) => (
-            <div key={t} className="rounded-2xl border p-5" style={{ borderColor: HAIR, background: CARD }}>
-              <h3 className="text-[15.5px] font-semibold">{t}</h3>
+          {rows.map(([label, d]) => (
+            <div key={label} className="rounded-2xl border p-5" style={{ borderColor: HAIR, background: CARD }}>
+              <h3 className="text-[15.5px] font-semibold">{t(label)}</h3>
               <p className="mt-1.5 text-[13.5px] leading-relaxed" style={{ color: BODY }}>
-                {d}
+                {t(d)}
               </p>
             </div>
           ))}
@@ -927,19 +1002,19 @@ function Industries() {
   );
 }
 
-function Difference() {
+function Difference({ t }: { t: T }) {
   return (
     <section className="border-t" style={{ borderColor: HAIR }}>
       <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
         <h2 className="max-w-3xl text-[27px] font-bold leading-tight tracking-[-0.015em] sm:text-[38px]">
-          Most construction software records what happened.
-          <span style={{ color: GOLD }}> Vantara IQ tells you what needs you now.</span>
+          {t("Most construction software records what happened.")}{" "}
+          <span style={{ color: GOLD }}>{t("Vantara IQ tells you what needs you now.")}</span>
         </h2>
 
         <div className="mt-10 grid grid-cols-1 gap-3.5 lg:grid-cols-2">
           <div className="rounded-2xl border p-6" style={{ borderColor: HAIR, background: CARD }}>
             <p className="text-[11px] font-bold uppercase tracking-[0.1em]" style={{ color: MUTED }}>
-              Run on separate systems
+              {t("Run on separate systems")}
             </p>
             <ul className="mt-3.5 space-y-2">
               {[
@@ -952,7 +1027,7 @@ function Difference() {
               ].map((x) => (
                 <li key={x} className="flex items-start gap-2 text-[14px]" style={{ color: BODY }}>
                   <span className="mt-[9px] size-1 shrink-0 rounded-full" style={{ background: MUTED }} />
-                  {x}
+                  {t(x)}
                 </li>
               ))}
             </ul>
@@ -963,7 +1038,7 @@ function Difference() {
             style={{ borderColor: "rgba(224,168,46,0.4)", background: "rgba(224,168,46,0.05)" }}
           >
             <p className="text-[11px] font-bold uppercase tracking-[0.1em]" style={{ color: GOLD }}>
-              Run on Vantara IQ
+              {t("Run on Vantara IQ")}
             </p>
             <ul className="mt-3.5 space-y-2">
               {[
@@ -976,7 +1051,7 @@ function Difference() {
               ].map((x) => (
                 <li key={x} className="flex items-start gap-2 text-[14px]" style={{ color: BODY }}>
                   <CheckCircle2 className="mt-0.5 size-4 shrink-0" style={{ color: GOLD }} />
-                  {x}
+                  {t(x)}
                 </li>
               ))}
             </ul>
@@ -984,14 +1059,14 @@ function Difference() {
         </div>
 
         <p className="mt-6 max-w-3xl text-[15px] leading-relaxed" style={{ color: MUTED }}>
-          Management by exception instead of management by spreadsheet.
+          {t("Management by exception instead of management by spreadsheet.")}
         </p>
       </div>
     </section>
   );
 }
 
-function Security() {
+function Security({ t }: { t: T }) {
   return (
     <section className="border-t" style={{ borderColor: HAIR, background: "var(--mk-card)" }}>
       <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
@@ -1002,26 +1077,36 @@ function Security() {
           <ShieldCheck className="size-5" />
         </span>
         <h2 className="mt-4 text-[24px] font-bold tracking-[-0.015em] sm:text-[30px]">
-          Your numbers stay yours
+          {t("Your numbers stay yours")}
         </h2>
         <div className="mt-7 grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
           {[
-            ["Your own system", "A dedicated database and deployment per company. Nothing you enter is visible to another contractor."],
-            ["Role-based access", "Owner, project manager, supervisor, foreman, inventory, office, subcontractor — each sees what their job needs."],
-            ["Rates and margin protected", "What you bill and what you pay are separate figures with separate permissions."],
+            [
+              "Your own system",
+              "A dedicated database and deployment per company. Nothing you enter is visible to another contractor.",
+            ],
+            [
+              "Role-based access",
+              "Owner, project manager, supervisor, foreman, inventory, office, subcontractor — each sees what their job needs.",
+            ],
+            [
+              "Rates and margin protected",
+              "What you bill and what you pay are separate figures with separate permissions.",
+            ],
             ["Auditable", "Every approval, rate change and payment carries who did it and when."],
-          ].map(([t, d]) => (
-            <div key={t} className="rounded-2xl border p-5" style={{ borderColor: HAIR, background: CARD }}>
-              <h3 className="text-[14.5px] font-semibold">{t}</h3>
+          ].map(([label, d]) => (
+            <div key={label} className="rounded-2xl border p-5" style={{ borderColor: HAIR, background: CARD }}>
+              <h3 className="text-[14.5px] font-semibold">{t(label)}</h3>
               <p className="mt-1.5 text-[13px] leading-relaxed" style={{ color: BODY }}>
-                {d}
+                {t(d)}
               </p>
             </div>
           ))}
         </div>
         <p className="mt-5 max-w-3xl text-[13px] leading-relaxed" style={{ color: MUTED }}>
-          We do not claim a security certification we have not been through. What is described here
-          is how the software is built, and we will walk you through any of it.
+          {t(
+            "We do not claim a security certification we have not been through. What is described here is how the software is built, and we will walk you through any of it.",
+          )}
         </p>
       </div>
     </section>
@@ -1034,17 +1119,21 @@ function Security() {
  * On the page rather than left out, because a contractor asks about equipment
  * and safety in the first meeting, and "on the roadmap" said plainly buys more
  * trust than a feature list that turns out to be aspirational in week one.
+ *
+ * The Spanish here matters more than anywhere else on the page. A hedge that
+ * softens in translation is how an honest page quietly stops being one.
  */
-function Roadmap() {
+function Roadmap({ t }: { t: T }) {
   return (
     <section className="border-t" style={{ borderColor: HAIR }}>
       <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6 sm:py-16">
         <h2 className="text-[20px] font-bold tracking-[-0.01em] sm:text-[24px]">
-          Being built next — not available today
+          {t("Being built next — not available today")}
         </h2>
         <p className="mt-2 max-w-2xl text-[14px] leading-relaxed" style={{ color: MUTED }}>
-          Named here so nobody buys on a promise. If one of these decides it for you, say so in the
-          demo and we will tell you honestly where it stands.
+          {t(
+            "Named here so nobody buys on a promise. If one of these decides it for you, say so in the demo and we will tell you honestly where it stands.",
+          )}
         </p>
         <div className="mt-6 flex flex-wrap gap-2">
           {[
@@ -1059,7 +1148,7 @@ function Roadmap() {
               className="rounded-lg border px-3 py-1.5 text-[13px]"
               style={{ borderColor: HAIR, background: CARD, color: BODY }}
             >
-              {x}
+              {t(x)}
             </span>
           ))}
         </div>
@@ -1068,27 +1157,53 @@ function Roadmap() {
   );
 }
 
-function Pricing() {
+function Pricing({ t }: { t: T }) {
   return (
     <section id="pricing" className="border-t" style={{ borderColor: HAIR, background: "var(--mk-card)" }}>
       <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
         <h2 className="text-[27px] font-bold tracking-[-0.015em] sm:text-[36px]">
-          One package. No tiers to work out.
+          {t("One package. No tiers to work out.")}
         </h2>
         <p className="mt-4 max-w-2xl text-[15.5px] leading-relaxed" style={{ color: BODY }}>
-          Your company runs on its own dedicated system — your database, your jobs, your rates.
-          Nothing you put in is visible to any other contractor using Vantara IQ.
+          {t(
+            "Your company runs on its own dedicated system — your database, your jobs, your rates. Nothing you put in is visible to any other contractor using Vantara IQ.",
+          )}
         </p>
 
+        {/* The money keeps its US formatting in both languages. It is a dollar
+            figure against a US contract, and a price a reader has to convert in
+            their head is a price they misremember. */}
         <div className="mt-10 grid grid-cols-1 gap-3.5 lg:grid-cols-3">
-          <Price amount="$1,000" unit="once" label="Implementation" body="Your own system, stood up and configured — rate cards loaded, crews and projects brought across, your people trained on it." />
-          <Price amount="$250" unit="per month" label="Enterprise package" body="The whole platform. Every module, unlimited projects, unlimited subcontractor crews, and their logins are free." feature />
-          <Price amount="$35" unit="per user, per month" label="Your staff" body="Each of your own people with a login — owners, project managers, supervisors, foremen. Your subcontractors' logins are not charged." />
+          <Price
+            amount="$1,000"
+            unit={t("once")}
+            label={t("Implementation")}
+            body={t(
+              "Your own system, stood up and configured — rate cards loaded, crews and projects brought across, your people trained on it.",
+            )}
+          />
+          <Price
+            amount="$250"
+            unit={t("per month")}
+            label={t("Enterprise package")}
+            body={t(
+              "The whole platform. Every module, unlimited projects, unlimited subcontractor crews, and their logins are free.",
+            )}
+            feature
+          />
+          <Price
+            amount="$35"
+            unit={t("per user, per month")}
+            label={t("Your staff")}
+            body={t(
+              "Each of your own people with a login — owners, project managers, supervisors, foremen. Your subcontractors' logins are not charged.",
+            )}
+          />
         </div>
 
         <div className="mt-4 rounded-2xl border p-6" style={{ borderColor: HAIR, background: CARD }}>
           <p className="text-[12px] font-bold uppercase tracking-[0.11em]" style={{ color: GOLD }}>
-            What that includes
+            {t("What that includes")}
           </p>
           <ul className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
             {[
@@ -1101,7 +1216,7 @@ function Pricing() {
             ].map((x) => (
               <li key={x} className="flex items-start gap-2 text-[14.5px]" style={{ color: BODY }}>
                 <CheckCircle2 className="mt-0.5 size-4 shrink-0" style={{ color: GOLD }} />
-                {x}
+                {t(x)}
               </li>
             ))}
           </ul>
@@ -1111,27 +1226,28 @@ function Pricing() {
   );
 }
 
-function Demo() {
+function Demo({ t }: { t: T }) {
   return (
     <section id="demo" className="border-t" style={{ borderColor: HAIR }}>
       <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
         <div className="max-w-3xl">
           <h2 className="text-[28px] font-bold leading-tight tracking-[-0.02em] sm:text-[40px]">
-            Run your entire infrastructure operation from one platform.
+            {t("Run your entire infrastructure operation from one platform.")}
           </h2>
           <p className="mt-4 text-[15.5px] leading-relaxed" style={{ color: BODY }}>
-            Projects. Crews. Dailies. Redlines. Locates. Materials. Billing. Subcontractors.
-            Financials. Vantara IQ connects the field to the office and turns operational data into
-            decisions.
+            {t(
+              "Projects. Crews. Dailies. Redlines. Locates. Materials. Billing. Subcontractors. Financials. Vantara IQ connects the field to the office and turns operational data into decisions.",
+            )}
           </p>
         </div>
 
         <div className="mt-10 grid grid-cols-1 gap-10 lg:grid-cols-2">
           <div>
-            <h3 className="text-[20px] font-semibold tracking-[-0.01em]">See it on your own jobs</h3>
+            <h3 className="text-[20px] font-semibold tracking-[-0.01em]">{t("See it on your own jobs")}</h3>
             <p className="mt-3 text-[15px] leading-relaxed" style={{ color: BODY }}>
-              Half an hour, walked through with one of your live jobs in front of us — your customer,
-              your crews, your rates. You will know inside ten minutes whether it fits how you work.
+              {t(
+                "Half an hour, walked through with one of your live jobs in front of us — your customer, your crews, your rates. You will know inside ten minutes whether it fits how you work.",
+              )}
             </p>
             <ul className="mt-6 flex flex-col gap-3">
               {[
@@ -1141,7 +1257,7 @@ function Demo() {
               ].map((x) => (
                 <li key={x} className="flex items-start gap-2.5 text-[14.5px]" style={{ color: BODY }}>
                   <CheckCircle2 className="mt-0.5 size-4 shrink-0" style={{ color: GOLD }} />
-                  {x}
+                  {t(x)}
                 </li>
               ))}
             </ul>
@@ -1154,7 +1270,7 @@ function Demo() {
   );
 }
 
-function Footer() {
+function Footer({ t }: { t: T }) {
   return (
     <footer className="border-t" style={{ borderColor: HAIR }}>
       <div
@@ -1165,16 +1281,16 @@ function Footer() {
         <span className="sm:ml-2">© {new Date().getFullYear()} Vantara IQ</span>
         <nav className="flex flex-wrap gap-x-5 gap-y-1 sm:ml-auto">
           <Link href="/sms" className="transition-colors hover:text-white">
-            Text message alerts
+            {t("Text message alerts")}
           </Link>
           <Link href="/privacy" className="transition-colors hover:text-white">
-            Privacy
+            {t("Privacy")}
           </Link>
           <Link href="/terms" className="transition-colors hover:text-white">
-            Terms
+            {t("Terms")}
           </Link>
           <Link href="/login" className="transition-colors hover:text-white">
-            Sign in
+            {t("Sign in")}
           </Link>
         </nav>
       </div>
@@ -1207,7 +1323,7 @@ function Price({
       <p className="text-[11.5px] font-bold uppercase tracking-[0.11em]" style={{ color: MUTED }}>
         {label}
       </p>
-      <p className="mt-2.5 flex items-baseline gap-1.5">
+      <p className="mt-2.5 flex flex-wrap items-baseline gap-x-1.5">
         <span className="text-[38px] font-bold tracking-[-0.03em] tabular-nums" style={{ color: INK }}>
           {amount}
         </span>

@@ -24,6 +24,8 @@
  * Latin American Spanish, since that is who is on these crews.
  */
 
+import { MARKETING_ES } from "@/lib/i18n-marketing";
+
 export const LOCALES = ["en", "es"] as const;
 export type Locale = (typeof LOCALES)[number];
 
@@ -95,6 +97,10 @@ const ES: Record<string, string> = {
   "Give feedback": "Enviar comentarios",
   "Sign out": "Cerrar sesión",
   Language: "Idioma",
+  "Switch to light mode": "Cambiar a modo claro",
+  "Switch to dark mode": "Cambiar a modo oscuro",
+  "Light mode": "Modo claro",
+  "Dark mode": "Modo oscuro",
   Crew: "Cuadrilla",
   "Crew portal": "Portal de la cuadrilla",
   Live: "En vivo",
@@ -199,7 +205,23 @@ const ES: Record<string, string> = {
   ft: "pies",
 };
 
-const DICTIONARIES: Record<Locale, Record<string, string>> = { en: {}, es: ES };
+/**
+ * One dictionary at runtime, two files to edit.
+ *
+ * The marketing copy lives in its own file because it is written for a
+ * different reader and is rewritten whenever the pitch changes; the field
+ * strings above are labels a foreman reads at six in the morning and should not
+ * churn every time a headline does. Merged here so a caller never has to know
+ * which half a string came from — `useT()` in a client component on the public
+ * page reaches the same lookup as `t()` on a crew screen.
+ *
+ * The field dictionary is spread last, so if the same English sentence ever
+ * appears in both, the crew's wording is the one that survives.
+ */
+const DICTIONARIES: Record<Locale, Record<string, string>> = {
+  en: {},
+  es: { ...MARKETING_ES, ...ES },
+};
 
 /**
  * A lookup for one locale.

@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Moon, Sun } from "lucide-react";
 
+import { useT } from "@/components/layout/language-provider";
 import { cn } from "@/lib/utils";
 
 type Theme = "dark" | "light";
@@ -13,6 +14,10 @@ type Theme = "dark" | "light";
  * pre-paint by the inline script in the root layout, so there's no flash.
  */
 export function ThemeToggle({ className }: { className?: string }) {
+  // The button carries no text, so its label is the only thing a screen reader
+  // or a hover has to go on — and on a page a Spanish-speaking contractor is
+  // reading, that label should not be the one English word left on the screen.
+  const t = useT();
   const [theme, setTheme] = React.useState<Theme>("dark");
   const [mounted, setMounted] = React.useState(false);
 
@@ -41,8 +46,8 @@ export function ThemeToggle({ className }: { className?: string }) {
     <button
       type="button"
       onClick={toggle}
-      aria-label={nextIsLight ? "Switch to light mode" : "Switch to dark mode"}
-      title={nextIsLight ? "Light mode" : "Dark mode"}
+      aria-label={nextIsLight ? t("Switch to light mode") : t("Switch to dark mode")}
+      title={nextIsLight ? t("Light mode") : t("Dark mode")}
       className={cn(
         "focus-ring grid size-9 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground",
         className,
