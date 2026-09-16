@@ -616,3 +616,113 @@ export function MobileShot() {
     </div>
   );
 }
+
+/* ------------------------------------------------------------------ *
+ * A task, and the proof attached to it.
+ * ------------------------------------------------------------------ */
+
+/**
+ * The photo panels are drawn frames with captions, not stand-in images.
+ *
+ * A stock photograph of a pedestal would be the only untrue thing on this page
+ * — it would not be a Vantara screen and it would not be this contractor's
+ * work. A labelled slot says what goes there without pretending a picture of
+ * somebody else's job is ours.
+ */
+function PhotoSlot({ label, caption, tone }: { label: string; caption: string; tone: string }) {
+  return (
+    <div className="overflow-hidden rounded-lg border" style={{ borderColor: LINE }}>
+      <div
+        className="flex items-center justify-between px-2 py-1"
+        style={{ background: `${tone}1a` }}
+      >
+        <span className="text-[8.5px] font-bold uppercase tracking-[0.12em]" style={{ color: tone }}>
+          {label}
+        </span>
+      </div>
+      <div
+        className="grid h-[86px] place-items-center"
+        style={{
+          background:
+            "repeating-linear-gradient(45deg, rgba(255,255,255,0.028) 0 8px, rgba(255,255,255,0.012) 8px 16px)",
+        }}
+      >
+        <span className="text-[9.5px]" style={{ color: MUTED }}>
+          {caption}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+export function TaskShot() {
+  return (
+    <Frame label="vantaraiq.com · tasks">
+      <div className="p-3 sm:p-4">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span
+            className="rounded-md px-1.5 py-0.5 text-[8.5px] font-bold uppercase"
+            style={{ background: "rgba(248,113,113,0.16)", color: BAD }}
+          >
+            High
+          </span>
+          <span className="text-[13px] font-bold" style={{ color: INK }}>
+            Pedestal 1847 not installed
+          </span>
+          <span
+            className="ml-auto rounded-md px-1.5 py-0.5 text-[8.5px] font-bold uppercase"
+            style={{ background: "rgba(245,158,11,0.16)", color: WARN }}
+          >
+            In progress
+          </span>
+        </div>
+
+        <div className="mt-1 flex flex-wrap gap-x-3 text-[9.5px]" style={{ color: MUTED }}>
+          <span>Ridgeline · ATL-204</span>
+          <span style={{ color: BRAND }}>Pace Boring · Crew 7</span>
+          <span>Due today, 3:00 PM</span>
+        </div>
+
+        {/* The proof, side by side. This is the part that settles arguments. */}
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <PhotoSlot label="Before" caption="Reported 9:12 AM" tone={BAD} />
+          <PhotoSlot label="After" caption="Attached 1:47 PM" tone={OK} />
+        </div>
+
+        {/* Office and field, in one place, against the job. */}
+        <div className="mt-3 overflow-hidden rounded-lg border" style={{ borderColor: LINE }}>
+          <p
+            className="border-b px-2.5 py-1.5 text-[8.5px] font-bold uppercase tracking-[0.12em]"
+            style={{ borderColor: LINE, color: MUTED, background: CARD }}
+          >
+            Activity
+          </p>
+          {[
+            ["10:42", "Office", "Raised with photo, assigned to Crew 7", MUTED],
+            ["10:42", "Vantara", "Texted the foreman", BRAND],
+            ["10:51", "Foreman", "Heading back to the location now", INK],
+            ["12:32", "Foreman", "Need another pedestal from the yard", INK],
+            ["12:34", "Office", "Materials on the way", INK],
+            ["1:47", "Foreman", "Photo attached, marked done", OK],
+          ].map(([t, who, what, colour], i) => (
+            <div
+              key={String(t) + String(what)}
+              className="flex gap-2 px-2.5 py-[6px]"
+              style={{ borderTop: i === 0 ? "none" : `1px solid ${LINE}` }}
+            >
+              <span className="w-[34px] shrink-0 text-[9px] tabular-nums" style={{ color: MUTED }}>
+                {t}
+              </span>
+              <span className="w-[48px] shrink-0 text-[9px] font-semibold" style={{ color: MUTED }}>
+                {who}
+              </span>
+              <span className="min-w-0 flex-1 text-[10px]" style={{ color: String(colour) }}>
+                {what}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Frame>
+  );
+}

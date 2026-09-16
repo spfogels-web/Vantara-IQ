@@ -4,6 +4,7 @@ import {
   Boxes,
   Brain,
   CheckCircle2,
+  ClipboardCheck,
   ClipboardList,
   FileText,
   Layers,
@@ -29,6 +30,7 @@ import {
   MobileShot,
   OpsCenterShot,
   SpreadShot,
+  TaskShot,
 } from "@/components/marketing/shots";
 
 /**
@@ -75,6 +77,7 @@ export function MarketingHome() {
       <Assistant />
       <OpsCenter />
       <FieldToInvoice />
+      <Accountability />
       <Locates />
       <Materials />
       <Subs />
@@ -450,6 +453,73 @@ function FieldToInvoice() {
   );
 }
 
+/**
+ * Tasks, as they actually work today.
+ *
+ * Written against what the schema and the actions do, and nothing else. The
+ * before-and-after photographs are real — TaskPhoto carries PROBLEM and
+ * RESOLUTION as distinct kinds — as are the text on assignment, the thread,
+ * the crew-only scoping and the reason required to block something.
+ *
+ * What is deliberately not claimed: an acknowledgement timestamp, a
+ * ready-for-verification step, office approval, a rework loop, response-time
+ * analytics. None of those are built. They are named in the roadmap instead,
+ * because a contractor shown a verification workflow in a demo will look for
+ * it in week one.
+ */
+function Accountability() {
+  return (
+    <section className="border-t" style={{ borderColor: HAIR, background: "rgba(255,255,255,0.018)" }}>
+      <div className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-10 px-4 py-16 sm:px-6 sm:py-24 lg:grid-cols-[1fr_1.05fr]">
+        <div>
+          <span
+            className="grid size-10 place-items-center rounded-xl"
+            style={{ background: "rgba(224,168,46,0.14)", color: GOLD }}
+          >
+            <ClipboardCheck className="size-5" />
+          </span>
+          <h2 className="mt-4 text-[27px] font-bold tracking-[-0.015em] sm:text-[36px]">
+            When something is wrong in the field, one person owns it.
+          </h2>
+          <p className="mt-4 text-[15.5px] leading-relaxed" style={{ color: BODY }}>
+            A pedestal that never went in. A handhole left open. A redline nobody sent. Raise it
+            against the job with a photograph of what you found, put one name on it, and the
+            foreman gets a text where he is standing.
+          </p>
+
+          <ul className="mt-6 space-y-2.5">
+            {[
+              ["The photograph of the fault, and the photograph of the fix", "Held as two different things and shown side by side. It settles an argument words never will."],
+              ["One owner, never two", "An employee or a crew — the system refuses both, so nobody can assume the other one had it."],
+              ["A text, not an email nobody opens", "Sent the moment it is assigned, to the company number and to every person the crew has invited."],
+              ["The conversation lives on the job", "Office and field talking in one thread against the project, not in somebody's phone."],
+              ["Blocked needs a reason", "You cannot park a task without saying what it is waiting on."],
+              ["Crews see only their own", "Scoped in the query. One crew cannot read another crew's problems."],
+            ].map(([t, d]) => (
+              <li key={t} className="flex gap-2.5">
+                <CheckCircle2 className="mt-0.5 size-4 shrink-0" style={{ color: GOLD }} />
+                <span className="min-w-0">
+                  <span className="block text-[14.5px] font-semibold">{t}</span>
+                  <span className="block text-[13.5px] leading-relaxed" style={{ color: BODY }}>
+                    {d}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+
+          <p className="mt-5 text-[13.5px] leading-relaxed" style={{ color: MUTED }}>
+            Every task stays on that project&rsquo;s record, so the punch list at closeout is the list of
+            what was actually raised and what was actually done about it.
+          </p>
+        </div>
+
+        <TaskShot />
+      </div>
+    </section>
+  );
+}
+
 function Locates() {
   return (
     <section className="border-t" style={{ borderColor: HAIR, background: "rgba(255,255,255,0.018)" }}>
@@ -791,6 +861,7 @@ function Roadmap() {
         </p>
         <div className="mt-6 flex flex-wrap gap-2">
           {[
+            "Task acknowledgement, office verification & rework",
             "Equipment & fleet",
             "Safety, JSAs & incident reporting",
             "Customer portal",
