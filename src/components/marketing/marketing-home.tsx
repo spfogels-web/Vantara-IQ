@@ -31,6 +31,7 @@ import {
   MaterialShot,
   MobileShot,
   OpsCenterShot,
+  CapabilityShot,
   SpreadShot,
   TaskShot,
 } from "@/components/marketing/shots";
@@ -83,6 +84,7 @@ export function MarketingHome() {
       <Locates />
       <Materials />
       <Subs />
+      <Pipeline />
       <Modules />
       <Industries />
       <Difference />
@@ -694,6 +696,85 @@ function Subs() {
   );
 }
 
+/**
+ * The pipeline, which starts before a project exists.
+ *
+ * Two things a prime tracks that ordinary CRMs do not: the bid it is chasing,
+ * and the crews it might need to build the work if it wins. Both are real —
+ * ProspectOpportunity carries value, probability and a bid date; equipment,
+ * trades with production rates, availability and prequalification each have
+ * their own table.
+ *
+ * The scoring is claimed as transparent because it is: every component comes
+ * back with the sentence that produced it, and missing information costs
+ * points and is called unknown rather than unsuitable.
+ */
+function Pipeline() {
+  return (
+    <section className="border-t" style={{ borderColor: HAIR }}>
+      <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-24">
+        <h2 className="max-w-2xl text-[27px] font-bold tracking-[-0.015em] sm:text-[36px]">
+          The work you are chasing, and the crews who could build it.
+        </h2>
+        <p className="mt-4 max-w-2xl text-[15.5px] leading-relaxed" style={{ color: BODY }}>
+          Winning the job and being able to staff it are two different problems, and most
+          contractors track them in two different places — a bid list in a spreadsheet, and the
+          crews in somebody&rsquo;s head. Vantara IQ keeps both, because the second decides whether you
+          should bid the first.
+        </p>
+
+        <div className="mt-10 grid grid-cols-1 items-start gap-8 lg:grid-cols-2">
+          <div>
+            <h3 className="text-[19px] font-semibold tracking-[-0.01em]">Customers and bids</h3>
+            <p className="mt-2.5 text-[14.5px] leading-relaxed" style={{ color: BODY }}>
+              Primes and customers you are working on, each opportunity with its market, estimated
+              value, probability, bid date and expected award — moving from identified through
+              estimating and bid submitted to awarded or lost. An awarded one becomes a project
+              rather than being typed in again.
+            </p>
+            <div className="mt-5">
+              <CrmShot />
+            </div>
+          </div>
+
+          <div>
+            <h3 className="text-[19px] font-semibold tracking-[-0.01em]">
+              Subcontractors, and what they can actually do
+            </h3>
+            <p className="mt-2.5 text-[14.5px] leading-relaxed" style={{ color: BODY }}>
+              Not a contact list. What machines they own or rent, which trades they run and at what
+              production, how many crews are free and from when, the markets they will travel to,
+              their rates, their references, and how much of the prequalification file is in.
+            </p>
+            <p className="mt-3 text-[14.5px] leading-relaxed" style={{ color: BODY }}>
+              Availability is kept as a history rather than overwritten, because &ldquo;committed through
+              the 20th&rdquo;, said in August, is what tells you in September that they are free.
+            </p>
+            <div className="mt-5">
+              <CapabilityShot />
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-8 grid grid-cols-1 gap-3.5 sm:grid-cols-3">
+          {[
+            ["A score you can argue with", "Every part of it comes back with the sentence that produced it — 16 of 20 on equipment because there is no vac trailer. Missing information costs points and is called unknown, never unsuitable."],
+            ["A follow-up is a real task", "Set one and it raises a task owned by somebody, not a note in a box nobody opens."],
+            ["Ready ones become subcontractors", "Convert a crew and their contacts, equipment and rates carry across. It refuses to create a duplicate of a company you already work with."],
+          ].map(([t, d]) => (
+            <div key={t} className="rounded-2xl border p-5" style={{ borderColor: HAIR, background: CARD }}>
+              <h4 className="text-[15px] font-semibold">{t}</h4>
+              <p className="mt-1.5 text-[13.5px] leading-relaxed" style={{ color: BODY }}>
+                {d}
+              </p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function Modules() {
   const items: [React.ReactNode, string, string][] = [
     [<ClipboardList key="d" className="size-4" />, "Dailies", "Production on your customer's own form, with redlines and photos attached."],
@@ -736,9 +817,6 @@ function Modules() {
           ))}
         </div>
 
-        <div className="mt-10">
-          <CrmShot />
-        </div>
       </div>
     </section>
   );

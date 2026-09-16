@@ -726,3 +726,98 @@ export function TaskShot() {
     </Frame>
   );
 }
+
+/* ------------------------------------------------------------------ *
+ * A crew you have not hired yet, and what you know about them.
+ * ------------------------------------------------------------------ */
+
+export function CapabilityShot() {
+  return (
+    <Frame label="vantaraiq.com · prospects">
+      <div className="p-3 sm:p-4">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-[13px] font-bold" style={{ color: INK }}>
+            Marfield Underground
+          </span>
+          <span
+            className="rounded-md px-1.5 py-0.5 text-[8.5px] font-bold uppercase"
+            style={{ background: "rgba(129,140,248,0.16)", color: BRAND }}
+          >
+            Prequalified
+          </span>
+          <span className="ml-auto text-right">
+            <span className="block text-[15px] font-bold tabular-nums" style={{ color: OK }}>
+              78
+            </span>
+            <span className="block text-[8px] font-bold uppercase tracking-[0.1em]" style={{ color: MUTED }}>
+              Score
+            </span>
+          </span>
+        </div>
+        <p className="mt-0.5 text-[9.5px]" style={{ color: MUTED }}>
+          3 crews free · available now · works GA, SC
+        </p>
+
+        {/* The score, shown as its parts. A number on its own is a number
+            somebody argues with. */}
+        <div className="mt-3 overflow-hidden rounded-lg border" style={{ borderColor: LINE }}>
+          <p
+            className="border-b px-2.5 py-1.5 text-[8.5px] font-bold uppercase tracking-[0.12em]"
+            style={{ borderColor: LINE, color: MUTED, background: CARD }}
+          >
+            Why 78
+          </p>
+          {[
+            ["Capacity", "20/20", "3 crews they say are free", OK],
+            ["Equipment", "16/20", "2 drills, 1 plough, no vac trailer", WARN],
+            ["Market fit", "20/20", "Works GA and SC", OK],
+            ["Availability", "20/20", "Free from the 4th", OK],
+            ["Documentation", "2/10", "W-9 in, insurance and references missing", BAD],
+            ["Rate fit", "0/10", "They have not quoted a rate", MUTED],
+          ].map(([what, score, why, colour], i) => (
+            <div
+              key={String(what)}
+              className="flex items-center gap-2 px-2.5 py-[6px]"
+              style={{ borderTop: i === 0 ? "none" : `1px solid ${LINE}` }}
+            >
+              <span className="w-[74px] shrink-0 text-[10px] font-medium" style={{ color: INK }}>
+                {what}
+              </span>
+              <span className="w-[38px] shrink-0 text-[10px] font-semibold tabular-nums" style={{ color: String(colour) }}>
+                {score}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-[9.5px]" style={{ color: MUTED }}>
+                {why}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-2.5 grid grid-cols-2 gap-2">
+          <div className="rounded-lg border p-2.5" style={{ borderColor: LINE, background: CARD }}>
+            <p className="text-[8px] font-bold uppercase tracking-[0.1em]" style={{ color: MUTED }}>
+              Equipment
+            </p>
+            {[["Directional drill", "2 owned"], ["Plough", "1 owned"], ["Vac trailer", "rented"]].map(([a, bq]) => (
+              <p key={String(a)} className="mt-1 flex justify-between text-[9.5px]" style={{ color: BODY }}>
+                <span>{a}</span>
+                <span style={{ color: MUTED }}>{bq}</span>
+              </p>
+            ))}
+          </div>
+          <div className="rounded-lg border p-2.5" style={{ borderColor: LINE, background: CARD }}>
+            <p className="text-[8px] font-bold uppercase tracking-[0.1em]" style={{ color: MUTED }}>
+              What they run
+            </p>
+            {[["Directional bore", "900 ft/day"], ["Plough", "2,400 ft/day"], ["Splicing", "occasional"]].map(([a, bq]) => (
+              <p key={String(a)} className="mt-1 flex justify-between text-[9.5px]" style={{ color: BODY }}>
+                <span>{a}</span>
+                <span style={{ color: GOLD }}>{bq}</span>
+              </p>
+            ))}
+          </div>
+        </div>
+      </div>
+    </Frame>
+  );
+}
