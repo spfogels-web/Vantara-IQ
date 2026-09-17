@@ -29,7 +29,7 @@ export async function GET(
   }
 
   const [sub, org] = await Promise.all([
-    prisma.subcontractor.findUnique({
+    prisma.subcontractor.findFirst({
       where: { id: subcontractorId },
       select: {
         company: true,

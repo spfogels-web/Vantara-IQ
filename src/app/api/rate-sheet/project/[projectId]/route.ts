@@ -40,7 +40,7 @@ export async function GET(
   }
 
   const [project, org] = await Promise.all([
-    prisma.project.findUnique({
+    prisma.project.findFirst({
       where: { id: projectId },
       select: {
         name: true,

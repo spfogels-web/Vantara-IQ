@@ -1110,7 +1110,7 @@ export async function getMyLocateProjects() {
   const me = await getCurrentUser();
   if (!me?.subcontractorId) return [];
   return prisma.project.findMany({
-    where: { completedAt: null, crews: { some: { id: me.subcontractorId } } },
+    where: { completedAt: null, crews: { some: { subcontractorId: me.subcontractorId } } },
     select: { id: true, name: true },
     orderBy: { name: "asc" },
   });
@@ -1146,7 +1146,7 @@ export async function submitCrewLocateTickets(input: {
   }
 
   const allowed = await prisma.project.findFirst({
-    where: { id: input.projectId, crews: { some: { id: me.subcontractorId } } },
+    where: { id: input.projectId, crews: { some: { subcontractorId: me.subcontractorId } } },
     select: { id: true, name: true },
   });
   if (!allowed) {

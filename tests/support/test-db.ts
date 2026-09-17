@@ -20,24 +20,63 @@ import { PrismaClient } from "@prisma/client";
 export const TEST_SCHEMA = `vq_test_${randomBytes(4).toString("hex")}`;
 
 /**
- * The tests deliberately use the UNPOOLED endpoint.
+ * The tests use the POOLED endpoint, and that is not interchangeable.
  *
- * Prisma pins `search_path` from the `?schema=` parameter as a session
- * setting. Neon's pooler hands a backend to the next client without clearing
- * that, so a test run left `search_path = vq_test_…` on a pooled connection
- * that a later process — using the plain production URL, with no schema
- * parameter at all — then inherited. It was still there after the schema had
- * been dropped.
+ * `?schema=` is honoured on the pooled endpoint — `search_path` becomes the
+ * named schema alone, and an unqualified `"Project"` cannot see production's.
+ * On the direct endpoint the parameter is **ignored**: `search_path` stays
+ * `"$user", public`, so every unqualified read and write lands on the live
+ * data. That is not a subtle difference and it is not documented anywhere the
+ * connection string can tell you about.
  *
- * Prisma schema-qualifies the SQL it generates, so the application itself was
- * unaffected. The exposure is raw SQL, which resolves through `search_path`,
- * and there are two such sites in the codebase. Going direct keeps the test
- * run's session state out of the pool entirely.
+ * It was found the hard way. A rehearsal script pointed at the direct endpoint
+ * created three projects and three subcontractors in production before anyone
+ * noticed, because the schema parameter it was relying on did nothing.
+ *
+ * So: pooled here, and `assertIsolated` below proves it on every run rather
+ * than trusting this comment.
  */
 function baseUrl(): string {
-  const url = process.env.DATABASE_URL_UNPOOLED || process.env.DATABASE_URL;
+  const url = process.env.DATABASE_URL;
   if (!url) throw new Error("DATABASE_URL is not set. Tests need it to reach Neon.");
   return url;
+}
+
+/**
+ * Prove the connection cannot see production before writing a single row.
+ *
+ * Two independent checks, both of which must hold: the resolved schema search
+ * path is exactly the test schema and nothing else, and `public."Project"` —
+ * a table that certainly exists on the live database — is not reachable by an
+ * unqualified name.
+ */
+export async function assertIsolated(): Promise<void> {
+  const db = new PrismaClient({ datasources: { db: { url: testDatabaseUrl() } } });
+  try {
+    const rows = await db.$queryRawUnsafe<{ s: string[] }[]>(`SELECT current_schemas(false) AS s`);
+    const path = rows[0].s;
+    if (path.length !== 1 || path[0] !== TEST_SCHEMA) {
+      throw new Error(
+        `Refusing to run: schema path resolved to [${path.join(", ")}], not [${TEST_SCHEMA}] alone. ` +
+          `The ?schema= parameter is being ignored — check this is the pooled endpoint.`,
+      );
+    }
+    let reachedProduction = false;
+    try {
+      await db.$queryRawUnsafe(`SELECT 1 FROM "Project" LIMIT 1`);
+      reachedProduction = true;
+    } catch {
+      /* the only acceptable outcome: no such table in this schema */
+    }
+    if (reachedProduction) {
+      throw new Error(
+        'Refusing to run: an unqualified "Project" resolved to a real table before the ' +
+          "test schema was built. This connection can see production.",
+      );
+    }
+  } finally {
+    await db.$disconnect();
+  }
 }
 
 /** The connection string the application under test is given. */
@@ -107,6 +146,9 @@ export async function createTestSchema(): Promise<void> {
   } finally {
     await owner.$disconnect();
   }
+
+  // Before anything is written, prove the connection cannot reach production.
+  await assertIsolated();
 
   // Run Prisma's entrypoint under this Node rather than through npx: current
   // Node refuses to spawn a .cmd shim on Windows (EINVAL), and going through a

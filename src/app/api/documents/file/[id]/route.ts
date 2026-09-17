@@ -26,7 +26,7 @@ export async function GET(
   const me = await getCurrentUser();
   if (!me) return NextResponse.json({ error: "Sign in to download." }, { status: 401 });
 
-  const file = await prisma.documentFile.findUnique({
+  const file = await prisma.documentFile.findFirst({
     where: { id },
     include: {
       document: {

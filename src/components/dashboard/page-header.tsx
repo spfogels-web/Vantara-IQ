@@ -4,7 +4,6 @@ import * as React from "react";
 import { CalendarDays, Download, RefreshCw, SlidersHorizontal } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { organization } from "@/data/mock";
 import { Button } from "@/components/ui/button";
 
 function greeting(hour: number) {
@@ -25,14 +24,17 @@ export function PageHeader({ name, summary }: { name?: string; summary?: string 
     return () => clearInterval(timer);
   }, []);
 
-  // Falls back to the fixture only when rendered without a signed-in user.
-  const firstName = (name ?? organization.user.name).split(" ")[0];
+  // Rendered without a signed-in user, the greeting drops the name rather than
+  // borrowing one from a fixture — "Good morning, John Smith" to somebody who
+  // is not John Smith is worse than no name at all.
+  const firstName = name?.split(" ")[0] ?? "";
 
   return (
     <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div className="min-w-0">
         <h1 className="section-title text-[22px] font-semibold leading-tight tracking-[-0.025em] sm:text-[26px]">
-          {now ? greeting(now.getHours()) : "Welcome back"}, {firstName}
+          {now ? greeting(now.getHours()) : "Welcome back"}
+          {firstName ? `, ${firstName}` : ""}
         </h1>
         <p className="mt-1 text-[13px] text-muted-foreground">
           <span suppressHydrationWarning>

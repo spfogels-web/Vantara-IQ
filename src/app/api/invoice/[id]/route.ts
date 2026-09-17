@@ -30,7 +30,7 @@ export async function GET(
     return NextResponse.json({ error: "Not authorised." }, { status: 403 });
   }
 
-  const invoice = await prisma.invoice.findUnique({
+  const invoice = await prisma.invoice.findFirst({
     where: { id },
     include: {
       customer: { select: { name: true, billingEmail: true, paymentTerms: true } },

@@ -43,7 +43,7 @@ export async function GET(
     }
   }
 
-  const project = await prisma.project.findUnique({
+  const project = await prisma.project.findFirst({
     where: { id: projectId },
     select: { name: true, number: true, mapUrl: true, mapOriginalUrl: true },
   });

@@ -21,7 +21,6 @@ import { cn } from "@/lib/utils";
 import { getIcon } from "@/lib/icons";
 import { initials } from "@/lib/format";
 import { toneStyles } from "@/lib/tone";
-import { organization } from "@/data/mock";
 import type { AppNotification } from "@/lib/types";
 import { markNotificationsRead } from "@/app/actions";
 import type { CurrentUser } from "@/lib/auth";
@@ -246,16 +245,17 @@ const ROLE_LABEL: Record<string, string> = {
 };
 
 function UserMenu({ user: current }: { user: CurrentUser | null }) {
-  // Falls back to the fixture only when nobody is signed in, which in practice
-  // means a page rendered outside the authenticated shell.
+  // Rendered outside a session — a bare route, or a page still resolving. It
+  // used to borrow a fixture here, which put one company's name and a made-up
+  // person on a screen that had no idea who was looking at it.
   const user = current
     ? {
         name: current.name,
         email: current.email,
         role: ROLE_LABEL[current.role] ?? current.role,
       }
-    : organization.user;
-  const plan = current?.organizationPlan ?? organization.plan;
+    : { name: "Signed out", email: "", role: "" };
+  const plan = current?.organizationPlan ?? null;
   const [feedbackOpen, setFeedbackOpen] = React.useState(false);
 
   return (
@@ -317,9 +317,11 @@ function UserMenu({ user: current }: { user: CurrentUser | null }) {
         <DropdownMenuItem className="gap-2.5 py-2 text-[12.5px]">
           <CreditCard className="size-4 text-muted-foreground" />
           Billing &amp; plan
-          <span className="ml-auto rounded bg-brand/15 px-1.5 py-0.5 text-[10px] font-semibold text-brand-bright">
-            {plan}
-          </span>
+          {plan ? (
+            <span className="ml-auto rounded bg-brand/15 px-1.5 py-0.5 text-[10px] font-semibold text-brand-bright">
+              {plan}
+            </span>
+          ) : null}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
@@ -339,10 +341,12 @@ function MobileNav({
   logoUrl,
   badges,
   role,
+  account,
 }: {
   logoUrl?: string | null;
   badges?: Record<string, number>;
   role?: string | null;
+  account?: { name: string; plan?: string | null } | null;
 }) {
   const { mobileOpen, setMobileOpen } = useSidebar();
 
@@ -363,6 +367,7 @@ function MobileNav({
           logoUrl={logoUrl}
           badges={badges}
           role={role}
+          account={account}
           collapsed={false}
           showCollapseButton={false}
           onNavigate={() => setMobileOpen(false)}
@@ -391,7 +396,21 @@ export function Topbar({
 
   return (
     <header className="glass sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-border px-3 sm:gap-3 sm:px-5">
-      <MobileNav logoUrl={logoUrl} badges={badges} role={user?.role} />
+      <MobileNav
+        logoUrl={logoUrl}
+        badges={badges}
+        role={user?.role}
+        account={
+          user
+            ? {
+                name:
+                  (user.role === "SUBCONTRACTOR" ? user.subcontractorName : user.organizationName) ||
+                  user.organizationName,
+                plan: user.role === "SUBCONTRACTOR" ? null : user.organizationPlan,
+              }
+            : null
+        }
+      />
 
       {/* From md up the search field is present and absorbs the squeeze, so the
           title keeps shrink-0 and never collapses to an ellipsis. Below md

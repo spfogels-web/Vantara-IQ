@@ -157,7 +157,7 @@ const PROJECT_LIST_SELECT = {
   // Who is actually on it. The  string above is typed once when the
   // project is created and says "Unassigned" on jobs a crew has been working
   // for a fortnight; this relation is the assignment that means something.
-  crews: { select: { company: true } },
+  crews: { select: { subcontractor: { select: { company: true } } } },
 } as const;
 
 /** A row from either query: the list select, or a full single-project row. */
@@ -1148,7 +1148,7 @@ export async function getProjects(): Promise<Project[]> {
     // every job read 0 ft at 0/0 pace on health 80 while Charles Hart had
     // 7,326 ft in the ground.
     const perDay = b.days > 0 ? Math.round(b.total / b.days) : 0;
-    const assigned = (r.crews ?? []).map((c) => c.company.trim()).filter(Boolean);
+    const assigned = (r.crews ?? []).map((c) => c.subcontractor.company.trim()).filter(Boolean);
     // A job somebody has called finished stops being measured against its
     // plan. The footage ratio is a progress estimate, and a finished job that
     // reads 94% because the material list overestimated is telling the office
@@ -1344,7 +1344,7 @@ export async function getProject(id: string): Promise<Project | undefined> {
 
   const r = await prisma.project.findUnique({
     where: { id },
-    include: { crews: { select: { company: true } } },
+    include: { crews: { select: { subcontractor: { select: { company: true } } } } },
   });
   return r ? toProject(r) : undefined;
 }
@@ -1360,7 +1360,7 @@ export async function getSubcontractors(): Promise<Subcontractor[]> {
   await requireStaff();
   const rows = await prisma.subcontractor.findMany({
     include: {
-      projects: { select: { id: true, name: true, number: true } },
+      projects: { select: { project: { select: { id: true, name: true, number: true } } } },
       // Section only — the files themselves are megabytes and nothing here
       // draws them; the question is only which slots have been filled.
       documents: { select: { section: true } },
@@ -1368,7 +1368,11 @@ export async function getSubcontractors(): Promise<Subcontractor[]> {
     orderBy: { createdAt: "asc" },
   });
   return rows.map((r) =>
-    toSubcontractor({ ...r, filedSections: r.documents.map((d) => d.section) }),
+    toSubcontractor({
+      ...r,
+      projects: r.projects.map((p) => p.project),
+      filedSections: r.documents.map((d) => d.section),
+    }),
   );
 }
 
@@ -2306,7 +2310,7 @@ export async function getProjectValuation(projectId: string): Promise<ProjectVal
   await requireStaff();
   await assertProjectAccess(projectId);
 
-  const project = await prisma.project.findUnique({
+  const projectRow = await prisma.project.findUnique({
     where: { id: projectId },
     select: {
       client: true,
@@ -2317,9 +2321,13 @@ export async function getProjectValuation(projectId: string): Promise<ProjectVal
         where: { inScope: true },
         select: { code: true, item: true, unit: true, planned: true },
       },
-      crews: { select: { id: true, company: true } },
+      crews: { select: { subcontractor: { select: { id: true, company: true } } } },
     },
   });
+  // One list of crews, rather than a list of assignments carrying one.
+  const project = projectRow
+    ? { ...projectRow, crews: projectRow.crews.map((c) => c.subcontractor) }
+    : null;
 
   const empty: PricingResult = {
     lines: [],
@@ -3411,7 +3419,7 @@ export async function getProjectRates(projectId: string): Promise<ProjectRates> 
     missingCustomerRates: 0, missingSubRates: 0,
   };
 
-  const project = await prisma.project.findUnique({
+  const projectRow = await prisma.project.findUnique({
     where: { id: projectId },
     select: {
       customerId: true,
@@ -3422,9 +3430,12 @@ export async function getProjectRates(projectId: string): Promise<ProjectRates> 
         where: { inScope: true },
         select: { code: true, item: true, unit: true, planned: true },
       },
-      crews: { select: { id: true, company: true } },
+      crews: { select: { subcontractor: { select: { id: true, company: true } } } },
     },
   });
+  const project = projectRow
+    ? { ...projectRow, crews: projectRow.crews.map((c) => c.subcontractor) }
+    : null;
   if (!project) return empty;
 
   const customerId =
@@ -3558,7 +3569,7 @@ export interface ProjectCrew {
 export async function getProjectCrews(projectId: string): Promise<ProjectCrew[]> {
   await requireStaff();
   const rows = await prisma.subcontractor.findMany({
-    where: { projects: { some: { id: projectId } } },
+    where: { projects: { some: { projectId } } },
     select: {
       id: true,
       company: true,

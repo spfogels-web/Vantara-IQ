@@ -25,7 +25,7 @@ export async function GET(
   const me = await getCurrentUser();
   if (!me) return NextResponse.json({ error: "Not signed in." }, { status: 401 });
 
-  const doc = await prisma.subDocument.findUnique({
+  const doc = await prisma.subDocument.findFirst({
     where: { id },
     select: {
       subcontractorId: true,

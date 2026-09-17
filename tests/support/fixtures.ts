@@ -171,7 +171,10 @@ async function buildTenant(db: PrismaClient, s: Spec): Promise<Tenant> {
       customerId: customer.id,
       crew: s.crews[0].company,
       mapUrl: `data:text/plain;base64,${Buffer.from(`${s.project} print`).toString("base64")}`,
-      crews: { connect: [{ id: crews[0].subcontractorId }] },
+      // `create`, not `connect`: the join is an explicit row now, and
+      // `connect: [{ id }]` would still compile while looking those ids up as
+      // assignment ids and quietly assigning nobody.
+      crews: { create: [{ subcontractorId: crews[0].subcontractorId }] },
     },
   });
 

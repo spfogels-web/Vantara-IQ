@@ -246,7 +246,7 @@ model Project {
   /// access is decided by, so it is a real foreign key rather than a list of
   /// typed names — renaming a project can no longer revoke a crew's access,
   /// and deleting one cannot leave an assignment pointing at nothing.
-  crews            Subcontractor[]   @relation("ProjectCrews")
+  crews            ProjectCrew[]
   documents        Document[]
   createdAt        DateTime          @default(now())
   locateTickets    LocateTicket[]
@@ -316,6 +316,37 @@ model DailySheet {
 /// Material actually tracked against a project — the thing the ops team manages.
 /// Rows arrive here only after a human approves them on the review screen, so
 /// nothing Claude extracted is ever counted as real stock on its own.
+/// A crew assigned to a job.
+///
+/// This was an implicit many-to-many — `crews Subcontractor[]` against
+/// `projects Project[]` — which Prisma stored in a hidden `_ProjectCrews`
+/// table of two id columns. It is written out because of what the relation
+/// does: it is the authority on what a subcontractor can see, and every
+/// project-scoped guard in the application resolves through it.
+///
+/// A hidden join table has nowhere to put anything. When the tenancy work adds
+/// an `organizationId` to every table, this one could not have carried it, and
+/// there would have been no way to stop a row pairing a project in one company
+/// with a crew in another — which is not a subtle leak, it is a crew being
+/// granted an entire job belonging to somebody else. Made explicit now, while
+/// it holds twenty-four rows and changes nothing, rather than during a
+/// migration that is already moving every other table.
+///
+/// `assignedAt` is new, and only because the row had to be created anyway.
+model ProjectCrew {
+  id              String        @id @default(cuid())
+  project         Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId       String
+  subcontractor   Subcontractor @relation(fields: [subcontractorId], references: [id], onDelete: Cascade)
+  subcontractorId String
+  assignedAt      DateTime      @default(now())
+
+  /// One assignment per crew per job. The implicit table enforced the same
+  /// thing with a composite primary key.
+  @@unique([projectId, subcontractorId])
+  @@index([subcontractorId])
+}
+
 model ProjectMaterial {
   id             String   @id @default(cuid())
   project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
@@ -404,7 +435,7 @@ model Subcontractor {
   state          SubState          @default(PENDING_REVIEW)
   tone           String            @default("neutral")
   /// Jobs this crew is assigned to — the authority on what they can see.
-  projects       Project[]         @relation("ProjectCrews")
+  projects       ProjectCrew[]
   badges         CrewBadge[]
   ach            AchAuthorization?
   notifications  Notification[]
@@ -979,6 +1010,13 @@ model Daily {
   reviewedBy     String   @default("")
   reviewedAt     String   @default("")
   createdAt      DateTime @default(now())
+  /// The highest-volume table in the system and, until now, the only one with
+  /// no index at all beyond its primary key. Every list reads it by date, by
+  /// job or by billing week, and each of those was a sequential scan.
+  @@index([workDate])
+  @@index([status, workDate])
+  @@index([billingWeekEnd])
+  @@index([projectId, workDate])
 }
 
 /// Where an invoice stands. DRAFT is staged and still recomputable; everything

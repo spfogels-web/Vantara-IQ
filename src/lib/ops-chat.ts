@@ -113,7 +113,7 @@ async function runTool(name: string, input: Record<string, unknown>): Promise<st
           company: true, lead: true, state: true, location: true, trades: true,
           compliance: true, crewSize: true,
           documents: { select: { section: true } },
-          projects: { select: { name: true } },
+          projects: { select: { project: { select: { name: true } } } },
         },
       });
       return JSON.stringify(
@@ -126,7 +126,7 @@ async function runTool(name: string, input: Record<string, unknown>): Promise<st
           crewSize: r.crewSize,
           documentsOnFile: [...new Set(r.documents.map((d) => d.section))],
           compliance: r.compliance,
-          projects: r.projects.map((p) => p.name),
+          projects: r.projects.map((p) => p.project.name),
         })),
       );
     }

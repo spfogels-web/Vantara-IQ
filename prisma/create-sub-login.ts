@@ -77,7 +77,7 @@ async function main() {
     }
     await prisma.subcontractor.update({
       where: { id: sub.id },
-      data: { projects: { connect: { id: match.id } } },
+      data: { projects: { create: { projectId: match.id } } },
     });
   }
 
@@ -90,12 +90,12 @@ async function main() {
 
   const assigned = await prisma.subcontractor.findUnique({
     where: { id: sub.id },
-    select: { projects: { select: { name: true } } },
+    select: { projects: { select: { project: { select: { name: true } } } } },
   });
 
   console.log(
     `${user.email}  ${user.name}  SUBCONTRACTOR  crew=${company}  ` +
-      `assigned=[${assigned?.projects.map((p) => p.name).join(", ") || "none"}]`,
+      `assigned=[${assigned?.projects.map((p) => p.project.name).join(", ") || "none"}]`,
   );
 }
 

@@ -124,7 +124,7 @@ async function main() {
       crewSize: 4,
       equipment: ["D20x22", "Plow", "Mini-ex"],
       notes: "Sandbox crew. Safe to delete.",
-      projects: { connect: { id: project.id } },
+      projects: { create: { projectId: project.id } },
     },
   });
 

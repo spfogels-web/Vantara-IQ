@@ -86,9 +86,9 @@ export async function visibleProjectIds(user: CurrentUser): Promise<string[] | n
 
   const sub = await prisma.subcontractor.findUnique({
     where: { id: user.subcontractorId },
-    select: { projects: { select: { id: true } } },
+    select: { projects: { select: { projectId: true } } },
   });
-  return (sub?.projects ?? []).map((p) => p.id);
+  return (sub?.projects ?? []).map((p) => p.projectId);
 }
 
 /**

@@ -65,7 +65,7 @@ export async function GET(
   const me = await getCurrentUser();
   if (!me) return NextResponse.json({ error: "Not authorised." }, { status: 403 });
 
-  const sheet = await prisma.dailySheet.findUnique({
+  const sheet = await prisma.dailySheet.findFirst({
     where: { id },
     select: {
       projectId: true,

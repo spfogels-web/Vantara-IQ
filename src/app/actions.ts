@@ -229,7 +229,7 @@ export async function deleteSubcontractor(id: string, confirm?: boolean) {
   await requireStaff();
   const sub = await prisma.subcontractor.findUnique({
     where: { id },
-    select: { company: true, projects: { select: { name: true } } },
+    select: { company: true, projects: { select: { project: { select: { name: true } } } } },
   });
   if (!sub) return { ok: false as const, error: "Subcontractor not found." };
 
@@ -248,7 +248,7 @@ export async function deleteSubcontractor(id: string, confirm?: boolean) {
     };
   }
 
-  const projects = sub.projects.map((p) => p.name.trim()).filter(Boolean);
+  const projects = sub.projects.map((p) => p.project.name.trim()).filter(Boolean);
   if (projects.length > 0 && !confirm) {
     return {
       ok: false as const,
@@ -318,10 +318,33 @@ export async function setSubcontractorProjects(id: string, projectIds: string[])
     select: { id: true },
   });
 
-  await prisma.subcontractor.update({
-    where: { id },
-    data: { projects: { set: real.map((p) => ({ id: p.id })) } },
-  });
+  /**
+   * Replace this crew's assignments with exactly the jobs asked for.
+   *
+   * This was `projects: { set: [...] }` against an implicit many-to-many, where
+   * the ids were project ids. With an explicit join row, `set` still compiles —
+   * `{ id }` is a valid ProjectCrew identifier — but it would be looking those
+   * project ids up as *assignment* ids, match nothing, and quietly unassign the
+   * crew from everything. The compiler cannot see the difference, so the write
+   * is spelled out instead.
+   *
+   * In one transaction, because a crew with no assignments is a crew locked out
+   * of their own jobs, and that state must never be observable.
+   */
+  await prisma.$transaction([
+    prisma.projectCrew.deleteMany({
+      // Spelled out rather than leaning on what `notIn: []` means, because
+      // unassigning a crew from everything is the case where being wrong is
+      // worst and the empty list is exactly when it is least obvious.
+      where: real.length
+        ? { subcontractorId: id, projectId: { notIn: real.map((p) => p.id) } }
+        : { subcontractorId: id },
+    }),
+    prisma.projectCrew.createMany({
+      data: real.map((p) => ({ subcontractorId: id, projectId: p.id })),
+      skipDuplicates: true,
+    }),
+  ]);
   revalidatePath("/subcontractors");
   revalidatePath("/projects");
   return { ok: true as const, count: real.length };

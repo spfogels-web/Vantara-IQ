@@ -45,9 +45,32 @@ function ShellFrame({
 
   const offset = isDesktop ? (collapsed ? SIDEBAR_WIDTH_COLLAPSED : SIDEBAR_WIDTH) : 0;
 
+  /**
+   * Whose name goes on the account card.
+   *
+   * A crew sees their own company, because that is the account they are signed
+   * in to — showing them the prime's name was an accident of the card reading
+   * from a fixture. The office sees the organization, and the plan only
+   * appears for staff: what a customer pays for the software is not a crew's
+   * business.
+   */
+  const isCrew = user?.role === "SUBCONTRACTOR";
+  const account = user
+    ? {
+        name: (isCrew ? user.subcontractorName : user.organizationName) || user.organizationName,
+        plan: isCrew ? null : user.organizationPlan,
+      }
+    : null;
+
   return (
     <div className="aurora relative min-h-svh">
-      <DesktopSidebar logoUrl={logoUrl} badges={badges} role={user?.role} showPay={showPay} />
+      <DesktopSidebar
+        logoUrl={logoUrl}
+        badges={badges}
+        role={user?.role}
+        showPay={showPay}
+        account={account}
+      />
 
       <div
         className="relative z-10 flex min-h-svh flex-col"

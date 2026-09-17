@@ -8,7 +8,6 @@ import { ChevronsLeft, MessageSquarePlus, PanelLeft, Settings, UserRound } from 
 import { cn } from "@/lib/utils";
 import { getIcon } from "@/lib/icons";
 import { footerNav, homeHrefFor, navSectionsFor } from "@/lib/nav";
-import { organization } from "@/data/mock";
 import { initials } from "@/lib/format";
 import type { NavItem } from "@/lib/types";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -118,6 +117,7 @@ export function SidebarContent({
   badges,
   role,
   showPay,
+  account,
 }: {
   collapsed: boolean;
   onNavigate?: () => void;
@@ -129,10 +129,25 @@ export function SidebarContent({
   /** Drives which rail is built — staff get the full one, crews get theirs. */
   role?: string | null;
   showPay?: boolean;
+  /**
+   * Whose account this is, for the card at the bottom.
+   *
+   * It used to read "Fortitude Infrastructure · Enterprise plan · pilot" for
+   * everybody, from a fixture in `src/data/mock.ts` — so a second contractor
+   * signing in would have seen another company's name on their own screen, and
+   * a crew saw the prime's name rather than their own.
+   */
+  account?: { name: string; plan?: string | null } | null;
 }) {
   const { toggle } = useSidebar();
   const t = useT();
   const [feedbackOpen, setFeedbackOpen] = React.useState(false);
+
+  // No account resolved means a screen rendered outside a session. Fall back
+  // to the product's own name — never to a company's, which is precisely the
+  // bug this replaced.
+  const accountName = account?.name?.trim() || "Vantara IQ";
+  const accountPlan = account?.plan?.trim() || null;
 
   return (
     <div className="flex h-full flex-col bg-sidebar">
@@ -198,22 +213,23 @@ export function SidebarContent({
         ))}
       </div>
 
-      {/* Org card — opens profile / org settings / feedback (Fortitude is the
-          Enterprise pilot user, so feedback is a first-class action here). */}
+      {/* Account card — opens profile, settings and feedback. Whose name
+          appears here comes from the session: a crew sees their own company,
+          the office sees theirs. */}
       <div className={cn("border-t border-sidebar-border p-3", collapsed && "px-0")}>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             {collapsed ? (
               <button
                 type="button"
-                aria-label={`${organization.name} — account menu`}
+                aria-label={`${accountName} — account menu`}
                 className="focus-ring mx-auto grid size-8 place-items-center rounded-lg bg-foreground/[0.06] text-[11px] font-semibold text-foreground ring-1 ring-inset ring-foreground/[0.06]"
               >
                 {logoUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={logoUrl} alt="" className="size-full rounded-lg object-contain p-0.5" />
                 ) : (
-                  initials(organization.name)
+                  initials(accountName)
                 )}
               </button>
             ) : (
@@ -226,16 +242,18 @@ export function SidebarContent({
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={logoUrl} alt="" className="size-full object-contain p-0.5" />
                   ) : (
-                    initials(organization.name)
+                    initials(accountName)
                   )}
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[12.5px] font-medium text-foreground">
-                    {organization.name}
+                    {accountName}
                   </span>
-                  <span className="block truncate text-[11px] text-muted-foreground">
-                    {organization.plan} · pilot
-                  </span>
+                  {accountPlan ? (
+                    <span className="block truncate text-[11px] text-muted-foreground">
+                      {accountPlan}
+                    </span>
+                  ) : null}
                 </span>
               </button>
             )}
@@ -247,10 +265,12 @@ export function SidebarContent({
             className="w-60 rounded-xl border-foreground/[0.08] shadow-elev-3"
           >
             <DropdownMenuLabel className="flex flex-col gap-0.5">
-              <span className="text-[12.5px] font-medium text-foreground">{organization.name}</span>
-              <span className="text-[10.5px] font-normal text-muted-foreground">
-                {organization.plan} plan · pilot account
-              </span>
+              <span className="text-[12.5px] font-medium text-foreground">{accountName}</span>
+              {accountPlan ? (
+                <span className="text-[10.5px] font-normal text-muted-foreground">
+                  {accountPlan}
+                </span>
+              ) : null}
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild className="gap-2.5 py-2 text-[12.5px]">
@@ -290,11 +310,13 @@ export function DesktopSidebar({
   badges,
   role,
   showPay,
+  account,
 }: {
   logoUrl?: string | null;
   badges?: Record<string, number>;
   role?: string | null;
   showPay?: boolean;
+  account?: { name: string; plan?: string | null } | null;
 }) {
   const { collapsed, toggle } = useSidebar();
 
@@ -307,7 +329,13 @@ export function DesktopSidebar({
         transition: "width 260ms cubic-bezier(0.16, 1, 0.3, 1)",
       }}
     >
-      <SidebarContent collapsed={collapsed} logoUrl={logoUrl} badges={badges} role={role} />
+      <SidebarContent
+        collapsed={collapsed}
+        logoUrl={logoUrl}
+        badges={badges}
+        role={role}
+        account={account}
+      />
 
       {/* Expand affordance, only visible while collapsed */}
       {collapsed ? (
