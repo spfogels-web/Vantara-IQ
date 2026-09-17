@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
-import { requireStaff } from "@/lib/authz";
-import { assertProjectAccess } from "@/lib/authz";
+import { assertProjectAccess, notAuthorized, requireStaff } from "@/lib/authz";
 import { buildRateSheetPdf } from "@/lib/rate-sheet-pdf";
 import { companyLogo } from "@/lib/rate-sheet-logo";
 import { normalizeCode, rateFamilyOf, RATE_FAMILIES } from "@/lib/unit-codes";
@@ -31,8 +30,14 @@ export async function GET(
   { params }: { params: Promise<{ projectId: string }> },
 ) {
   const { projectId } = await params;
-  await requireStaff();
-  await assertProjectAccess(projectId);
+  try {
+    await requireStaff();
+    await assertProjectAccess(projectId);
+  } catch (e) {
+    const denied = notAuthorized(e);
+    if (!denied) throw e;
+    return NextResponse.json({ error: denied.message }, { status: 403 });
+  }
 
   const [project, org] = await Promise.all([
     prisma.project.findUnique({

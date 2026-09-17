@@ -34,6 +34,26 @@ export class NotAuthorizedError extends Error {
   }
 }
 
+/**
+ * The same throw, translated for a route handler.
+ *
+ * A Server Action can let `NotAuthorizedError` propagate — React turns it into
+ * a rejected action and the caller shows the message. A route handler cannot:
+ * an uncaught throw there is a 500, so a refusal reads to the browser as "this
+ * broke" rather than "you may not". Both rate-sheet routes did exactly that.
+ *
+ * Returns null for anything else, so a real fault still surfaces as a fault
+ * instead of being flattened into a permission error.
+ */
+export function notAuthorized(error: unknown): { message: string } | null {
+  if (error instanceof NotAuthorizedError) return { message: error.message };
+  // Instance checks fail across module instances in dev; the name is stable.
+  if (error instanceof Error && error.name === "NotAuthorizedError") {
+    return { message: error.message };
+  }
+  return null;
+}
+
 /** The signed-in user, or null. Never throws — for read paths that degrade. */
 export async function viewer(): Promise<CurrentUser | null> {
   return getCurrentUser();

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
-import { requireStaff } from "@/lib/authz";
+import { notAuthorized, requireStaff } from "@/lib/authz";
 import { buildRateSheetPdf } from "@/lib/rate-sheet-pdf";
 import { companyLogo } from "@/lib/rate-sheet-logo";
 
@@ -20,7 +20,13 @@ export async function GET(
   { params }: { params: Promise<{ subcontractorId: string }> },
 ) {
   const { subcontractorId } = await params;
-  await requireStaff();
+  try {
+    await requireStaff();
+  } catch (e) {
+    const denied = notAuthorized(e);
+    if (!denied) throw e;
+    return NextResponse.json({ error: denied.message }, { status: 403 });
+  }
 
   const [sub, org] = await Promise.all([
     prisma.subcontractor.findUnique({

@@ -42,6 +42,13 @@ const PUBLIC_PREFIXES = [
   // Twilio POSTs opt-outs here and cannot carry a session. It authenticates
   // instead by verifying Twilio’s signature over the body.
   "/api/sms",
+  // Vercel's scheduler calls this twice a day with a bearer token and no
+  // cookie. Without this line it was redirected to /login before the route's
+  // own CRON_SECRET check ever ran, which is why the locate sweep has never
+  // fired — the 503 about a missing secret was a symptom, not the cause.
+  // The route is not unprotected: it compares the bearer against CRON_SECRET
+  // and refuses to run at all if that variable is unset.
+  "/api/cron",
 ];
 
 /**
@@ -79,6 +86,11 @@ const SUB_ALLOWED_PREFIXES = [
   // statement belongs to the company asking before it renders anything —
   // what another crew is paid is the one figure that must never cross over.
   "/api/remittance",
+  // A document from their own onboarding packet — the W-9 they uploaded, the
+  // agreement they signed. The route was written to serve exactly that and
+  // checks the document belongs to the company asking, but without this line
+  // middleware bounced them to /dailies first, so the path was dead.
+  "/api/sub-document",
 ];
 
 /**
