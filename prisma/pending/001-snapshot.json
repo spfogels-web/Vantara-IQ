@@ -1,0 +1,114 @@
+{
+  "takenAt": "2026-09-17T02:57:19.138Z",
+  "pairs": [
+    {
+      "A": "cmscmrx41000bbzbs374l808w",
+      "B": "cmsjvt8ba0000i80468x067ju"
+    },
+    {
+      "A": "cmscmrx41000bbzbs374l808w",
+      "B": "cmskscef80000jv04whxf7frw"
+    },
+    {
+      "A": "cmscmrx41000bbzbs374l808w",
+      "B": "cmskudkp00000l80462flw47i"
+    },
+    {
+      "A": "cmscmrx41000bbzbs374l808w",
+      "B": "cmsp43y030000lc04h2y0dbu3"
+    },
+    {
+      "A": "cmscmrx41000bbzbs374l808w",
+      "B": "cmsp62v880000la04xexedieh"
+    },
+    {
+      "A": "cmscmrx41000bbzbs374l808w",
+      "B": "cmt3jvcc70000ky044o3besn6"
+    },
+    {
+      "A": "cmscmrxbb000fbzbsxwaceerj",
+      "B": "cmsjvt8ba0000i80468x067ju"
+    },
+    {
+      "A": "cmscmrxbb000fbzbsxwaceerj",
+      "B": "cmsp62v880000la04xexedieh"
+    },
+    {
+      "A": "cmscmrxbb000fbzbsxwaceerj",
+      "B": "cmspj9fxu0000js044518sbi2"
+    },
+    {
+      "A": "cmskqkfx40001jx04jolq2t9a",
+      "B": "cmsjvt8ba0000i80468x067ju"
+    },
+    {
+      "A": "cmskqkfx40001jx04jolq2t9a",
+      "B": "cmsp62v880000la04xexedieh"
+    },
+    {
+      "A": "cmskqkfx40001jx04jolq2t9a",
+      "B": "cmss8g6i10000l504chl7w05g"
+    },
+    {
+      "A": "cmskqkfx40001jx04jolq2t9a",
+      "B": "cmtiwx86h0000jo04nczsl2f9"
+    },
+    {
+      "A": "cmslwnyw00001ie04im36b91z",
+      "B": "cmskscef80000jv04whxf7frw"
+    },
+    {
+      "A": "cmslwnyw00001ie04im36b91z",
+      "B": "cmsoynvzt0000jr043zlc15dk"
+    },
+    {
+      "A": "cmslwnyw00001ie04im36b91z",
+      "B": "cmsp7se470000jv041hy6wmmk"
+    },
+    {
+      "A": "cmslwnyw00001ie04im36b91z",
+      "B": "cmsw4fg7m0000l5043jrftzu7"
+    },
+    {
+      "A": "cmtiim2db0001l104ui0ket9a",
+      "B": "cmskscef80000jv04whxf7frw"
+    },
+    {
+      "A": "cmtiio2420003l104k62cu7a6",
+      "B": "cmtso9qdj0000l704f6asvum4"
+    },
+    {
+      "A": "cmtj9eq3o0001jx04ujv7bvdr",
+      "B": "cmskscef80000jv04whxf7frw"
+    },
+    {
+      "A": "cmtja0f5o0001jo0402dglxy7",
+      "B": "cmskscef80000jv04whxf7frw"
+    },
+    {
+      "A": "cmtjanipi0001jp04w54rptud",
+      "B": "cmtso9qdj0000l704f6asvum4"
+    },
+    {
+      "A": "cmtjjxdcp002sl004fdkf7fya",
+      "B": "cmtso9qdj0000l704f6asvum4"
+    },
+    {
+      "A": "cmtnsnyhy0001l504u4yc27in",
+      "B": "cmsp62v880000la04xexedieh"
+    }
+  ],
+  "counts": {
+    "Organization": 1,
+    "Project": 12,
+    "Subcontractor": 13,
+    "Customer": 2,
+    "User": 15,
+    "Daily": 33,
+    "DailySheet": 69,
+    "Invoice": 2,
+    "SubInvoice": 2,
+    "LocateTicket": 11,
+    "__tables": 80
+  }
+}
