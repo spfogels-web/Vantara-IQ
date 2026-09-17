@@ -27,7 +27,19 @@ const ROWS = 2000;
 const QUERIES_PER_PAGE = 8;
 const SAMPLES = 30;
 
-const ROLE = "vq_rls_spike";
+/** tsconfig targets below ES2020, so a 0n literal will not compile. */
+const ZERO = BigInt(0);
+
+/**
+ * A fresh name every run.
+ *
+ * Dropping and recreating a role with the same name fails against the pooled
+ * endpoint with `invalid role OID` — the pooler still holds the old oid for
+ * that name and authenticates against it. Worth knowing before Phase 4 creates
+ * the real application role: create it once and leave it, rather than
+ * recreating it on each deploy.
+ */
+const ROLE = `vq_rls_spike_${randomBytes(4).toString("hex")}`;
 const PASSWORD = randomBytes(18).toString("base64url");
 
 function stats(ms: number[]) {
@@ -117,7 +129,7 @@ async function main() {
   const unset = await app.$queryRawUnsafe<{ n: bigint }[]>(
     `SELECT count(*)::bigint AS n FROM rls_spike.guarded`,
   );
-  console.log(`  no app.org_id set                 ${unset[0].n} of ${ROWS} rows   ${ok(unset[0].n === 0n)}`);
+  console.log(`  no app.org_id set                 ${unset[0].n} of ${ROWS} rows   ${ok(unset[0].n === ZERO)}`);
 
   const r = await app.$transaction(async (tx) => {
     await tx.$executeRawUnsafe(`SELECT set_config('app.org_id', '${ORG_A}', true)`);
@@ -138,7 +150,7 @@ async function main() {
     return { mine: mine[0].n, stolen: stolen[0].n, agg: agg[0].s, allAgg: allAgg[0].s };
   });
   console.log(`  as org A, count                   ${r.mine} of ${ROWS} rows   ${ok(r.mine === BigInt(ROWS / 2))}`);
-  console.log(`  as org A, fetch B's row by id     ${r.stolen} rows   ${ok(r.stolen === 0n)}`);
+  console.log(`  as org A, fetch B's row by id     ${r.stolen} rows   ${ok(r.stolen === ZERO)}`);
   console.log(
     `  as org A, SUM(amount)             ${r.agg} vs ${r.allAgg} unscoped   ${ok(r.agg !== r.allAgg)}`,
   );
