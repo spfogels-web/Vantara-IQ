@@ -1,7 +1,8 @@
 import "server-only";
 
-import { prisma } from "@/lib/prisma";
-import type { MaterialInstanceStatus, Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import { prisma, table } from "@/lib/prisma";
+import type { MaterialInstanceStatus } from "@prisma/client";
 
 /**
  * Every operation that moves material.
@@ -326,7 +327,7 @@ export async function issueMaterial(input: IssueInput) {
       const rows = await tx.$queryRaw<
         { id: string; code: string; reelNumber: string; status: string; custodianSubId: string | null; crew: string; responsibleName: string; locationLabel: string }[]
       >`SELECT id, code, "reelNumber", status::text, "custodianSubId", crew, "responsibleName", "locationLabel"
-          FROM "MaterialInstance" WHERE id = ${input.instanceId} FOR UPDATE`;
+          FROM ${Prisma.raw(table("MaterialInstance"))} WHERE id = ${input.instanceId} FOR UPDATE`;
       const inst = rows[0];
       if (!inst) throw new MaterialError("That material record no longer exists.");
 

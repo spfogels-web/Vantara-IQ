@@ -3,7 +3,7 @@ import "server-only";
 import { cache } from "react";
 
 import { Prisma } from "@prisma/client";
-import { prisma } from "@/lib/prisma";
+import { prisma, table } from "@/lib/prisma";
 import { ratesForMarket } from "@/lib/markets";
 import {
   assertOwnSubcontractor,
@@ -185,7 +185,7 @@ async function mapSummaries(ids: string[]): Promise<Map<string, { mapUrl: string
     select id,
            case when length("mapUrl") <= 4096 then "mapUrl" end as "mapUrl",
            ("mapUrl" is not null) as "hasMap"
-      from "Project"
+      from ${Prisma.raw(table("Project"))}
      where id in (${Prisma.join(ids)})`;
   for (const r of rows) out.set(r.id, { mapUrl: r.mapUrl, hasMap: r.hasMap });
   return out;

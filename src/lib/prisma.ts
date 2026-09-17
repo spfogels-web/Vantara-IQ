@@ -37,6 +37,45 @@ function connectionUrl(): string | undefined {
 }
 
 /**
+ * The schema this application's tables live in, for raw SQL to name outright.
+ *
+ * Prisma schema-qualifies everything it generates, so the model API never
+ * depends on `search_path`. Raw SQL does, and that turned out to be a real
+ * outage rather than a theoretical one: the two raw queries in this codebase
+ * failed in production with `relation "Project" does not exist` while every
+ * model-API query on the same page succeeded.
+ *
+ * Setting `?schema=` is not a reliable fix on its own. Prisma applies it as a
+ * session setting when the connection opens, and a pooled Neon connection in a
+ * serverless runtime does not keep one session to itself — so the value can be
+ * whatever the previous occupant of that backend left behind. It held on a
+ * long-lived local connection and did not hold in production, which is exactly
+ * the asymmetry that made this hard to see.
+ *
+ * Naming the schema in the query removes the question entirely. Validated
+ * against an identifier pattern because it is interpolated rather than bound —
+ * it comes from our own environment, but a value that reaches SQL unescaped
+ * deserves the check regardless.
+ */
+export const DB_SCHEMA: string = (() => {
+  const fallback = "public";
+  try {
+    const raw = process.env.DATABASE_URL;
+    if (!raw) return fallback;
+    const named = new URL(raw).searchParams.get("schema");
+    if (!named) return fallback;
+    return /^[A-Za-z_][A-Za-z0-9_]*$/.test(named) ? named : fallback;
+  } catch {
+    return fallback;
+  }
+})();
+
+/** `"public"."Project"` — a table reference that cannot be resolved wrongly. */
+export function table(name: string): string {
+  return `"${DB_SCHEMA}"."${name}"`;
+}
+
+/**
  * A single PrismaClient across hot reloads / serverless invocations. Without the
  * global cache, dev fast-refresh (and every lambda cold path) would spawn a new
  * client and exhaust the connection pool.
