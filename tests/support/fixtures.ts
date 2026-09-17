@@ -1,0 +1,253 @@
+/**
+ * Two contractors who both run on Vantara IQ, and must never see each other.
+ *
+ * Every name, number, street and figure here is invented. The point of the
+ * fixture is that each tenant holds exactly the things the business has said
+ * must stay private — a customer rate card, a crew's pay rate, an invoice, a
+ * pay statement — so a test can ask for one across the boundary and get a
+ * specific, meaningful answer rather than "some row".
+ *
+ * Two subcontractors per tenant, because there are two boundaries to prove,
+ * not one: tenant against tenant, and crew against crew inside a tenant. The
+ * second already works today and is the thing most likely to be broken by
+ * accident during the migration.
+ */
+import type { PrismaClient } from "@prisma/client";
+
+export type Crew = {
+  subcontractorId: string;
+  userId: string;
+  company: string;
+  subInvoiceId: string;
+  subInvoiceNumber: string;
+  documentId: string;
+  rate: number;
+};
+
+export type Tenant = {
+  key: "northgate" | "barrow";
+  orgId: string;
+  orgName: string;
+  staffUserId: string;
+  customerId: string;
+  customerName: string;
+  projectId: string;
+  projectName: string;
+  invoiceId: string;
+  invoiceNumber: string;
+  dailyId: string;
+  dailySheetId: string;
+  taskId: string;
+  locateTicketId: string;
+  customerRate: number;
+  crews: [Crew, Crew];
+};
+
+export type Fixtures = { a: Tenant; b: Tenant };
+
+type Spec = {
+  key: Tenant["key"];
+  org: string;
+  staffEmail: string;
+  customer: string;
+  shortCode: string;
+  project: string;
+  invoiceNumber: string;
+  /** What this contractor bills its customer for one unit code. */
+  customerRate: number;
+  crews: { company: string; email: string; rate: number; subInvoice: string }[];
+};
+
+const SPECS: Spec[] = [
+  {
+    key: "northgate",
+    org: "Northgate Utility Group",
+    staffEmail: "office@northgate-utility.test",
+    customer: "Calder Broadband",
+    shortCode: "CLD",
+    project: "Whitfield Loop",
+    invoiceNumber: "NG-1001",
+    customerRate: 8.5,
+    crews: [
+      { company: "Pellham Boring", email: "lead@pellham.test", rate: 6.0, subInvoice: "NG-S-4001" },
+      { company: "Orsett Underground", email: "lead@orsett.test", rate: 5.75, subInvoice: "NG-S-4002" },
+    ],
+  },
+  {
+    key: "barrow",
+    org: "Barrow Line Services",
+    staffEmail: "office@barrow-line.test",
+    customer: "Merrick Fiber",
+    shortCode: "MRK",
+    project: "Denholm Extension",
+    invoiceNumber: "BL-2001",
+    customerRate: 9.25,
+    crews: [
+      { company: "Vance Trenching", email: "lead@vance.test", rate: 6.4, subInvoice: "BL-S-5001" },
+      { company: "Kittle Directional", email: "lead@kittle.test", rate: 6.15, subInvoice: "BL-S-5002" },
+    ],
+  },
+];
+
+async function buildTenant(db: PrismaClient, s: Spec): Promise<Tenant> {
+  const org = await db.organization.create({ data: { name: s.org, plan: "Enterprise" } });
+
+  const staff = await db.user.create({
+    data: { email: s.staffEmail, name: `${s.org} office`, role: "ADMIN", organizationId: org.id },
+  });
+
+  const customer = await db.customer.create({
+    data: {
+      name: s.customer,
+      shortCode: s.shortCode,
+      industry: "Telecom",
+      tone: "info",
+      status: "Active",
+      logoTint: "#3b6ea5",
+      location: "Invented County",
+    },
+  });
+
+  // The customer rate card: what this contractor bills. Never a crew's business.
+  await db.customerRate.create({
+    data: { customerId: customer.id, code: "BFOV12", description: "Plow 12ct", unit: "ft", rate: s.customerRate },
+  });
+
+  const crews: Crew[] = [];
+  for (const c of s.crews) {
+    const sub = await db.subcontractor.create({
+      data: { company: c.company, lead: c.company, email: c.email, state: "ACTIVE" },
+    });
+    // What this crew is paid. Never another crew's business, and never the
+    // other contractor's.
+    await db.subcontractorRate.create({
+      data: { subcontractorId: sub.id, code: "BFOV12", description: "Plow 12ct", unit: "ft", rate: c.rate },
+    });
+    const user = await db.user.create({
+      data: {
+        email: c.email,
+        name: `${c.company} lead`,
+        role: "SUBCONTRACTOR",
+        subcontractorId: sub.id,
+      },
+    });
+    const statement = await db.subInvoice.create({
+      data: { number: c.subInvoice, subcontractorId: sub.id, status: "ISSUED" },
+    });
+    const doc = await db.subDocument.create({
+      data: {
+        subcontractorId: sub.id,
+        section: "w9",
+        fileName: "w9.pdf",
+        dataUrl: "data:application/pdf;base64,JVBERi0xLjQK",
+      },
+    });
+    crews.push({
+      subcontractorId: sub.id,
+      userId: user.id,
+      company: c.company,
+      subInvoiceId: statement.id,
+      subInvoiceNumber: c.subInvoice,
+      documentId: doc.id,
+      rate: c.rate,
+    });
+  }
+
+  // Only the first crew is assigned to the job. The second is the control for
+  // the crew-against-crew boundary inside one tenant.
+  //
+  // The map is a real (tiny) data URL rather than left empty. An empty one
+  // makes /api/project-map answer "no map on this project" — a 404 that a
+  // naive test reads as a refusal, so the test passes while the boundary is
+  // wide open. Every resource a cross-tenant test asks for has to exist, or
+  // the suite reassures instead of checking.
+  const project = await db.project.create({
+    data: {
+      name: s.project,
+      client: s.customer,
+      location: "Invented County",
+      status: "Active",
+      tone: "info",
+      customerId: customer.id,
+      crew: s.crews[0].company,
+      mapUrl: `data:text/plain;base64,${Buffer.from(`${s.project} print`).toString("base64")}`,
+      crews: { connect: [{ id: crews[0].subcontractorId }] },
+    },
+  });
+
+  // The job's own priced codes. Without these the project rate-sheet route
+  // answers 400 "no rates", which a cross-tenant test would read as a refusal.
+  await db.projectRate.createMany({
+    data: [
+      { projectId: project.id, code: "BFOV12", description: "Plow 12ct", unit: "ft", rate: s.customerRate },
+      { projectId: project.id, code: "BHF3048", description: "Handhole 30x48", unit: "ea", rate: 396 },
+    ],
+  });
+
+  const invoice = await db.invoice.create({
+    data: { number: s.invoiceNumber, customerId: customer.id, projectId: project.id, status: "SENT" },
+  });
+
+  const daily = await db.daily.create({
+    data: {
+      sheetNumber: `${s.shortCode}-0001`,
+      projectId: project.id,
+      projectName: s.project,
+      customer: s.customer,
+      subcontractor: s.crews[0].company,
+      crew: s.crews[0].company,
+      workDate: "2026-09-01",
+      status: "Approved",
+      totalFt: 1450,
+    },
+  });
+
+  // The billing sheet is its own model, and /api/daily-sheet takes its id —
+  // not the Daily's. Passing the wrong id gets a 404 that looks like a refusal.
+  const sheet = await db.dailySheet.create({
+    data: {
+      projectId: project.id,
+      projectName: s.project,
+      filedForId: crews[0].subcontractorId,
+      workDate: "2026-09-01",
+      status: "Approved",
+    },
+  });
+
+  const task = await db.task.create({
+    data: {
+      title: `${s.project}: pedestal not set`,
+      projectId: project.id,
+      assigneeSubId: crews[0].subcontractorId,
+    },
+  });
+
+  const ticket = await db.locateTicket.create({
+    data: { number: `${s.shortCode}-811-0001`, projectId: project.id, crewId: crews[0].subcontractorId },
+  });
+
+  return {
+    key: s.key,
+    orgId: org.id,
+    orgName: s.org,
+    staffUserId: staff.id,
+    customerId: customer.id,
+    customerName: s.customer,
+    projectId: project.id,
+    projectName: s.project,
+    invoiceId: invoice.id,
+    invoiceNumber: s.invoiceNumber,
+    dailyId: daily.id,
+    dailySheetId: sheet.id,
+    taskId: task.id,
+    locateTicketId: ticket.id,
+    customerRate: s.customerRate,
+    crews: [crews[0], crews[1]],
+  };
+}
+
+export async function seedTwoTenants(db: PrismaClient): Promise<Fixtures> {
+  const a = await buildTenant(db, SPECS[0]);
+  const b = await buildTenant(db, SPECS[1]);
+  return { a, b };
+}

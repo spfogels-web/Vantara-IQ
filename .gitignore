@@ -48,3 +48,4 @@ next-env.d.ts
 
 # Scratch scripts used while debugging — never part of the app.
 _*.mjs
+tests/.fixtures.json

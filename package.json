@@ -13,7 +13,9 @@
     "postinstall": "prisma generate",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
-    "check:blob": "node scripts/check-blob.mjs"
+    "check:blob": "node scripts/check-blob.mjs",
+    "test": "vitest run",
+    "test:isolation": "vitest run tests/isolation"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -54,7 +56,8 @@
     "eslint": "^9",
     "eslint-config-next": "15.5.22",
     "tailwindcss": "^4",
-    "tsx": "^4.23.5",
-    "typescript": "^5"
+    "tsx": "^4.23.13",
+    "typescript": "^5",
+    "vitest": "^3.2.7"
   }
 }
