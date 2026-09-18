@@ -57,8 +57,8 @@ export async function acceptSubUserInvite(input: {
 
   let userId: string;
   try {
-    const [user] = await prisma.$transaction([
-      prisma.user.create({
+    const user = await prisma.$transaction(async (tx) => {
+      const created = await tx.user.create({
         data: {
           email: invite.email,
           name,
@@ -68,14 +68,15 @@ export async function acceptSubUserInvite(input: {
           subUserRole: invite.subUserRole,
         },
         select: { id: true, role: true },
-      }),
+      });
       // Burned in the same transaction as the account it creates. A second
       // person opening a forwarded copy of the link finds it spent.
-      prisma.subUserInvite.update({
+      await tx.subUserInvite.update({
         where: { token: invite.token, used: false },
         data: { used: true },
-      }),
-    ]);
+      });
+      return created;
+    });
     userId = user.id;
   } catch {
     return { ok: false as const, error: "That invitation has already been used." };

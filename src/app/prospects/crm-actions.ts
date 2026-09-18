@@ -337,16 +337,16 @@ export async function setAvailability(input: {
   note?: string;
 }) {
   const me = await requireStaff();
-  await prisma.$transaction([
-    prisma.prospect.update({
+  await prisma.$transaction(async (tx) => {
+    await tx.prospect.update({
       where: { id: input.id },
       data: {
         availability: input.status as never,
         availableCrews: Math.max(0, Math.round(input.crews ?? 0)),
         earliestStart: input.fromDate ?? "",
       },
-    }),
-    prisma.prospectAvailabilityEntry.create({
+    });
+    await tx.prospectAvailabilityEntry.create({
       data: {
         prospectId: input.id,
         status: input.status as never,
@@ -355,8 +355,8 @@ export async function setAvailability(input: {
         note: input.note ?? "",
         recordedBy: actor(me),
       },
-    }),
-  ]);
+    });
+  });
   await log(
     input.id,
     "note",

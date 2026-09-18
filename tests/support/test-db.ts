@@ -13,11 +13,48 @@
  */
 import { execFileSync } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { PrismaClient } from "@prisma/client";
 
-/** The schema this run owns. One per run, so two runs cannot collide. */
-export const TEST_SCHEMA = `vq_test_${randomBytes(4).toString("hex")}`;
+/**
+ * The schema this run owns. One per run, so two runs cannot collide.
+ *
+ * Shared through a file rather than a module constant. Vitest loads the global
+ * setup and each test file as separate module instances, so a constant
+ * generated at import time gives every file a *different* name — and a test
+ * that connects to a schema nobody built sees an empty database and fails for
+ * a reason that has nothing to do with what it is testing. That is exactly
+ * what happened, and it made a genuinely-failing assertion look like it was
+ * failing for the right reason.
+ */
+const SCHEMA_FILE = join(process.cwd(), "tests", ".schema");
+
+function schemaForThisRun(): string {
+  try {
+    const named = readFileSync(SCHEMA_FILE, "utf8").trim();
+    if (named) return named;
+  } catch {
+    /* the global setup has not written it yet — we are the one creating it */
+  }
+  return `vq_test_${randomBytes(4).toString("hex")}`;
+}
+
+export const TEST_SCHEMA = schemaForThisRun();
+
+/** Called once by the global setup, so every test file resolves the same name. */
+export function publishSchemaName(): void {
+  writeFileSync(SCHEMA_FILE, TEST_SCHEMA);
+}
+
+export function clearSchemaName(): void {
+  try {
+    rmSync(SCHEMA_FILE, { force: true });
+  } catch {
+    /* nothing to clean */
+  }
+}
 
 /**
  * The tests use the POOLED endpoint, and that is not interchangeable.

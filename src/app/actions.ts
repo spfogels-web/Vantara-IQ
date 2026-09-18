@@ -260,10 +260,11 @@ export async function deleteSubcontractor(id: string, confirm?: boolean) {
     };
   }
 
-  const [logins] = await prisma.$transaction([
-    prisma.user.deleteMany({ where: { subcontractorId: id } }),
-    prisma.subcontractor.delete({ where: { id } }),
-  ]);
+  const logins = await prisma.$transaction(async (tx) => {
+    const removed = await tx.user.deleteMany({ where: { subcontractorId: id } });
+    await tx.subcontractor.delete({ where: { id } });
+    return removed;
+  });
   revalidatePath("/subcontractors");
   revalidatePath("/projects");
   return { ok: true as const, removedLogins: logins.count };
@@ -331,20 +332,20 @@ export async function setSubcontractorProjects(id: string, projectIds: string[])
    * In one transaction, because a crew with no assignments is a crew locked out
    * of their own jobs, and that state must never be observable.
    */
-  await prisma.$transaction([
-    prisma.projectCrew.deleteMany({
+  await prisma.$transaction(async (tx) => {
+    await tx.projectCrew.deleteMany({
       // Spelled out rather than leaning on what `notIn: []` means, because
       // unassigning a crew from everything is the case where being wrong is
       // worst and the empty list is exactly when it is least obvious.
       where: real.length
         ? { subcontractorId: id, projectId: { notIn: real.map((p) => p.id) } }
         : { subcontractorId: id },
-    }),
-    prisma.projectCrew.createMany({
+    });
+    await tx.projectCrew.createMany({
       data: real.map((p) => ({ subcontractorId: id, projectId: p.id })),
       skipDuplicates: true,
-    }),
-  ]);
+    });
+  });
   revalidatePath("/subcontractors");
   revalidatePath("/projects");
   return { ok: true as const, count: real.length };
@@ -4875,8 +4876,8 @@ export async function recordSubPayment(input: {
     ? statementMoney(inv).net
     : statementMoney(inv).payable;
 
-  await prisma.$transaction([
-    prisma.subPayment.create({
+  await prisma.$transaction(async (tx) => {
+    await tx.subPayment.create({
       data: {
         invoiceId: input.id,
         amount: Math.round(input.amount * 100) / 100,
@@ -4886,9 +4887,9 @@ export async function recordSubPayment(input: {
         note: (input.note ?? "").trim().slice(0, 300),
         recordedBy: me.name ?? "",
       },
-    }),
-    prisma.subInvoice.update({ where: { id: input.id }, data: { status: "PAID" } }),
-  ]);
+    });
+    await tx.subInvoice.update({ where: { id: input.id }, data: { status: "PAID" } });
+  });
 
   revalidatePath("/pay");
   revalidatePath("/pay-applications");
@@ -5517,17 +5518,17 @@ export async function setProspectStage(id: string, stage: keyof typeof STAGE_TO_
   const to = STAGE_TO_DB[stage];
   if (before.stage === to) return { ok: true as const };
 
-  await prisma.$transaction([
-    prisma.prospect.update({ where: { id }, data: { stage: to } }),
-    prisma.prospectActivity.create({
+  await prisma.$transaction(async (tx) => {
+    await tx.prospect.update({ where: { id }, data: { stage: to } });
+    await tx.prospectActivity.create({
       data: {
         prospectId: id,
         kind: "stage",
         body: `Moved to ${stage}`,
         author: me.name || me.email,
       },
-    }),
-  ]);
+    });
+  });
   revalidatePath("/prospects");
   return { ok: true as const };
 }
@@ -5537,16 +5538,16 @@ export async function logProspectActivity(id: string, kind: string, body: string
   const text = body.trim();
   if (!text) return { ok: false as const, error: "Nothing to log." };
 
-  await prisma.$transaction([
-    prisma.prospectActivity.create({
+  await prisma.$transaction(async (tx) => {
+    await tx.prospectActivity.create({
       data: { prospectId: id, kind, body: text, author: me.name || me.email },
-    }),
+    });
     // A logged touch is the only honest source for "when did we last speak".
-    prisma.prospect.update({
+    await tx.prospect.update({
       where: { id },
       data: { lastContact: new Date().toISOString().slice(0, 10) },
-    }),
-  ]);
+    });
+  });
   revalidatePath("/prospects");
   return { ok: true as const };
 }
@@ -5595,20 +5596,20 @@ export async function convertProspectToSubcontractor(id: string) {
     },
   });
 
-  await prisma.$transaction([
-    prisma.prospect.update({
+  await prisma.$transaction(async (tx) => {
+    await tx.prospect.update({
       where: { id },
       data: { stage: "WON", convertedSubcontractorId: sub.id, convertedAt: new Date() },
-    }),
-    prisma.prospectActivity.create({
+    });
+    await tx.prospectActivity.create({
       data: {
         prospectId: id,
         kind: "stage",
         body: "Converted to a subcontractor",
         author: me.name || me.email,
       },
-    }),
-  ]);
+    });
+  });
 
   revalidatePath("/prospects");
   revalidatePath("/subcontractors");
@@ -6025,14 +6026,14 @@ export async function deleteDaily(id: string, confirm?: boolean) {
     };
   }
 
-  await prisma.$transaction([
-    prisma.invoiceLine.deleteMany({ where: { dailyId: id } }),
-    prisma.subInvoiceLine.deleteMany({ where: { dailyId: id } }),
+  await prisma.$transaction(async (tx) => {
+    await tx.invoiceLine.deleteMany({ where: { dailyId: id } });
+    await tx.subInvoiceLine.deleteMany({ where: { dailyId: id } });
     // The sheet is the crew's own record of the day and is kept, released back
     // to a draft so it can be corrected and filed again rather than retyped.
-    prisma.dailySheet.updateMany({ where: { dailyId: id }, data: { dailyId: null, status: "DRAFT" } }),
-    prisma.daily.delete({ where: { id } }),
-  ]);
+    await tx.dailySheet.updateMany({ where: { dailyId: id }, data: { dailyId: null, status: "DRAFT" } });
+    await tx.daily.delete({ where: { id } });
+  });
 
   // Whatever it was on has to be re-totalled, or the invoice keeps the money.
   for (const invoiceId of [...new Set(invLines.map((l) => l.invoiceId))]) {

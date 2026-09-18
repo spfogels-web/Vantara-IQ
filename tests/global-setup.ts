@@ -15,9 +15,11 @@ import { join } from "node:path";
 
 import {
   TEST_SCHEMA,
+  clearSchemaName,
   createTestSchema,
   dropTestSchema,
   testClient,
+  publishSchemaName,
   testDatabaseUrl,
 } from "./support/test-db";
 import { seedTwoTenants } from "./support/fixtures";
@@ -60,6 +62,9 @@ function stopServer() {
 export async function setup() {
   const url = testDatabaseUrl();
 
+  // Publish the name before anything else reads it, so every test file
+  // resolves the same schema rather than inventing its own.
+  publishSchemaName();
   console.log(`\n  test schema: ${TEST_SCHEMA}`);
   console.log("  building the application schema inside it…");
   await createTestSchema();
@@ -95,5 +100,6 @@ export async function teardown() {
     /* nothing to clean */
   }
   await dropTestSchema();
+  clearSchemaName();
   console.log(`\n  dropped ${TEST_SCHEMA}.`);
 }
