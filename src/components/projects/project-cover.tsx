@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { upload as blobUpload } from "@vercel/blob/client";
+import { useBlobUpload } from "@/components/layout/org-provider";
 import { ImagePlus, Loader2, Map as MapIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -33,6 +33,7 @@ export function ProjectCover({
   mapUrl?: string | null;
   className?: string;
 }) {
+  const blobUpload = useBlobUpload();
   const router = useRouter();
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [src, setSrc] = React.useState(photoUrl ?? "");

@@ -70,6 +70,27 @@ const twilio: SmsProvider = {
   },
 
   async send(to: string, body: string): Promise<SmsSendResult> {
+    /**
+     * The organisation switch, repeated here because this is the *second* way
+     * out of the building.
+     *
+     * `sms.ts` guards job alerts; this guards the messaging hub. Both reach
+     * Twilio directly, and a rule applied at one of two exits is not a rule.
+     * A demonstration organisation cannot send from here either, and no
+     * setting makes it able to — see `smsAllowed`.
+     */
+    const { orgSettings } = await import("@/lib/org-settings");
+    const settings = await orgSettings();
+    if (!settings.smsAllowed) {
+      return {
+        ok: false,
+        errorCode: "ORG_SMS_OFF",
+        errorMessage: settings.isDemo
+          ? "This is a demonstration organisation. It never sends messages."
+          : "Texting is switched off for this organisation.",
+      };
+    }
+
     const sid = process.env.TWILIO_ACCOUNT_SID!;
     const token = process.env.TWILIO_AUTH_TOKEN!;
     const service = process.env.TWILIO_MESSAGING_SERVICE_SID?.trim();

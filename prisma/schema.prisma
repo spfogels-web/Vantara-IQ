@@ -106,7 +106,114 @@ model User {
   loginCount  Int       @default(0)
   lastLoginAt DateTime?
 
+  /// Whether this person operates the platform, as distinct from running a
+  /// company on it.
+  ///
+  /// The two are not the same and must not be inferred from one another: the
+  /// owner of a contractor is an ADMIN of their own business and has no
+  /// business seeing that another organisation exists. Only this flag grants
+  /// moving between organisations, and it is checked server-side every time.
+  ///
+  /// False by default, so a new account — and every existing one — operates
+  /// nothing until somebody says otherwise.
+  isPlatformAdmin Boolean @default(false)
+
   createdAt       DateTime       @default(now())
+}
+
+/// How this organisation does business, and what it is allowed to do.
+///
+/// One row per database, because one database is one organisation. The values
+/// here used to be defaults baked into the schema — Net 30, ten percent
+/// retainage, Net 21, GA811, Georgia — which is to say they were Fortitude's
+/// terms written into the shape of the product. They are configuration now,
+/// set when an organisation is created rather than inherited from whoever
+/// happened to be first.
+///
+/// The two booleans fail closed. An organisation whose settings have not been
+/// written sends no texts and shows no assistant, which is the right way round
+/// for both.
+model OrgSettings {
+  /// One row. The id is fixed so there is nothing to choose between.
+  id String @id @default("singleton")
+
+  /// What this organisation is called on its own paperwork — invoices,
+  /// remittances, badges, the agreement a crew signs.
+  legalName String
+  /// The short form, for screens where the full legal name will not fit.
+  shortName String
+
+  /// A demonstration organisation: real software, invented company.
+  ///
+  /// Nothing about a demo may reach the outside world. This is the hard half
+  /// of that switch — see `smsEnabled`, which cannot override it.
+  isDemo Boolean @default(false)
+
+  /// Whether this organisation may send text messages at all.
+  ///
+  /// Ignored entirely when `isDemo` is set. There is one Twilio account, one
+  /// number and one A2P registration, all belonging to the real business, so a
+  /// text sent "as" a demo organisation would arrive from the real one's
+  /// number under its brand. There is no configuration in which that is
+  /// wanted.
+  smsEnabled Boolean @default(false)
+
+  /// Whether the operations assistant is offered here. A paid capability, off
+  /// until somebody turns it on.
+  assistantEnabled Boolean @default(false)
+
+  /// Terms this organisation bills its customers on, and pays its crews on.
+  customerTerms String
+  subTerms      String
+  /// Held back from a crew's statement, as a fraction: 0.1 is ten percent.
+  retainagePct  Float
+  /// The one-call centre that serves this organisation's ground.
+  locateProvider String
+  /// Where it works, for the fields that need a state before anyone picks one.
+  defaultState   String
+
+  updatedAt DateTime @updatedAt
+}
+
+/// A market is a place plus the prime the work is billed through.
+///
+/// Was three entries in a TypeScript constant naming the primes one company
+/// bills through, which is that company's commercial relationships written
+/// into the product. A second contractor's projects would have rendered them.
+model Market {
+  /// Stable, human-readable, and referenced by `Project.market`.
+  id        String   @id
+  label     String
+  /// Who the work is billed through.
+  prime     String
+  /// For the filter chip, so a market reads without opening it.
+  hint      String
+  state     String
+  /// Towns and customer names that *suggest* this market for a project that
+  /// has none. Never used to override one a person set.
+  towns     String[]
+  customers String[]
+  sortOrder Int      @default(0)
+}
+
+/// This organisation's unit-code vocabulary.
+///
+/// The code lists were one contractor's underground vocabulary — which codes
+/// matter, and which belong together on a rate card. A contractor running
+/// aerial, splicing and storm work has a different answer to both, and the
+/// pickers and the rate-family grouping were shaped around the first one.
+model OrgCodeProfile {
+  id String @id @default("singleton")
+
+  /// The codes this organisation bills most, in the order the pickers offer
+  /// them.
+  priorityCodes String[]
+  /// Code families, as `{ familyName: [code, …] }`. Codes in one family are
+  /// priced together, so a rate card that sets one and not its siblings is
+  /// incomplete rather than wrong.
+  families Json
+
+  updatedAt DateTime @updatedAt
 }
 
 model Customer {

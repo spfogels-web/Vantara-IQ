@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { upload as blobUpload } from "@vercel/blob/client";
+import { useBlobUpload } from "@/components/layout/org-provider";
 import {
   ArrowLeft,
   Building2,
@@ -354,6 +354,7 @@ function Thread({
   meId: string;
   onBack: () => void;
 }) {
+  const blobUpload = useBlobUpload();
   const router = useRouter();
   const [body, setBody] = React.useState("");
   // Texting is the default, not an extra step.

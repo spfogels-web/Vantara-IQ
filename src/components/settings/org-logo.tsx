@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { upload as blobUpload } from "@vercel/blob/client";
+import { useBlobUpload } from "@/components/layout/org-provider";
 import { Camera, Loader2 } from "lucide-react";
 
 import { initials } from "@/lib/format";
@@ -25,6 +25,7 @@ export function OrgLogo({
   initialUrl?: string | null;
   size?: number;
 }) {
+  const blobUpload = useBlobUpload();
   const router = useRouter();
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [src, setSrc] = React.useState(initialUrl ?? "");

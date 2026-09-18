@@ -1,6 +1,7 @@
 import "server-only";
 
-import Anthropic from "@anthropic-ai/sdk";
+import type Anthropic from "@anthropic-ai/sdk";
+import { aiClient } from "@/lib/ai-client";
 
 import { prisma } from "@/lib/prisma";
 import { billingWeekFor, weekOf, addDays } from "@/lib/billing";
@@ -331,7 +332,7 @@ export async function askOps(history: OpsMessage[]): Promise<OpsAnswer> {
     throw new Error("ANTHROPIC_API_KEY is not set, so the assistant is unavailable.");
   }
 
-  const client = new Anthropic();
+  const client = await aiClient();
   const messages: Anthropic.MessageParam[] = history.map((m) => ({
     role: m.role,
     content: m.content,

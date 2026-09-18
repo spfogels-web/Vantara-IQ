@@ -14,7 +14,7 @@ import {
   X,
 } from "lucide-react";
 
-import { upload as blobUpload } from "@vercel/blob/client";
+import { useBlobUpload } from "@/components/layout/org-provider";
 
 import { cn } from "@/lib/utils";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
@@ -695,6 +695,7 @@ function PhotoPicker({
   photos: string[];
   onChange: (next: string[]) => void;
 }) {
+  const blobUpload = useBlobUpload();
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState<string | null>(null);
 

@@ -1,6 +1,7 @@
 import "server-only";
 
-import Anthropic from "@anthropic-ai/sdk";
+import type Anthropic from "@anthropic-ai/sdk";
+import { aiClient } from "@/lib/ai-client";
 
 /**
  * Read an engineering print and count what is on it.
@@ -207,7 +208,7 @@ export async function readProjectMap(
     throw new Error("ANTHROPIC_API_KEY is not set, so prints cannot be read.");
   }
 
-  const client = new Anthropic();
+  const client = await aiClient();
   const message = await client.messages.create({
     model: "claude-opus-5",
     max_tokens: 8000,

@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { upload as blobUpload } from "@vercel/blob/client";
+import { useBlobUpload } from "@/components/layout/org-provider";
 import {
   Download,
   ImagePlus,
@@ -27,6 +27,7 @@ export function isPdfUrl(u: string) {
 }
 
 export function ProjectHeaderActions({ projectId, photoUrl }: { projectId: string; photoUrl?: string | null }) {
+  const blobUpload = useBlobUpload();
   const router = useRouter();
   const [deleting, setDeleting] = React.useState(false);
   const [photoBusy, setPhotoBusy] = React.useState(false);
@@ -123,6 +124,7 @@ export function ProjectMapPanel({
   /** Fortitude staff. A crew reads this map; it never redraws it. */
   canEdit: boolean;
 }) {
+  const blobUpload = useBlobUpload();
   const router = useRouter();
   const [mapUrl, setMapUrl] = React.useState<string | null | undefined>(initialMapUrl);
   const [busy, setBusy] = React.useState(false);

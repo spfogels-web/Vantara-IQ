@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { upload as blobUpload } from "@vercel/blob/client";
+import { useBlobUpload } from "@/components/layout/org-provider";
 import { AlertTriangle, CheckCircle2, FileUp, Loader2, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -59,6 +59,7 @@ export function DocumentUpload({
   projects: { id: string; name: string; number: string }[];
   subcontractors: { id: string; company: string }[];
 }) {
+  const blobUpload = useBlobUpload();
   const router = useRouter();
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [rows, setRows] = React.useState<Row[]>([]);

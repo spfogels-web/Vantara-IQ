@@ -10,8 +10,10 @@ import { prisma } from "@/lib/prisma";
 import { isMarketId, marketLabel } from "@/lib/markets";
 import { SMS_CONSENT_TEXT, WELCOME_MESSAGE } from "@/lib/sms-consent";
 import { textCrew, textUser, toE164 } from "@/lib/sms";
-import { hashPassword, isStaff, setSessionCookie, signSession } from "@/lib/auth";
+import { hashPassword, isStaff, setSessionCookie, signSession, type SessionRole } from "@/lib/auth";
 import { resolveOrg } from "@/lib/org-context";
+import { orgSettings } from "@/lib/org-settings";
+import { aiAvailable } from "@/lib/ai-client";
 import {
   extractDocument,
   isConfigured,
@@ -6349,15 +6351,27 @@ export async function clearComplianceWaiver(subcontractorId: string, label: stri
  * owner's address is the check, overridable by env so it can move without a
  * deploy.
  */
-function opsAssistantOwner(): string {
-  return (process.env.OPS_ASSISTANT_OWNER ?? "sean.fogelson@fortitude-infra.com")
-    .trim()
-    .toLowerCase();
+/**
+ * Who may ask the operations assistant.
+ *
+ * Two conditions, and both have to hold. The organisation must be entitled to
+ * the assistant at all — it is a paid capability, off until somebody turns it
+ * on, and off permanently for a demonstration organisation, which makes no
+ * outbound model requests of any kind. And the person asking must be staff,
+ * because the assistant reads across the whole business at once.
+ *
+ * This used to compare the viewer's email to a single global environment
+ * variable naming one person at one company. Signed in as anybody else — which
+ * includes every other organisation — the panel silently did not render.
+ */
+async function assistantAllowedFor(me: { email: string; role: string } | null): Promise<boolean> {
+  if (!me) return false;
+  if (!isStaff(me.role as SessionRole)) return false;
+  return (await orgSettings()).assistantEnabled && (await aiAvailable());
 }
 
 export async function canUseOpsAssistant(): Promise<boolean> {
-  const me = await viewer();
-  return Boolean(me && me.email.trim().toLowerCase() === opsAssistantOwner());
+  return assistantAllowedFor(await viewer());
 }
 
 /**
@@ -6370,7 +6384,7 @@ export async function canUseOpsAssistant(): Promise<boolean> {
  */
 export async function askOperations(history: { role: "user" | "assistant"; content: string }[]) {
   const me = await requireUser();
-  if (me.email.trim().toLowerCase() !== opsAssistantOwner()) {
+  if (!(await assistantAllowedFor(me))) {
     return { ok: false as const, error: "The operations assistant isn't available on this account." };
   }
   if (!opsChatReady()) {

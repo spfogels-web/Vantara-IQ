@@ -23,7 +23,7 @@ import {
   ZoomOut,
 } from "lucide-react";
 
-import { upload as blobUpload } from "@vercel/blob/client";
+import { useBlobUpload } from "@/components/layout/org-provider";
 
 import { saveProjectMarkups } from "@/app/actions";
 
@@ -452,6 +452,7 @@ export function MapMarkupEditor({
   onSave?: (shapes: Shape[]) => void | Promise<void>;
   title?: string;
 }) {
+  const blobUpload = useBlobUpload();
   const { pages, loading, loadError } = useMapPages(mapUrl, isPdf);
 
   const [tool, setTool] = React.useState<Tool>("line");

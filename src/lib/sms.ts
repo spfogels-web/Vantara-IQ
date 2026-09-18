@@ -2,6 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/prisma";
 import { alertsLive } from "@/lib/alerts-switch";
+import { orgSettings } from "@/lib/org-settings";
 
 /**
  * Text messages to crews.
@@ -118,6 +119,34 @@ async function post(to: string, body: string): Promise<SmsResult> {
   //
   // Deliberately after nothing and before everything. A welcome text is a
   // message too, and "off" that still sends welcomes is not off.
+  /**
+   * The organisation switch, and it is checked before the alerts switch
+   * because it is not the same kind of thing.
+   *
+   * Alerts are a preference the office sets and unsets. This is a property of
+   * the organisation: there is one Twilio account, one number and one A2P
+   * registration, and they belong to the real business. A message sent "as" a
+   * demonstration organisation would arrive on somebody's handset from the
+   * real company's number, under its brand, quoting invented work. No
+   * configuration makes that acceptable, which is why `smsAllowed` already
+   * folds in `isDemo` and cannot be switched back on by a setting.
+   *
+   * Placed here, in the one function every message goes through, rather than
+   * in each caller — a rule enforced in fourteen places is a rule with
+   * fourteen chances to be forgotten.
+   */
+  const settings = await orgSettings();
+  if (!settings.smsAllowed) {
+    return {
+      sent: false,
+      reason: settings.isDemo
+        ? "This is a demonstration organisation. It never sends messages."
+        : settings.configured
+          ? "Texting is switched off for this organisation."
+          : "This organisation has no settings, so texting is off until it does.",
+    };
+  }
+
   if (!(await alertsLive())) {
     return { sent: false, reason: "Job alerts are switched off." };
   }

@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { upload as blobUpload } from "@vercel/blob/client";
+import { useBlobUpload } from "@/components/layout/org-provider";
 import {
   AlertTriangle,
   ArrowDownToLine,
@@ -65,6 +65,7 @@ export function ProjectMaterials({
   imports: ProjectMaterialImport[];
   tracked: TrackedMaterial[];
 }) {
+  const blobUpload = useBlobUpload();
   const router = useRouter();
   const fileRef = React.useRef<HTMLInputElement>(null);
   const cameraRef = React.useRef<HTMLInputElement>(null);

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { upload as blobUpload } from "@vercel/blob/client";
+import { useBlobUpload } from "@/components/layout/org-provider";
 import {
   Camera,
   Compass,
@@ -74,6 +74,7 @@ export function ProjectPhotos({
   photos: ProjectPhotoRow[];
   canDelete: boolean;
 }) {
+  const blobUpload = useBlobUpload();
   const router = useRouter();
   const cameraRef = React.useRef<HTMLInputElement>(null);
   const fileRef = React.useRef<HTMLInputElement>(null);

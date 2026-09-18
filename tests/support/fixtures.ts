@@ -293,3 +293,52 @@ export const PLATFORM_ADMIN_EMAIL = SPECS[0].staffEmail;
 
 /** A staff account that is deliberately *not* on the allowlist. */
 export const NON_ADMIN_EMAIL = SPECS[1].staffEmail;
+
+/**
+ * Settings for the ordinary organisation: texting on, assistant on.
+ *
+ * Deliberately permissive, so that a test showing the demonstration
+ * organisation refusing to send proves the demonstration flag did it, and not
+ * that the feature was off everywhere.
+ */
+export async function seedWorkingOrgSettings(db: PrismaClient): Promise<void> {
+  await db.orgSettings.create({
+    data: {
+      legalName: SPECS[0].org,
+      shortName: "Northgate",
+      isDemo: false,
+      smsEnabled: true,
+      assistantEnabled: true,
+      customerTerms: "Net 30",
+      subTerms: "Net 21",
+      retainagePct: 0.1,
+      locateProvider: "GA811",
+      defaultState: "GA",
+    },
+  });
+}
+
+/**
+ * Settings for the demonstration organisation.
+ *
+ * Note what is switched **on** here. Texting and the assistant are both
+ * enabled, which is the strongest available statement of the rule: the demo
+ * flag is not one vote among several, it overrides. A test that set them off
+ * would prove only that off things stay off.
+ */
+export async function seedDemoOrgSettings(db: PrismaClient): Promise<void> {
+  await db.orgSettings.create({
+    data: {
+      legalName: OTHER_SPEC.org,
+      shortName: "Halloway",
+      isDemo: true,
+      smsEnabled: true,
+      assistantEnabled: true,
+      customerTerms: "Net 45",
+      subTerms: "Net 30",
+      retainagePct: 0.05,
+      locateProvider: "Sunshine811",
+      defaultState: "FL",
+    },
+  });
+}

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { upload as blobUpload } from "@vercel/blob/client";
+import { useBlobUpload } from "@/components/layout/org-provider";
 import {
   Camera,
   Check,
@@ -710,6 +710,7 @@ function TaskPhotos({
   detail: Detail;
   onChanged: () => void;
 }) {
+  const blobUpload = useBlobUpload();
   const [busy, setBusy] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [viewing, setViewing] = React.useState<number | null>(null);

@@ -1,6 +1,7 @@
 import "server-only";
 
-import Anthropic from "@anthropic-ai/sdk";
+import type Anthropic from "@anthropic-ai/sdk";
+import { aiClient } from "@/lib/ai-client";
 
 /**
  * AI extraction of rate/unit/material/rate-card documents into structured rows.
@@ -102,7 +103,7 @@ async function extractOnce(input: {
     throw new Error("ANTHROPIC_API_KEY is not set");
   }
 
-  const client = new Anthropic();
+  const client = await aiClient();
 
   const instruction =
     `You are extracting data from ${DOC_GUIDANCE[input.docType]}\n\n` +

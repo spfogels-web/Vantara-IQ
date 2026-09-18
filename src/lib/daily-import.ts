@@ -1,6 +1,7 @@
 import "server-only";
 
-import Anthropic from "@anthropic-ai/sdk";
+import type Anthropic from "@anthropic-ai/sdk";
+import { aiClient } from "@/lib/ai-client";
 
 import { MAIN_BILLABLE_CODES } from "@/lib/unit-codes";
 
@@ -202,7 +203,7 @@ export async function extractDailySheet(
     throw new Error("ANTHROPIC_API_KEY is not set, so daily sheets cannot be read.");
   }
 
-  const client = new Anthropic();
+  const client = await aiClient();
   const message = await client.messages.create({
     model: "claude-opus-5",
     max_tokens: 8000,

@@ -23,7 +23,13 @@ import {
   publishSchemaName,
   testDatabaseUrl,
 } from "./support/test-db";
-import { PLATFORM_ADMIN_EMAIL, seedOtherDatabase, seedTwoTenants } from "./support/fixtures";
+import {
+  PLATFORM_ADMIN_EMAIL,
+  seedDemoOrgSettings,
+  seedOtherDatabase,
+  seedTwoTenants,
+  seedWorkingOrgSettings,
+} from "./support/fixtures";
 
 const PORT = 3111;
 export const BASE_URL = `http://localhost:${PORT}`;
@@ -76,6 +82,7 @@ export async function setup() {
   const db = testClient();
   try {
     const fixtures = await seedTwoTenants(db);
+    await seedWorkingOrgSettings(db);
     writeFileSync(FIXTURE_FILE, JSON.stringify(fixtures, null, 2));
   } finally {
     await db.$disconnect();
@@ -88,6 +95,7 @@ export async function setup() {
   const other = testClient(TEST_SCHEMA_B);
   try {
     const tenant = await seedOtherDatabase(other);
+    await seedDemoOrgSettings(other);
     writeFileSync(OTHER_FIXTURE_FILE, JSON.stringify(tenant, null, 2));
   } finally {
     await other.$disconnect();

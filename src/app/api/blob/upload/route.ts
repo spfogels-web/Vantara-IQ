@@ -3,6 +3,8 @@ import { NextResponse } from "next/server";
 
 import { getCurrentUser, getSession, isStaff } from "@/lib/auth";
 import { assertOwnSubcontractor, assertProjectAccess } from "@/lib/authz";
+import { resolveOrg } from "@/lib/org-context";
+import { splitOrgBlobPath } from "@/lib/blob-paths";
 
 export const runtime = "nodejs";
 
@@ -91,10 +93,29 @@ async function authorizePath(pathname: string): Promise<void> {
     throw new UploadDenied("That upload path isn't allowed.");
   }
 
-  const scope = SCOPES.find((s) => pathname.startsWith(s.prefix));
+  /**
+   * The organisation's own folder, and it must be *this* request's
+   * organisation.
+   *
+   * One store serves every organisation and record ids are only unique within
+   * a database, so without this two contractors can collide on a path that
+   * looks perfectly specific. Taking the id from the request rather than from
+   * the path is what makes it a check: the browser proposes, this decides.
+   */
+  const org = await resolveOrg();
+  const owner = splitOrgBlobPath(pathname);
+  if (!owner) {
+    throw new UploadDenied("That upload path isn't allowed.");
+  }
+  if (owner.orgId !== org) {
+    throw new UploadDenied("That upload path belongs to a different organisation.");
+  }
+
+  const withinOrg = owner.rest;
+  const scope = SCOPES.find((s) => withinOrg.startsWith(s.prefix));
   if (!scope) throw new UploadDenied("That upload path isn't allowed.");
 
-  const rest = pathname.slice(scope.prefix.length);
+  const rest = withinOrg.slice(scope.prefix.length);
   const firstSegment = rest.split("/")[0] ?? "";
 
   if (scope.kind === "project") {
@@ -169,6 +190,24 @@ export async function POST(request: Request): Promise<NextResponse> {
             "image/gif",
             "image/heic",
             "application/pdf",
+            /**
+             * Video, which the uploader has always offered and the door has
+             * always refused.
+             *
+             * `project-photos` accepts `image/*,video/*`, branches on the file
+             * type, and stores a `mediaType` and a `kind` of VIDEO — so a
+             * foreman picking a clip of a bore hitting rock got as far as the
+             * upload and then a flat rejection, with the button having told
+             * him it was allowed.
+             *
+             * These four cover what a phone actually produces: iPhone writes
+             * quicktime, Android writes mp4, and the two webm variants are
+             * what a browser recording produces.
+             */
+            "video/mp4",
+            "video/quicktime",
+            "video/webm",
+            "video/x-matroska",
           ],
           maximumSizeInBytes: 500 * 1024 * 1024, // 500 MB — plenty for large map PDFs
           addRandomSuffix: true,

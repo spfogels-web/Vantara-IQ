@@ -10,6 +10,8 @@ import { alertsState } from "@/lib/alerts-switch";
 import { getNavBadges, getOrganizationLogo , getNotifications } from "@/data/queries";
 import { getLocale } from "@/lib/i18n-server";
 import { organisationChoices, switchOrganisation } from "@/app/org-actions";
+import { OrgProvider } from "@/components/layout/org-provider";
+import { getSession } from "@/lib/auth";
 import { LanguageProvider } from "@/components/layout/language-provider";
 
 export const metadata: Metadata = {
@@ -48,7 +50,11 @@ export default async function RootLayout({
    * is both correct and less work: a logged-out visitor was never going to be
    * shown a nav badge or a notification.
    */
-  const [user, locale] = await Promise.all([getCurrentUser(), getLocale()]);
+  const [user, locale, session] = await Promise.all([
+    getCurrentUser(),
+    getLocale(),
+    getSession(),
+  ]);
 
   const [logoUrl, badges, notifications] = user
     ? await Promise.all([getOrganizationLogo(), getNavBadges(), getNotifications()])
@@ -93,6 +99,7 @@ export default async function RootLayout({
       </head>
       <body className="min-h-svh bg-background font-sans antialiased">
         <LanguageProvider locale={locale}>
+          <OrgProvider orgId={session?.org ?? null}>
           <AppShell
             user={user}
             logoUrl={logoUrl}
@@ -105,6 +112,7 @@ export default async function RootLayout({
           >
             {children}
           </AppShell>
+          </OrgProvider>
         </LanguageProvider>
       </body>
     </html>

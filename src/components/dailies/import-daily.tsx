@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { upload as blobUpload } from "@vercel/blob/client";
+import { useBlobUpload } from "@/components/layout/org-provider";
 import {
   AlertTriangle,
   Check,
@@ -54,6 +54,7 @@ export function ImportDaily({
    */
   startOpen?: boolean;
 }) {
+  const blobUpload = useBlobUpload();
   const router = useRouter();
   const t = useT();
   const [open, setOpen] = React.useState(startOpen);

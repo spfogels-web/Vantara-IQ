@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { upload as blobUpload } from "@vercel/blob/client";
+import { useBlobUpload } from "@/components/layout/org-provider";
 import { Camera, ImagePlus, Loader2, Trash2, FileText } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -97,6 +97,7 @@ export function SheetPhotos({
    */
   accept?: string;
 }) {
+  const blobUpload = useBlobUpload();
   // Whether this uploader takes a document as well as a photograph. Read off
   // the accept list rather than passed separately, so the button offered and
   // the file types allowed cannot drift apart.
