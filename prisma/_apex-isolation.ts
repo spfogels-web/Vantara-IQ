@@ -20,6 +20,7 @@ import { PrismaClient } from "@prisma/client";
 
 const FORT_URL = process.env.DATABASE_URL;
 const APEX_URL = process.env.APEX_DATABASE_URL;
+const APEX_DIRECT = process.env.APEX_DATABASE_URL_UNPOOLED;
 
 let pass = 0;
 let fail = 0;
@@ -36,22 +37,66 @@ function identity(url: string) {
 }
 
 async function main() {
-  if (!FORT_URL) throw new Error("DATABASE_URL is not set.");
-  if (!APEX_URL) {
+  /**
+   * Refuse loudly, and check both strings.
+   *
+   * A gate that cannot run must not be mistakable for a gate that passed —
+   * not by a person skimming, and not by a shell script reading the exit code.
+   * Both are checked here because step 2 needs the direct string for schema
+   * push, and finding that out two steps later is a worse place to find it.
+   */
+  const missing: string[] = [];
+  if (!FORT_URL) missing.push("DATABASE_URL (Fortitude)");
+  if (!APEX_URL) missing.push("APEX_DATABASE_URL (Apex, pooled)");
+  if (!APEX_DIRECT) missing.push("APEX_DATABASE_URL_UNPOOLED (Apex, direct)");
+
+  if (missing.length) {
+    console.error("\n" + "=".repeat(64));
+    console.error("  STEP 1 GATE: FAILED — cannot run");
+    console.error("=".repeat(64));
+    console.error("\n  Missing environment variables:");
+    for (const m of missing) console.error(`    · ${m}`);
     console.error(
-      "\nAPEX_DATABASE_URL is not set.\n\n" +
-        "Step 1 needs an empty Neon project for Apex. I cannot provision one:\n" +
-        "there is no Neon API key here, and `vercel integration add` would install\n" +
-        "into the Vercel project that serves Fortitude production.\n\n" +
-        "Create it in the Neon console as a SEPARATE PROJECT, then put its pooled\n" +
-        "connection string in .env.local as APEX_DATABASE_URL and re-run this.\n",
+      "\n  Apex needs its own Neon project. Add both of its connection strings\n" +
+        "  to .env, beside Fortitude's pair:\n\n" +
+        '    APEX_DATABASE_URL="…-pooler.…"      the pooled endpoint\n' +
+        '    APEX_DATABASE_URL_UNPOOLED="…"      the direct endpoint\n\n' +
+        "  Nothing was connected to and nothing was changed.\n",
     );
     process.exitCode = 1;
     return;
   }
 
-  const fortId = identity(FORT_URL);
-  const apexId = identity(APEX_URL);
+  /**
+   * Catch the classic swap before connecting. Pooled and direct differ only by
+   * `-pooler` in the host, they are trivially transposed, and the consequences
+   * show up much later as a schema pushed to the wrong endpoint.
+   */
+  const swapped =
+    !new URL(APEX_URL!).host.includes("-pooler") || new URL(APEX_DIRECT!).host.includes("-pooler");
+  if (swapped) {
+    console.error("\n" + "=".repeat(64));
+    console.error("  STEP 1 GATE: FAILED — the two Apex strings look transposed");
+    console.error("=".repeat(64));
+    console.error(
+      `\n  APEX_DATABASE_URL should contain "-pooler" and does ${
+        new URL(APEX_URL!).host.includes("-pooler") ? "" : "NOT"
+      }.\n` +
+        `  APEX_DATABASE_URL_UNPOOLED should not, and does ${
+          new URL(APEX_DIRECT!).host.includes("-pooler") ? "" : "not"
+        }.\n\n  Swap them in .env and re-run. Nothing was connected to.\n`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+
+  // Narrowed by the guard above; the array-push form does not tell the
+  // compiler that, so it is stated once here rather than at every use.
+  const fortUrl: string = FORT_URL!;
+  const apexUrl: string = APEX_URL!;
+
+  const fortId = identity(fortUrl);
+  const apexId = identity(apexUrl);
 
   console.log("Phase One · Step 1 — isolation proof\n");
   console.log(`  Fortitude  host ${fortId.host}  db ${fortId.database}  role ${fortId.user}`);
@@ -62,8 +107,8 @@ async function main() {
   console.log("=== They are genuinely different databases ===");
   check(
     "connection strings are not the same",
-    FORT_URL !== APEX_URL,
-    FORT_URL === APEX_URL ? "IDENTICAL — stop immediately" : "",
+    fortUrl !== apexUrl,
+    fortUrl === apexUrl ? "IDENTICAL — stop immediately" : "",
   );
   check(
     "not the same host and database",
@@ -81,8 +126,8 @@ async function main() {
   );
   check("credentials differ", fortId.user !== apexId.user || fortId.host !== apexId.host);
 
-  const fort = new PrismaClient({ datasources: { db: { url: FORT_URL } } });
-  const apex = new PrismaClient({ datasources: { db: { url: APEX_URL } } });
+  const fort = new PrismaClient({ datasources: { db: { url: fortUrl } } });
+  const apex = new PrismaClient({ datasources: { db: { url: apexUrl } } });
 
   try {
     const fortDb = await fort.$queryRawUnsafe<{ d: string }[]>(`SELECT current_database() AS d`);
