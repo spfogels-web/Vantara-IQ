@@ -1,7 +1,6 @@
 import "server-only";
 
 import { AsyncLocalStorage } from "node:async_hooks";
-import { headers } from "next/headers";
 
 import { INCUMBENT_ORG, isKnownOrg, type OrgId } from "@/lib/org-registry";
 
@@ -62,6 +61,10 @@ export async function resolveOrg(): Promise<OrgId> {
   if (explicit) return explicit;
 
   try {
+    // Imported here rather than at the top of the file so that everything with
+    // no request behind it — the cron sweep, seed scripts, the test suite —
+    // can import this module without dragging Next's request machinery in.
+    const { headers } = await import("next/headers");
     const h = await headers();
     const named = h.get(ORG_HEADER);
     if (named) {

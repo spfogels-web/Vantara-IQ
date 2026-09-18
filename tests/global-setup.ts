@@ -15,6 +15,7 @@ import { join } from "node:path";
 
 import {
   TEST_SCHEMA,
+  TEST_SCHEMA_B,
   clearSchemaName,
   createTestSchema,
   dropTestSchema,
@@ -27,6 +28,10 @@ import { seedTwoTenants } from "./support/fixtures";
 const PORT = 3111;
 export const BASE_URL = `http://localhost:${PORT}`;
 const FIXTURE_FILE = join(process.cwd(), "tests", ".fixtures.json");
+
+/** The only row in the second organisation's database. See `SECOND_ORG_NAME`. */
+export { SECOND_ORG_NAME } from "./support/second-org";
+import { SECOND_ORG_NAME } from "./support/second-org";
 
 let server: ChildProcess | null = null;
 
@@ -78,6 +83,18 @@ export async function setup() {
     await db.$disconnect();
   }
 
+  // A second organisation's database, for the proxy's routing tests. Only an
+  // organisation row is seeded: the assertion is which connection answered,
+  // and one row nobody else can see says that unambiguously.
+  console.log(`  second organisation's schema: ${TEST_SCHEMA_B}`);
+  await createTestSchema(TEST_SCHEMA_B);
+  const other = testClient(TEST_SCHEMA_B);
+  try {
+    await other.organization.create({ data: { name: SECOND_ORG_NAME } });
+  } finally {
+    await other.$disconnect();
+  }
+
   console.log(`  starting the server on ${PORT}…`);
   server = spawn(
     process.execPath,
@@ -100,6 +117,7 @@ export async function teardown() {
     /* nothing to clean */
   }
   await dropTestSchema();
+  await dropTestSchema(TEST_SCHEMA_B);
   clearSchemaName();
-  console.log(`\n  dropped ${TEST_SCHEMA}.`);
+  console.log(`\n  dropped ${TEST_SCHEMA} and ${TEST_SCHEMA_B}.`);
 }

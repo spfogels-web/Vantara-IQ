@@ -24,10 +24,16 @@ for (const file of [".env.local", ".env"]) {
 
 export default defineConfig({
   resolve: {
-    // Anchored to "@/" rather than "@", or "@prisma/client" would resolve into
-    // src/ and nothing would import Prisma again. Test-only: the application
-    // build resolves this through tsconfig already.
-    alias: [{ find: /^@\//, replacement: resolve(process.cwd(), "src") + "/" }],
+    alias: [
+      // Anchored to "@/" rather than "@", or "@prisma/client" would resolve
+      // into src/ and nothing would import Prisma again.
+      { find: /^@\//, replacement: resolve(process.cwd(), "src") + "/" },
+      // See tests/support/server-only-stub.ts.
+      {
+        find: /^server-only$/,
+        replacement: resolve(process.cwd(), "tests/support/server-only-stub.ts"),
+      },
+    ],
   },
   test: {
     include: ["tests/**/*.test.ts"],

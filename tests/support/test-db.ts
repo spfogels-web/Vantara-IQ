@@ -30,29 +30,52 @@ import { PrismaClient } from "@prisma/client";
  * failing for the right reason.
  */
 const SCHEMA_FILE = join(process.cwd(), "tests", ".schema");
+const SCHEMA_FILE_B = join(process.cwd(), "tests", ".schema-b");
 
-function schemaForThisRun(): string {
+function schemaForThisRun(file: string, prefix: string): string {
   try {
-    const named = readFileSync(SCHEMA_FILE, "utf8").trim();
+    const named = readFileSync(file, "utf8").trim();
     if (named) return named;
   } catch {
     /* the global setup has not written it yet — we are the one creating it */
   }
-  return `vq_test_${randomBytes(4).toString("hex")}`;
+  return `${prefix}${randomBytes(4).toString("hex")}`;
 }
 
-export const TEST_SCHEMA = schemaForThisRun();
+export const TEST_SCHEMA = schemaForThisRun(SCHEMA_FILE, "vq_test_");
 
-/** Called once by the global setup, so every test file resolves the same name. */
+/**
+ * A second, wholly separate copy of the application schema.
+ *
+ * The organisation proxy routes between two *databases* in production. There is
+ * only one database reachable from here, so the proxy's routing is proved
+ * between two schemas instead: the registry is pointed at both, and a row
+ * written under one organisation has to be invisible under the other. That
+ * tests the thing step 2 actually introduces — which connection a call lands
+ * on — without needing Apex to have a schema, which this phase forbids.
+ *
+ * Step 1's gate already proved the two real Neon projects cannot see each
+ * other. This proves the code picks the right one. Neither proof covers the
+ * other, so both exist.
+ *
+ * Named with the same `vq_test_` prefix so the production guard applies to it
+ * unchanged.
+ */
+export const TEST_SCHEMA_B = schemaForThisRun(SCHEMA_FILE_B, "vq_test_b_");
+
+/** Called once by the global setup, so every test file resolves the same names. */
 export function publishSchemaName(): void {
   writeFileSync(SCHEMA_FILE, TEST_SCHEMA);
+  writeFileSync(SCHEMA_FILE_B, TEST_SCHEMA_B);
 }
 
 export function clearSchemaName(): void {
-  try {
-    rmSync(SCHEMA_FILE, { force: true });
-  } catch {
-    /* nothing to clean */
+  for (const f of [SCHEMA_FILE, SCHEMA_FILE_B]) {
+    try {
+      rmSync(f, { force: true });
+    } catch {
+      /* nothing to clean */
+    }
   }
 }
 
@@ -87,14 +110,14 @@ function baseUrl(): string {
  * a table that certainly exists on the live database — is not reachable by an
  * unqualified name.
  */
-export async function assertIsolated(): Promise<void> {
-  const db = new PrismaClient({ datasources: { db: { url: testDatabaseUrl() } } });
+export async function assertIsolated(schema = TEST_SCHEMA): Promise<void> {
+  const db = new PrismaClient({ datasources: { db: { url: testDatabaseUrl(schema) } } });
   try {
     const rows = await db.$queryRawUnsafe<{ s: string[] }[]>(`SELECT current_schemas(false) AS s`);
     const path = rows[0].s;
-    if (path.length !== 1 || path[0] !== TEST_SCHEMA) {
+    if (path.length !== 1 || path[0] !== schema) {
       throw new Error(
-        `Refusing to run: schema path resolved to [${path.join(", ")}], not [${TEST_SCHEMA}] alone. ` +
+        `Refusing to run: schema path resolved to [${path.join(", ")}], not [${schema}] alone. ` +
           `The ?schema= parameter is being ignored — check this is the pooled endpoint.`,
       );
     }
@@ -171,21 +194,21 @@ export async function publicTableCount(): Promise<number> {
  * the schema parameter were ever ignored the command would refuse rather than
  * reshape production.
  */
-export async function createTestSchema(): Promise<void> {
-  const url = testDatabaseUrl();
+export async function createTestSchema(schema = TEST_SCHEMA): Promise<void> {
+  const url = testDatabaseUrl(schema);
   assertNotProduction(url);
 
   const before = await publicTableCount();
 
   const owner = ownerClient();
   try {
-    await owner.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS ${TEST_SCHEMA}`);
+    await owner.$executeRawUnsafe(`CREATE SCHEMA IF NOT EXISTS ${schema}`);
   } finally {
     await owner.$disconnect();
   }
 
   // Before anything is written, prove the connection cannot reach production.
-  await assertIsolated();
+  await assertIsolated(schema);
 
   // Run Prisma's entrypoint under this Node rather than through npx: current
   // Node refuses to spawn a .cmd shim on Windows (EINVAL), and going through a
@@ -205,18 +228,18 @@ export async function createTestSchema(): Promise<void> {
   }
 }
 
-export async function dropTestSchema(): Promise<void> {
+export async function dropTestSchema(schema = TEST_SCHEMA): Promise<void> {
   const owner = ownerClient();
   try {
-    await owner.$executeRawUnsafe(`DROP SCHEMA IF EXISTS ${TEST_SCHEMA} CASCADE`);
+    await owner.$executeRawUnsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
   } finally {
     await owner.$disconnect();
   }
 }
 
 /** A client bound to the test schema, for seeding and for asserting on state. */
-export function testClient(): PrismaClient {
-  const url = testDatabaseUrl();
+export function testClient(schema = TEST_SCHEMA): PrismaClient {
+  const url = testDatabaseUrl(schema);
   assertNotProduction(url);
   return new PrismaClient({ datasources: { db: { url } } });
 }
