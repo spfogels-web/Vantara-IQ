@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { saveCrewContact, saveVendorPacket } from "@/app/actions";
 import { CrewPeople, type CrewPerson } from "@/components/subcontractors/crew-people";
 import { CrewLead, type CrewLogin } from "@/components/subcontractors/crew-lead";
+import { useOrgName } from "@/components/layout/org-provider";
 
 /**
  * The vendor packet — what a crew supplies before they can be given work.
@@ -40,6 +41,7 @@ export function VendorPacketForm({
   logins?: CrewLogin[];
   canEdit?: boolean;
 }) {
+  const orgName = useOrgName();
   const router = useRouter();
   const [f, setF] = React.useState(() => ({ ...packet }));
   const [busy, setBusy] = React.useState(false);
@@ -139,7 +141,7 @@ export function VendorPacketForm({
             </p>
             <p className="mt-0.5 text-[12px] text-muted-foreground">
               {status.complete
-                ? "Everything required is on file. Fortitude reviews it from here."
+                ? `Everything required is on file. ${orgName} reviews it from here.`
                 : `Still needed before you can be assigned work: ${status.blocking.join(", ")}.`}
             </p>
             {status.complete && status.optional.length > 0 ? (

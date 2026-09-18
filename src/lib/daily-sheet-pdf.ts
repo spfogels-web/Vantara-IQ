@@ -63,7 +63,7 @@ const fmt = (n: number) =>
 export async function buildDailySheetPdf(sheet: SheetForPdf): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
   const h = sheet.header ?? {};
-  pdf.setTitle(safe(`Daily billing sheet — ${sheet.projectName || "Fortitude"}`));
+  pdf.setTitle(safe(`Daily billing sheet — ${sheet.projectName || "project"}`));
 
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const body = await pdf.embedFont(StandardFonts.Helvetica);

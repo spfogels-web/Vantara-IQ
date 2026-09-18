@@ -5,7 +5,7 @@ import { FileUp, Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { uploadRateSheet } from "@/app/actions";
-import { MARKETS } from "@/lib/markets";
+import { useMarkets } from "@/components/layout/org-provider";
 
 /**
  * Drop a signed rate sheet onto a card.
@@ -35,6 +35,7 @@ export function RateSheetUpload({
   customerId?: string;
   onLoaded?: () => void;
 }) {
+  const MARKETS = useMarkets();
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [market, setMarket] = React.useState("");
   const [busy, setBusy] = React.useState(false);

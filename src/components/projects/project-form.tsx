@@ -7,7 +7,7 @@ import { ArrowLeft, Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { createProject, updateProject, type ProjectInput } from "@/app/actions";
-import { MARKETS } from "@/lib/markets";
+import { useMarkets } from "@/components/layout/org-provider";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { Button } from "@/components/ui/button";
 
@@ -41,6 +41,7 @@ export function ProjectForm({
   initial?: ProjectFormInitial;
   customerNames: string[];
 }) {
+  const MARKETS = useMarkets();
   const router = useRouter();
   const editing = Boolean(initial?.id);
   const [f, setF] = React.useState<ProjectInput>({ ...BLANK, ...initial });

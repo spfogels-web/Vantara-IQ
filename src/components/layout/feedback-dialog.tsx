@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { useOrgName } from "@/components/layout/org-provider";
 
 const CATEGORIES = [
   { key: "idea", label: "Idea", icon: Lightbulb },
@@ -33,6 +34,7 @@ export function FeedbackDialog({
   open: boolean;
   onOpenChange: (v: boolean) => void;
 }) {
+  const orgName = useOrgName();
   const [category, setCategory] = React.useState<(typeof CATEGORIES)[number]["key"]>("idea");
   const [message, setMessage] = React.useState("");
   const [sent, setSent] = React.useState(false);
@@ -75,7 +77,7 @@ export function FeedbackDialog({
             <h2 className="mt-4 text-[16px] font-semibold text-foreground">Thanks — we got it</h2>
             <p className="mt-1.5 max-w-xs text-[12.5px] text-muted-foreground">
               Your feedback goes straight to the Vantara IQ team. This is exactly how we make the
-              platform more effective for Fortitude.
+              platform more effective for {orgName}.
             </p>
             <Button
               type="button"

@@ -5,7 +5,8 @@ import { aiClient } from "@/lib/ai-client";
 
 import { prisma } from "@/lib/prisma";
 import { billingWeekFor, weekOf, addDays } from "@/lib/billing";
-import { MAIN_BILLABLE_CODES } from "@/lib/unit-codes";
+import { getCodeProfile } from "@/data/code-profile";
+import { orgName } from "@/lib/org-settings";
 
 /**
  * The operations assistant — ask the business a question in English.
@@ -275,7 +276,7 @@ async function runTool(name: string, input: Record<string, unknown>): Promise<st
       const cust = await prisma.customer.findMany({
         select: { name: true, rates: { select: { code: true, rate: true, unit: true } } },
       });
-      const main = new Set(MAIN_BILLABLE_CODES.map(key));
+      const main = new Set((await getCodeProfile()).billableCodes.map(key));
       return JSON.stringify(
         cust.map((c) => ({
           customer: c.name,
@@ -291,7 +292,10 @@ async function runTool(name: string, input: Record<string, unknown>): Promise<st
   }
 }
 
-const SYSTEM = `You are the operations assistant for Fortitude Infrastructure, a veteran-owned underground utility and fibre contractor working Windstream jobs in Georgia through Globe Communications. You are talking to Sean Fogelson, who owns the company.
+// Built per request. The prompt used to name one company, its prime, its
+// customer and its owner — so the assistant introduced itself as somebody
+// else's business to every other organisation.
+const systemPrompt = (org: string) => `You are the operations assistant for ${org}, an underground utility and fibre contractor. You are talking to the staff who run the company.
 
 WHAT YOU ARE
 You read the business and answer questions about it. You are here to help him run and improve the company: spot where money is leaking, where a crew is unprofitable, what is holding up billing, what needs chasing.
@@ -309,7 +313,7 @@ HOW TO ANSWER
 WHAT YOU KNOW ABOUT THE BUSINESS
 - Billing weeks run Saturday to Friday. Work after Friday 11:59pm falls into the following week unless the office overrides it.
 - A unit code must match the customer's rate card exactly or it prices at zero and bills nothing while still looking filed. This has happened and cost real money.
-- Fortitude bills Globe; Globe's rate is what Fortitude earns. Subcontractor rates are what Fortitude pays crews. The difference is the margin, and it varies by crew for the same work.
+- The customer's rate is what the company earns; subcontractor rates are what it pays crews. The difference is the margin, and it varies by crew for the same work.
 - The "I" suffix on a fibre code means pulled through existing pipe, priced far lower than placing new cable.
 
 SPEAKING
@@ -343,7 +347,7 @@ export async function askOps(history: OpsMessage[]): Promise<OpsAnswer> {
       model: "claude-opus-5",
       max_tokens: 4000,
       thinking: { type: "adaptive" },
-      system: SYSTEM,
+      system: systemPrompt(await orgName()),
       tools: TOOLS,
       messages,
     });

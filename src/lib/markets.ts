@@ -1,20 +1,29 @@
 /**
- * The markets Fortitude works in.
+ * What a market is, and the rules that follow from one.
  *
  * A market is not a state and it is not a customer — it is the combination,
- * because that is what the rate card follows. Two of these run through Trawick
- * and pay differently, so "who is the prime" does not identify a job's money on
- * its own and neither does "which state".
+ * because that is what the rate card follows. Two markets can run through the
+ * same prime at different prices, so "who is the prime" does not identify a
+ * job's money on its own, and neither does "which state".
  *
- * Kept as data rather than a database table: there are three of them, they
- * change about never, and a table would mean a join on every project read for
- * something a constant answers.
+ * ## Why there is no list here any more
+ *
+ * There used to be three of them in this file, by name: North Georgia through
+ * Globe Communications, South Georgia and Alabama through Trawick. That is one
+ * contractor's commercial relationships written into the product — every other
+ * organisation's project form offered them, and their rate sheets were filed
+ * against them. Not a database leak; a worse one, because it looks like
+ * working software.
+ *
+ * The list lives in each organisation's own database now (see
+ * `src/data/markets.ts`). What stays here is the part that is true for
+ * everybody: the shape of a market, and how rates resolve against one.
+ *
+ * No `server-only`: the type and `ratesForMarket` are used on both sides.
  */
 
-export type MarketId = "north-ga" | "south-ga" | "alabama";
-
 export type Market = {
-  id: MarketId;
+  id: string;
   label: string;
   /** Who the work is billed through. */
   prime: string;
@@ -30,109 +39,52 @@ export type Market = {
   state: string;
 };
 
-export const MARKETS: Market[] = [
-  {
-    id: "north-ga",
-    label: "North Georgia",
-    prime: "Globe Communications",
-    hint: "Globe",
-    state: "GA",
-    towns: [
-      "toccoa",
-      "eastanollee",
-      "colbert",
-      "lexington",
-      "white plains",
-      "hartwell",
-      "royston",
-      "carnesville",
-      "clarkesville",
-      "cornelia",
-    ],
-    customers: ["globe communications", "globe"],
-  },
-  {
-    id: "south-ga",
-    label: "South Georgia",
-    prime: "Trawick Construction",
-    hint: "Trawick",
-    state: "GA",
-    towns: [
-      "milledgeville",
-      "dublin",
-      "sandersville",
-      "eatonton",
-      "gray",
-      "macon",
-      "swainsboro",
-      "vidalia",
-    ],
-    // Trawick runs two markets, so the customer alone cannot place a job —
-    // the town is what separates this from Alabama. Listed anyway so a
-    // Trawick project with an unfamiliar town lands somewhere reviewable
-    // rather than nowhere.
-    customers: ["trawick construction", "trawick"],
-  },
-  {
-    id: "alabama",
-    label: "Alabama",
-    prime: "Trawick Construction",
-    hint: "Trawick · Odenville & Springville",
-    state: "AL",
-    towns: ["odenville", "springville", "moody", "trussville", "pell city", "ashville"],
-    customers: [],
-  },
-];
-
-export const MARKET_BY_ID = new Map(MARKETS.map((m) => [m.id, m]));
-
-export function isMarketId(v: unknown): v is MarketId {
-  return typeof v === "string" && MARKET_BY_ID.has(v as MarketId);
+/** The label for a market id, from a list already loaded. Empty if unknown. */
+export function labelOf(markets: Market[], id: string | null | undefined): string {
+  if (!id) return "";
+  return markets.find((m) => m.id === id)?.label ?? "";
 }
 
-export function marketLabel(id: string): string {
-  return MARKET_BY_ID.get(id as MarketId)?.label ?? "";
+/** Whether this id names a market this organisation actually has. */
+export function isKnownMarket(markets: Market[], v: unknown): v is string {
+  return typeof v === "string" && markets.some((m) => m.id === v);
 }
 
 /**
- * A guess at which market a job belongs to, from its town and its customer.
+ * Work out which market a piece of free text means, or none.
  *
- * Town first, deliberately. Trawick runs both South Georgia and Alabama on
- * different rates, so the customer cannot decide between them — reading the
- * customer first would put every Alabama job on the Georgia card.
+ * Rate sheets arrive with a market typed on them by hand, so "North Georgia",
+ * "north-ga" and "N Georgia" all turn up meaning the same place. This used to
+ * be a short if-ladder mapping exactly those spellings onto exactly three ids —
+ * which is to say, one organisation's markets hardcoded into the importer, and
+ * for anybody else a silent "no market" on every sheet.
  *
- * Returns null rather than guessing when nothing matches. An unassigned job
- * shows up in the filter as unassigned, which somebody fixes in a moment; a
- * wrongly assigned one is invisible and gets billed at the wrong rate.
+ * Matching against the organisation's own markets answers the same question
+ * without knowing anything in advance: the id, the label, or the short hint,
+ * each compared loosely enough to survive a space or a hyphen.
+ *
+ * Returns "" rather than guessing. A sheet filed under no market prices
+ * everywhere, which is visible and fixable; a sheet filed under the wrong
+ * market is invisible and bills at the wrong rate.
  */
-export function inferMarket(input: {
-  location?: string | null;
-  client?: string | null;
-  customer?: string | null;
-}): MarketId | null {
-  const where = (input.location ?? "").toLowerCase();
+export function resolveMarketText(markets: Market[], text: string | null | undefined): string {
+  const loose = (s: string) => s.trim().toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const want = loose(text ?? "");
+  if (!want) return "";
 
-  for (const m of MARKETS) {
-    if (m.towns.some((town) => where.includes(town))) return m.id;
-  }
-
-  // No town matched. Fall back to the customer, which can only ever resolve a
-  // market that does not share its prime with another.
-  const who = `${input.customer ?? ""} ${input.client ?? ""}`.toLowerCase();
-  const byCustomer = MARKETS.filter((m) => m.customers.some((c) => who.includes(c)));
-  const unambiguous = byCustomer.filter(
-    (m) => MARKETS.filter((o) => o.prime === m.prime).length === 1,
-  );
-  return unambiguous.length === 1 ? unambiguous[0].id : null;
+  for (const m of markets) if (loose(m.id) === want) return m.id;
+  for (const m of markets) if (loose(m.label) === want) return m.id;
+  for (const m of markets) if (m.hint && loose(m.hint) === want) return m.id;
+  return "";
 }
 
 /**
  * Pick the rows that apply in a market, one per code.
  *
  * A row naming the market beats a row that names none. That is what lets one
- * customer hold two cards at different prices: Trawick's South Georgia sheet
- * and Trawick's Alabama sheet both live under Trawick, and a job is priced off
- * whichever matches the market it is in.
+ * customer hold two cards at different prices: a prime's sheet for one market
+ * and the same prime's sheet for another both live under that customer, and a
+ * job is priced off whichever matches the market it is in.
  *
  * A blank market means "everywhere". Most customers work one market and expect
  * their card to follow them, so that is the default and nothing has to be

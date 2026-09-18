@@ -11,6 +11,10 @@ import { getNavBadges, getOrganizationLogo , getNotifications } from "@/data/que
 import { getLocale } from "@/lib/i18n-server";
 import { organisationChoices, switchOrganisation } from "@/app/org-actions";
 import { OrgProvider } from "@/components/layout/org-provider";
+import { getMarkets } from "@/data/markets";
+import { getCodeProfile } from "@/data/code-profile";
+import { orgSettings } from "@/lib/org-settings";
+import { EMPTY_CODE_PROFILE } from "@/lib/unit-codes";
 import { getSession } from "@/lib/auth";
 import { LanguageProvider } from "@/components/layout/language-provider";
 
@@ -56,9 +60,20 @@ export default async function RootLayout({
     getSession(),
   ]);
 
-  const [logoUrl, badges, notifications] = user
-    ? await Promise.all([getOrganizationLogo(), getNavBadges(), getNotifications()])
-    : [null, undefined, undefined];
+  const [logoUrl, badges, notifications, markets, codes] = user
+    ? await Promise.all([
+        getOrganizationLogo(),
+        getNavBadges(),
+        getNotifications(),
+        // This organisation's own markets and code vocabulary, for the pickers
+        // and rate cards deep in the tree.
+        getMarkets(),
+        getCodeProfile(),
+      ])
+    : [null, undefined, undefined, [], EMPTY_CODE_PROFILE];
+
+  // What this organisation is called, for the screens that speak on its behalf.
+  const settings = user ? await orgSettings() : null;
 
   // The alerts light in the top bar. Staff only — a crew has their own consent
   // and no say in the master switch, and a control they cannot use is a
@@ -99,7 +114,14 @@ export default async function RootLayout({
       </head>
       <body className="min-h-svh bg-background font-sans antialiased">
         <LanguageProvider locale={locale}>
-          <OrgProvider orgId={session?.org ?? null}>
+          <OrgProvider
+            orgId={session?.org ?? null}
+            markets={markets}
+            codes={codes}
+            name={settings?.legalName ?? ""}
+            shortName={settings?.shortName ?? ""}
+            logoUrl={logoUrl ?? null}
+          >
           <AppShell
             user={user}
             logoUrl={logoUrl}

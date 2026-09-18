@@ -12,6 +12,7 @@ import { LogoUpload } from "@/components/common/logo-upload";
 import { DocumentCenter } from "@/components/subcontractors/document-center";
 import { AgreementStep } from "@/components/subcontractors/agreement-step";
 import { AchForm } from "@/components/subcontractors/ach-form";
+import { useOrgName } from "@/components/layout/org-provider";
 
 export type InviteProject = {
   name: string;
@@ -43,6 +44,7 @@ const inputClass =
 type Step = "account" | "capabilities" | "agreement" | "payment" | "documents" | "done";
 
 export function InviteOnboarding({ token, project }: { token: string; project: InviteProject }) {
+  const orgName = useOrgName();
   const [step, setStep] = React.useState<Step>("account");
   const [subId, setSubId] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
@@ -131,7 +133,7 @@ export function InviteOnboarding({ token, project }: { token: string; project: I
       <div className="surface mt-8 p-5 sm:p-6">
         <p className="eyebrow">Subcontractor invitation</p>
         <h1 className="mt-1.5 text-[22px] font-semibold tracking-[-0.025em] text-gradient sm:text-[26px]">
-          You&apos;ve been invited by Fortitude Infrastructure
+          You&apos;ve been invited by {orgName}
         </h1>
         {project ? (
           <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-brand/25 bg-brand/[0.06] px-4 py-3">
@@ -193,7 +195,7 @@ export function InviteOnboarding({ token, project }: { token: string; project: I
           <div className="surface p-5">
             <p className="eyebrow">What you&apos;ll complete</p>
             <ol className="mt-3 flex flex-col gap-3">
-              {["Create your account", "Company logo & capabilities", "W-9, insurance & agreements", "Payment / ACH details", "Fortitude review & approval", "You're active on your project"].map((label, i) => (
+              {["Create your account", "Company logo & capabilities", "W-9, insurance & agreements", "Payment / ACH details", `${orgName} review & approval`, "You're active on your project"].map((label, i) => (
                 <li key={label} className="flex items-center gap-3">
                   <span className="grid size-6 shrink-0 place-items-center rounded-full bg-foreground/[0.05] text-[10px] font-semibold text-muted-foreground ring-1 ring-inset ring-foreground/[0.08]">
                     {i + 1}
@@ -203,7 +205,7 @@ export function InviteOnboarding({ token, project }: { token: string; project: I
               ))}
             </ol>
             <p className="mt-4 rounded-lg border border-border/60 bg-foreground/[0.02] p-3 text-[11.5px] leading-relaxed text-muted-foreground">
-              Nothing is approved automatically — Fortitude reviews every document before your access opens.
+              Nothing is approved automatically — {orgName} reviews every document before your access opens.
             </p>
           </div>
         </div>
@@ -215,7 +217,7 @@ export function InviteOnboarding({ token, project }: { token: string; project: I
               <HardHat className="size-4 text-brand-bright" /> Capabilities statement
             </h2>
             <p className="mt-1 text-[11.5px] text-muted-foreground">
-              Tell Fortitude what your crews and equipment can do.
+              Tell {orgName} what your crews and equipment can do.
             </p>
 
             <div className="mt-3 flex items-center gap-3 rounded-xl border border-border/70 bg-foreground/[0.02] p-3">
@@ -337,7 +339,7 @@ export function InviteOnboarding({ token, project }: { token: string; project: I
             </button>
             {!achSaved ? (
               <span className="text-[12px] text-muted-foreground">
-                Fortitude cannot pay you without this.
+                {orgName} cannot pay you without this.
               </span>
             ) : null}
           </div>
@@ -395,7 +397,7 @@ export function InviteOnboarding({ token, project }: { token: string; project: I
           </span>
           <h2 className="mt-4 text-[16px] font-semibold text-foreground">Submitted for review</h2>
           <p className="mt-1.5 max-w-sm text-[12.5px] text-muted-foreground">
-            Your account, capabilities and documents are in. Fortitude reviews and approves before
+            Your account, capabilities and documents are in. {orgName} reviews and approves before
             your access opens — you&apos;ll get an email the moment you&apos;re active on{" "}
             {project ? project.name : "your project"}.
           </p>
@@ -403,7 +405,7 @@ export function InviteOnboarding({ token, project }: { token: string; project: I
       )}
 
       <p className="mt-8 text-center text-[11px] text-muted-foreground/70">
-        Powered by Vantara IQ · Nothing is approved automatically — Fortitude reviews every step.
+        Powered by Vantara IQ · Nothing is approved automatically — {orgName} reviews every step.
       </p>
     </div>
   );

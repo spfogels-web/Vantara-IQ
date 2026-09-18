@@ -4,9 +4,10 @@ import * as React from "react";
 import { Download, Loader2, Plus, Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { marketLabel } from "@/lib/markets";
+import { useMarketLabel } from "@/components/layout/org-provider";
 import { formatRate } from "@/lib/format";
 import { compareByPriority } from "@/lib/unit-codes";
+import { useCodeProfile } from "@/components/layout/org-provider";
 import {
   addSubRate,
   deleteSubRate,
@@ -35,6 +36,8 @@ const inputClass =
   "w-full rounded-lg border border-foreground/[0.1] bg-foreground/[0.03] px-2.5 py-1.5 text-[12px] text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-brand/40";
 
 export function SubRateCard({ subcontractorId }: { subcontractorId: string }) {
+  const marketLabel = useMarketLabel();
+  const codeProfile = useCodeProfile();
   const [rates, setRates] = React.useState<Rate[] | null>(null);
 
   // A crew can run in two markets at two prices — Trawick's South Georgia and
@@ -88,8 +91,8 @@ export function SubRateCard({ subcontractorId }: { subcontractorId: string }) {
 
   const load = React.useCallback(async () => {
     const rows = await listSubRates(subcontractorId);
-    setRates([...rows].sort((a, b) => compareByPriority(a.code, b.code)));
-  }, [subcontractorId]);
+    setRates([...rows].sort((a, b) => compareByPriority(codeProfile, a.code, b.code)));
+  }, [subcontractorId, codeProfile]);
 
   React.useEffect(() => {
     setRates(null);

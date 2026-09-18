@@ -6,7 +6,7 @@ import { getInvite } from "@/data/queries";
 import { InviteOnboarding, type InviteProject } from "@/components/subcontractors/invite-onboarding";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Join Fortitude · Vantara IQ" };
+export const metadata = { title: "Join your crew · Vantara IQ" };
 
 /**
  * The onboarding entry point.
@@ -35,7 +35,7 @@ export default async function InvitePage({
           This invitation link isn&apos;t valid
         </h1>
         <p className="mt-2 text-[13px] leading-relaxed text-muted-foreground">
-          It may have been mistyped, or withdrawn. Ask Fortitude Infrastructure for the link to
+          It may have been mistyped, or withdrawn. Ask the office for the link to
           your project.
         </p>
         <Link

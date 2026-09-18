@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { CheckCircle2, MapPin } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { MARKETS, type MarketId } from "@/lib/markets";
+import { useMarkets } from "@/components/layout/org-provider";
 import { useT } from "@/components/layout/language-provider";
 
 /**
@@ -26,7 +26,14 @@ import { useT } from "@/components/layout/language-provider";
 
 export type MarketCounts = Record<string, number>;
 
-type Choice = MarketId | "all" | "unassigned";
+/**
+ * A market id, or one of the two pseudo-choices.
+ *
+ * Was a union of three literal ids — one organisation's three markets, in the
+ * type system. Any id now, because which ids exist is a question for the
+ * organisation's own database rather than for the compiler.
+ */
+type Choice = string;
 
 export function MarketFilter({
   counts,
@@ -43,6 +50,7 @@ export function MarketFilter({
   stage: "current" | "completed" | "all";
   stageCounts: { current: number; completed: number };
 }) {
+  const MARKETS = useMarkets();
   const t = useT();
   const router = useRouter();
   const params = useSearchParams();

@@ -4,8 +4,10 @@ import { prisma } from "@/lib/prisma";
 import { assertProjectAccess, notAuthorized, requireStaff } from "@/lib/authz";
 import { buildRateSheetPdf } from "@/lib/rate-sheet-pdf";
 import { companyLogo } from "@/lib/rate-sheet-logo";
-import { normalizeCode, rateFamilyOf, RATE_FAMILIES } from "@/lib/unit-codes";
-import { marketLabel } from "@/lib/markets";
+import { normalizeCode, rateFamilyOf } from "@/lib/unit-codes";
+import { getCodeProfile } from "@/data/code-profile";
+import { marketLabel } from "@/data/markets";
+import { orgName } from "@/lib/org-settings";
 
 export const runtime = "nodejs";
 
@@ -154,9 +156,10 @@ export async function GET(
   // both without inviting an argument on the day. The one the job builds most
   // of wins, because that is the number somebody set with the work in front of
   // them rather than the one that came along with a card.
+  const codeProfile = await getCodeProfile();
   const familyRate = new Map<string, { row: (typeof candidates)[number]; planned: number }>();
   for (const row of byCode.values()) {
-    const family = rateFamilyOf(row.code);
+    const family = rateFamilyOf(codeProfile, row.code);
     if (!family) continue;
     const planned = plannedOf.get(normalizeCode(row.code)) ?? 0;
     const held = familyRate.get(family);
@@ -164,7 +167,7 @@ export async function GET(
   }
 
   for (const [family, { row }] of familyRate) {
-    for (const sibling of RATE_FAMILIES[family]) {
+    for (const sibling of codeProfile.families[family] ?? []) {
       byCode.set(normalizeCode(sibling), { ...row, code: sibling });
     }
   }
@@ -185,7 +188,7 @@ export async function GET(
   });
 
   const pdf = await buildRateSheetPdf({
-    companyName: org?.name ?? "Fortitude Infrastructure",
+    companyName: org?.name ?? (await orgName()),
     // Left for the recipient to be written in. The sheet goes out before
     // anyone is signed, so naming a company on it would be presumptuous and
     // would have to be corrected by hand on every copy.

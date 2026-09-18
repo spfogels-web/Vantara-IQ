@@ -171,6 +171,8 @@ model OrgSettings {
   locateProvider String
   /// Where it works, for the fields that need a state before anyone picks one.
   defaultState   String
+  /// The number a crew is told to ring. One company's office is not another's.
+  supportPhone   String @default("")
 
   updatedAt DateTime @updatedAt
 }
@@ -206,8 +208,12 @@ model OrgCodeProfile {
   id String @id @default("singleton")
 
   /// The codes this organisation bills most, in the order the pickers offer
-  /// them.
+  /// them. Matched by prefix, so BFO12 covers BFO12I and BFO12RI.
   priorityCodes String[]
+  /// Exactly the codes a crew may put on a daily sheet. Exact, not prefixes:
+  /// matching by family puts hundreds of variants on a dropdown and a crew
+  /// picks the wrong one, which still prices.
+  billableCodes String[]
   /// Code families, as `{ familyName: [code, …] }`. Codes in one family are
   /// priced together, so a rate card that sets one and not its siblings is
   /// incomplete rather than wrong.
@@ -2004,11 +2010,16 @@ model LocateTicket {
   closedOn String @default("")
   notes    String @default("")
 
-  /// Which one-call centre issued this. GA811 today; the adapter layer means
-  /// AL811 and SC811 are a row here rather than a fork in the code.
-  provider String @default("GA811")
+  /// Which one-call centre issued this.
+  ///
+  /// No default. It used to be GA811, and the state GA — one organisation's
+  /// ground, inherited by every ticket any other organisation ever filed. The
+  /// centre a ticket belongs to comes from the organisation's own settings at
+  /// the moment it is created; an empty value renders as an unintegrated
+  /// centre, which is honest, rather than as somebody else's.
+  provider String @default("")
   /// Two-letter state, so a multi-state board can be read by market.
-  state    String @default("GA")
+  state    String @default("")
 
   /// The crew this work belongs to. Crews are subcontractors here — the same
   /// record a daily, an invoice and a project assignment already hang off.

@@ -26,6 +26,8 @@ import {
 import {
   PLATFORM_ADMIN_EMAIL,
   seedDemoOrgSettings,
+  seedIncumbentConfig,
+  seedOtherConfig,
   seedOtherDatabase,
   seedTwoTenants,
   seedWorkingOrgSettings,
@@ -83,6 +85,7 @@ export async function setup() {
   try {
     const fixtures = await seedTwoTenants(db);
     await seedWorkingOrgSettings(db);
+    await seedIncumbentConfig(db);
     writeFileSync(FIXTURE_FILE, JSON.stringify(fixtures, null, 2));
   } finally {
     await db.$disconnect();
@@ -96,6 +99,7 @@ export async function setup() {
   try {
     const tenant = await seedOtherDatabase(other);
     await seedDemoOrgSettings(other);
+    await seedOtherConfig(other);
     writeFileSync(OTHER_FIXTURE_FILE, JSON.stringify(tenant, null, 2));
   } finally {
     await other.$disconnect();

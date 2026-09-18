@@ -27,7 +27,7 @@ import {
 } from "@/app/actions";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { RateSheetUpload } from "@/components/common/rate-sheet-upload";
-import { marketLabel } from "@/lib/markets";
+import { useMarketLabel } from "@/components/layout/org-provider";
 import { StatusPill } from "@/components/common/status-pill";
 import { Button } from "@/components/ui/button";
 
@@ -50,6 +50,7 @@ function fmtBytes(n: number) {
 }
 
 export function CustomerBilling({ customerId }: { customerId: string }) {
+  const marketLabel = useMarketLabel();
   const router = useRouter();
   const [docs, setDocs] = React.useState<Doc[] | null>(null);
   const [rates, setRates] = React.useState<Rate[] | null>(null);

@@ -12,6 +12,7 @@ import { getT } from "@/lib/i18n-server";
 import { PageShell } from "@/components/common/page-shell";
 import { DailiesView } from "@/components/dailies/dailies-view";
 import { ImportDaily } from "@/components/dailies/import-daily";
+import { orgName } from "@/lib/org-settings";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Dailies · Vantara IQ" };
@@ -50,7 +51,10 @@ export default async function DailiesPage({
           ? t(
               "Every crew's daily production, digitized from the field. The AI reads each sheet, reconciles quantities and documentation, and stages it for your team's review.",
             )
-          : t("The days your crew has filed, and where each one stands with Fortitude.")
+          : t("The days your crew has filed, and where each one stands with {company}.").replace(
+              "{company}",
+              await orgName(),
+            )
       }
       actions={
         <Link

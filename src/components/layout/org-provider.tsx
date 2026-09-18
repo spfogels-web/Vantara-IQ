@@ -3,6 +3,8 @@
 import * as React from "react";
 
 import { orgBlobPrefix } from "@/lib/blob-paths";
+import { labelOf, type Market } from "@/lib/markets";
+import { EMPTY_CODE_PROFILE, type CodeProfile } from "@/lib/unit-codes";
 
 /**
  * Which organisation the screens on this page belong to.
@@ -19,20 +21,112 @@ import { orgBlobPrefix } from "@/lib/blob-paths";
  * somebody else's folder.
  */
 
-const OrgContext = React.createContext<string | null>(null);
+type OrgValue = {
+  orgId: string | null;
+  /**
+   * This organisation's markets.
+   *
+   * Carried here rather than passed down because the pickers that need them —
+   * the project form, the market filter, the rate-sheet uploader, two rate
+   * cards — sit five and six levels deep behind client components that have no
+   * other reason to know about markets. Threading a prop through all of them
+   * would put "which markets exist" into the signature of half the component
+   * tree, and every one of those signatures would be a place to forget it.
+   *
+   * Always this organisation's own, because the layout that fills it runs per
+   * request and reads the request's own database.
+   */
+  markets: Market[];
+  /** This organisation's code vocabulary, for the rate card's ordering. */
+  codes: CodeProfile;
+  /**
+   * What this organisation is called, for the screens that address a crew on
+   * its behalf — "approved by", "send to", "reviews every document".
+   *
+   * Roughly a hundred of those said one contractor's name outright. Under any
+   * other organisation they were simply wrong: the crew is not waiting on
+   * Fortitude, and Fortitude is not paying them.
+   */
+  name: string;
+  shortName: string;
+  /** The mark this organisation has uploaded, if any. */
+  logoUrl: string | null;
+};
+
+const OrgContext = React.createContext<OrgValue>({
+  orgId: null,
+  markets: [],
+  codes: EMPTY_CODE_PROFILE,
+  name: "",
+  shortName: "",
+  logoUrl: null,
+});
 
 export function OrgProvider({
   orgId,
+  markets,
+  codes,
+  name,
+  shortName,
+  logoUrl,
   children,
 }: {
   orgId: string | null;
+  markets: Market[];
+  codes: CodeProfile;
+  name: string;
+  shortName: string;
+  logoUrl: string | null;
   children: React.ReactNode;
 }) {
-  return <OrgContext.Provider value={orgId}>{children}</OrgContext.Provider>;
+  const value = React.useMemo(
+    () => ({ orgId, markets, codes, name, shortName, logoUrl }),
+    [orgId, markets, codes, name, shortName, logoUrl],
+  );
+  return <OrgContext.Provider value={value}>{children}</OrgContext.Provider>;
 }
 
 export function useOrgId(): string | null {
-  return React.useContext(OrgContext);
+  return React.useContext(OrgContext).orgId;
+}
+
+/**
+ * What to call this organisation on screen.
+ *
+ * Falls back to "the office" rather than to a company name. A crew reading
+ * "waiting on the office" is told the truth; a crew reading the wrong
+ * contractor's name is told something false about who owes them money.
+ */
+export function useOrgName(fallback = "the office"): string {
+  const { name } = React.useContext(OrgContext);
+  return name.trim() || fallback;
+}
+
+/** The mark this organisation has uploaded, if any. */
+export function useOrgLogo(): string | null {
+  return React.useContext(OrgContext).logoUrl;
+}
+
+/** The short form, for buttons and inline mentions. */
+export function useOrgShortName(fallback = "the office"): string {
+  const { shortName, name } = React.useContext(OrgContext);
+  return shortName.trim() || name.trim() || fallback;
+}
+
+/** This organisation's code vocabulary. Empty when it has not set one. */
+export function useCodeProfile(): CodeProfile {
+  return React.useContext(OrgContext).codes;
+}
+
+/** This organisation's markets. Empty when it has not said where it works. */
+export function useMarkets(): Market[] {
+  return React.useContext(OrgContext).markets;
+}
+
+/** The label for a market id, or empty. */
+export function useMarketLabel(): (id: string | null | undefined) => string {
+  const markets = useMarkets();
+  return React.useCallback((id) => labelOf(markets, id), [markets]);
 }
 
 /**

@@ -4,6 +4,7 @@ import { getTasks, getTaskAssignees } from "@/data/queries";
 import { getCurrentUser, isStaff } from "@/lib/auth";
 import { PageShell } from "@/components/common/page-shell";
 import { TasksView } from "@/components/tasks/tasks-view";
+import { orgName } from "@/lib/org-settings";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Tasks · Vantara IQ" };
@@ -33,7 +34,7 @@ export default async function TasksPage() {
       description={
         staff
           ? "Anything that needs chasing, assigned to an employee or a crew — with a photo of the problem and proof it was fixed."
-          : "Work Fortitude has assigned to your crew. Photograph what you find and what you did, and it stays on the record."
+          : `Work ${await orgName()} has assigned to your crew. Photograph what you find and what you did, and it stays on the record.`
       }
     >
       <TasksView tasks={tasks} assignees={assignees} canManage={staff} />

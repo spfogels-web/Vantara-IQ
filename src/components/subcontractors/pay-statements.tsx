@@ -26,6 +26,7 @@ import {
 import type { SubInvoiceRow } from "@/data/queries";
 import { acceptSubInvoice, disputeSubInvoice, electFastPay } from "@/app/actions";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
+import { useOrgName } from "@/components/layout/org-provider";
 
 /**
  * What a crew is owed, and their answer to it.
@@ -48,6 +49,7 @@ const STATUS: Record<string, { label: string; cls: string }> = {
 };
 
 export function PayStatements({ invoices }: { invoices: SubInvoiceRow[] }) {
+  const orgName = useOrgName();
   const waiting = invoices.filter((i) => i.status === "ISSUED");
   const settled = invoices.filter((i) => i.status !== "ISSUED");
 
@@ -62,7 +64,7 @@ export function PayStatements({ invoices }: { invoices: SubInvoiceRow[] }) {
         {/* Settled figures are what actually lands, not what the work came to
             — on a fast-pay statement those are different numbers, and the one
             worth showing is the one that hits the account. */}
-        <Stat label="Approved, not yet paid" value={invoices.filter((i) => i.status === "ACCEPTED").reduce((s, i) => s + i.net, 0)} hint="agreed with Fortitude" />
+        <Stat label="Approved, not yet paid" value={invoices.filter((i) => i.status === "ACCEPTED").reduce((s, i) => s + i.net, 0)} hint={`agreed with ${orgName}`} />
         <Stat label="Paid" value={invoices.filter((i) => i.status === "PAID").reduce((s, i) => s + i.net, 0)} hint="settled" />
       </div>
 
@@ -94,7 +96,7 @@ export function PayStatements({ invoices }: { invoices: SubInvoiceRow[] }) {
             <FileText className="mx-auto size-6 text-muted-foreground/40" />
             <p className="mt-2 text-[12.5px] text-muted-foreground">
               {invoices.length === 0
-                ? "No statements yet. One is prepared for each week your approved dailies cover, and appears here when Fortitude sends it."
+                ? `No statements yet. One is prepared for each week your approved dailies cover, and appears here when ${orgName} sends it.`
                 : "Nothing settled yet."}
             </p>
             {owed > 0 ? null : null}
@@ -124,6 +126,7 @@ function Stat({ label, value, hint, tone }: { label: string; value: number; hint
 }
 
 function StatementRow({ invoice: inv, actionable }: { invoice: SubInvoiceRow; actionable: boolean }) {
+  const orgName = useOrgName();
   const router = useRouter();
   const [open, setOpen] = React.useState(actionable);
   const [busy, setBusy] = React.useState<string | null>(null);
@@ -312,7 +315,7 @@ function StatementRow({ invoice: inv, actionable }: { invoice: SubInvoiceRow; ac
       ) : null}
       {inv.resolutionNote ? (
         <p className="mt-1.5 text-[11.5px] text-muted-foreground">
-          <span className="font-medium">Fortitude:</span> {inv.resolutionNote}
+          <span className="font-medium">{orgName}:</span> {inv.resolutionNote}
         </p>
       ) : null}
 
@@ -448,7 +451,7 @@ function StatementRow({ invoice: inv, actionable }: { invoice: SubInvoiceRow; ac
                   disabled={Boolean(busy) || !note.trim()}
                   className="focus-ring inline-flex h-9 items-center gap-1.5 rounded-lg bg-critical px-3.5 text-[12.5px] font-semibold text-white hover:opacity-90 disabled:opacity-40"
                 >
-                  {busy === "dispute" ? <Loader2 className="size-3.5 animate-spin" /> : null} Send to Fortitude
+                  {busy === "dispute" ? <Loader2 className="size-3.5 animate-spin" /> : null} Send to {orgName}
                 </button>
                 <button
                   type="button"

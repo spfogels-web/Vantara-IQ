@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser, isStaff } from "@/lib/auth";
 import { buildInvoicePdf } from "@/lib/invoice-pdf";
+import { orgName } from "@/lib/org-settings";
 
 export const runtime = "nodejs";
 
@@ -46,7 +47,7 @@ export async function GET(
   try {
     pdf = await buildInvoicePdf(
       invoice,
-      org?.name ?? "Fortitude Infrastructure LLC",
+      org?.name ?? (await orgName()),
       org?.logoUrl,
       new URL(request.url).origin,
     );

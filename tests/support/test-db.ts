@@ -214,11 +214,63 @@ export async function createTestSchema(schema = TEST_SCHEMA): Promise<void> {
   // Node refuses to spawn a .cmd shim on Windows (EINVAL), and going through a
   // shell to work around that would mean the connection string — which carries
   // the database password — passes through a command line.
-  execFileSync(
-    process.execPath,
-    [require.resolve("prisma/build/index.js"), "db", "push", "--skip-generate"],
-    { env: { ...process.env, DATABASE_URL: url, DATABASE_URL_UNPOOLED: url }, stdio: "pipe" },
-  );
+  /**
+   * `db push`, retried on one specific transient failure.
+   *
+   * Occasionally the schema engine comes back with
+   *
+   *     ERROR: no schema has been selected to create in
+   *
+   * on a schema that demonstrably exists — the assertion above has just read
+   * rows through it. It is the pooler: the engine is a separate process that
+   * opens its own connection, and a reused backend does not always get the
+   * `?schema=` startup parameter applied, so it arrives with an empty
+   * `search_path` and cannot create anything.
+   *
+   * This is the same family as the production incident earlier in this work,
+   * and the honest response is the same: do not paper over it, name it. Two
+   * retries, only for this message, and anything else fails immediately. A
+   * `db push` that has genuinely broken should still stop the run on the first
+   * attempt.
+   *
+   * Using the direct endpoint instead would be the obvious fix and is the
+   * wrong one: it ignores `?schema=` entirely, which is how a rehearsal script
+   * once wrote test data into live tables.
+   */
+  const POOLER_LOST_SEARCH_PATH = "no schema has been selected to create in";
+  for (let attempt = 1; ; attempt++) {
+    try {
+      execFileSync(
+        process.execPath,
+        [require.resolve("prisma/build/index.js"), "db", "push", "--skip-generate"],
+        { env: { ...process.env, DATABASE_URL: url, DATABASE_URL_UNPOOLED: url }, stdio: "pipe" },
+      );
+      break;
+    } catch (e) {
+      const detail = `${(e as { stdout?: Buffer }).stdout ?? ""}${(e as { stderr?: Buffer }).stderr ?? ""}`;
+      if (attempt >= 3 || !detail.includes(POOLER_LOST_SEARCH_PATH)) throw e;
+
+      /**
+       * Start the schema again before retrying.
+       *
+       * The failed attempt is not a no-op: it gets far enough to create the
+       * enums before the statement that needs a search path fails, so a plain
+       * retry dies on `type "…" already exists` — which is a confusing error
+       * about a real problem that has already been solved. The schema is
+       * disposable and holds nothing at this point, so the honest reset is to
+       * drop it.
+       */
+      console.log(`  the pooler dropped the schema path; starting ${schema} again (${attempt}/2)…`);
+      const owner = ownerClient();
+      try {
+        await owner.$executeRawUnsafe(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+        await owner.$executeRawUnsafe(`CREATE SCHEMA ${schema}`);
+      } finally {
+        await owner.$disconnect();
+      }
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+  }
 
   const after = await publicTableCount();
   if (after !== before) {

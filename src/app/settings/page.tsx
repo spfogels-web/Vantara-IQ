@@ -17,6 +17,7 @@ import { planBilling } from "@/lib/plan";
 import { PlanPanel } from "@/components/settings/plan-panel";
 import { AlertsSwitchPanel } from "@/components/settings/alerts-switch-panel";
 import { getCurrentUser, isStaff } from "@/lib/auth";
+import { orgSettings } from "@/lib/org-settings";
 
 export const dynamic = "force-dynamic";
 const ROLE_LABEL: Record<string, string> = {
@@ -84,6 +85,7 @@ const integrations = [
 ];
 
 export default async function SettingsPage() {
+  const { smsAllowed } = await orgSettings();
   const [org, me, orgLogoUrl, myAlerts, alerts] = await Promise.all([
     getOrganization(),
     getCurrentUser(),
@@ -136,14 +138,20 @@ export default async function SettingsPage() {
           </Panel>
         ) : null}
 
-        <Panel className="lg:col-span-2">
-          <PanelHeader
-            title="Job alerts to your phone"
-            description="Your own number and your own consent. Nothing is sent until you agree, and replying STOP stops it."
-            icon={<Smartphone className="size-3.5 text-gold" />}
-          />
-          <MyAlerts initial={myAlerts} consentText={SMS_CONSENT_TEXT} />
-        </Panel>
+        {/* Only where texting is actually possible. The consent wording names
+            the registered sender, so offering it under an organisation that
+            can never send would put another company's name in front of
+            somebody and ask them to agree to it. */}
+        {smsAllowed ? (
+          <Panel className="lg:col-span-2">
+            <PanelHeader
+              title="Job alerts to your phone"
+              description="Your own number and your own consent. Nothing is sent until you agree, and replying STOP stops it."
+              icon={<Smartphone className="size-3.5 text-gold" />}
+            />
+            <MyAlerts initial={myAlerts} consentText={SMS_CONSENT_TEXT} />
+          </Panel>
+        ) : null}
 
         {/* Staff only, and only because it is diagnostics: it names environment
             variables and sends live traffic. A crew has nothing to do with

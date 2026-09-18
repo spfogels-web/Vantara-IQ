@@ -70,7 +70,7 @@ export default function LoginPage() {
         <LoginForm />
 
         <p className="mt-4 rounded-lg border border-border/60 bg-foreground/[0.02] px-3 py-2 text-center text-[11px] text-muted-foreground">
-          New subcontractors join via the invite link Fortitude sends.
+          New subcontractors join by invitation from the office they work for.
         </p>
       </div>
 

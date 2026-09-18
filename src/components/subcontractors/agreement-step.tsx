@@ -4,6 +4,7 @@ import * as React from "react";
 import { Check, Download, FileSignature, ScrollText, ShieldCheck } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { useOrgName } from "@/components/layout/org-provider";
 
 /**
  * Download both agreements, sign them, send them back.
@@ -49,6 +50,7 @@ export function AgreementStep({
   onDownloaded: () => void;
   downloaded: boolean;
 }) {
+  const orgName = useOrgName();
   // Tracked per document so "downloaded" cannot be satisfied by taking one of
   // the two — both have to be signed, so both have to be fetched.
   const [got, setGot] = React.useState<Record<PaperKey, boolean>>({
@@ -75,7 +77,7 @@ export function AgreementStep({
         <div className="min-w-0 flex-1">
           <h2 className="text-[15px] font-semibold text-foreground">Agreements to sign</h2>
           <p className="mt-0.5 text-[11.5px] text-muted-foreground">
-            Between Fortitude Infrastructure LLC and {companyName || "your company"}. Download both,
+            Between {orgName} and {companyName || "your company"}. Download both,
             fill them in, sign them, then upload the signed copies on the next step.
           </p>
         </div>
@@ -142,7 +144,7 @@ export function AgreementStep({
           {[
             "Download both documents using the buttons above.",
             "Fill in your company details — company name, address, EIN, and the name and title of the person authorised to sign.",
-            "Sign both by hand. A typed name is not accepted; Fortitude requires a wet signature on the subcontractor agreement.",
+            "Sign both by hand. A typed name is not accepted; ${orgName} requires a wet signature on the subcontractor agreement.",
             "Date them.",
             "Scan them, or photograph every page so the whole page is readable.",
             "Upload the signed copies on the next step.",
@@ -157,7 +159,7 @@ export function AgreementStep({
         </ol>
 
         <p className="mt-3 rounded-lg border border-border/60 bg-foreground/[0.03] p-3 text-[11.5px] leading-relaxed text-muted-foreground">
-          These PDFs are the operative documents — what you sign is what governs the work. Fortitude
+          These PDFs are the operative documents — what you sign is what governs the work. {orgName}
           countersigns and returns the executed agreements to your portal. You cannot be assigned a
           job until the signed subcontractor agreement is back.
         </p>

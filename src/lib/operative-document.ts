@@ -34,7 +34,7 @@ export async function serveOperativeDocument(type: DocType, downloadName: string
   const file = doc?.files[0];
   if (!file) {
     return NextResponse.json(
-      { error: "That document isn't on file yet. Ask Fortitude to upload it." },
+      { error: "That document isn't on file yet. Ask the office to upload it." },
       { status: 404 },
     );
   }

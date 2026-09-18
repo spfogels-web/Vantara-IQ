@@ -5,6 +5,8 @@ import { cache } from "react";
 import { Prisma } from "@prisma/client";
 import { prisma, table } from "@/lib/prisma";
 import { ratesForMarket } from "@/lib/markets";
+import { getCodeProfile } from "@/data/code-profile";
+import { orgSettings } from "@/lib/org-settings";
 import {
   assertOwnSubcontractor,
   assertProjectAccess,
@@ -49,12 +51,7 @@ import {
 // The operations centre no longer reads fixtures. What is left here is
 // awaiting the same treatment: invoices and materials have real tables behind
 // them, pay applications and reports do not exist yet.
-import {
-  invoices,
-  materials,
-  organization,
-  reportDefinitions,
-} from "@/data/mock";
+import { invoices, materials, reportDefinitions } from "@/data/mock";
 import type {
   AppNotification,
   BriefItem,
@@ -403,10 +400,30 @@ function toDaily(
   };
 }
 
-/* -- Organization (fixture) ------------------------------------------------- */
+/* -- Organization ----------------------------------------------------------- */
 
+/**
+ * Who this organisation is, for the settings screen.
+ *
+ * Returned a fixture until now — one hardcoded company name and an invented
+ * director — so every organisation's settings page named the first one.
+ * Reads the organisation's own row now, and says plainly when there is none
+ * rather than borrowing somebody else's.
+ */
 export async function getOrganization(): Promise<Organization> {
-  return organization;
+  const [settings, row] = await Promise.all([
+    orgSettings(),
+    prisma.organization.findFirst({ select: { name: true, plan: true } }).catch(() => null),
+  ]);
+
+  return {
+    name: settings.legalName || row?.name || "Not set",
+    plan: row?.plan || "Enterprise",
+    // Nobody in particular. The settings screen shows the company, not a
+    // named contact, and the fixture that used to supply one named an
+    // invented director at the incumbent.
+    user: { name: "", email: "", role: "" },
+  };
 }
 
 /* -- Dashboard aggregates (fixtures for now) -------------------------------- */
@@ -1870,9 +1887,10 @@ export async function getProjectMaterials(projectId: string): Promise<TrackedMat
     }
   }
 
+  const codes = await getCodeProfile();
   const mapped = rows
     // High-traffic underground codes lead; the rest follow as listed.
-    .sort((a, b) => compareByPriority(a.code, b.code))
+    .sort((a, b) => compareByPriority(codes, a.code, b.code))
     .map((r) => {
     const hit = billed.get(normCode(r.code));
     const completed = hit?.qty ?? 0;
@@ -1947,7 +1965,10 @@ export interface MaterialCodeOption {
  * already knows its unit and remaining quantity is how they stay honest.
  */
 export async function getProjectMaterialCodes(projectId: string): Promise<MaterialCodeOption[]> {
-  const materials = await getProjectMaterials(projectId);
+  const [materials, codes] = await Promise.all([
+    getProjectMaterials(projectId),
+    getCodeProfile(),
+  ]);
   return materials
     .filter((m) => m.code)
     .map((m) => ({
@@ -1957,11 +1978,11 @@ export async function getProjectMaterialCodes(projectId: string): Promise<Materi
       planned: m.planned,
       billed: m.completed,
       remaining: m.remaining,
-      priority: isPriorityCode(m.code),
+      priority: isPriorityCode(codes, m.code),
       aerial: isAerialCode(m.code),
     }))
     // The underground codes crews reach for most come first.
-    .sort((a, b) => compareByPriority(a.code, b.code));
+    .sort((a, b) => compareByPriority(codes, a.code, b.code));
 }
 
 /* ------------------------------------------------------------------ *
@@ -4509,9 +4530,6 @@ export async function getBillableCodes(
     orderBy: { code: "asc" },
   });
 
-  // The work we actually sell, not everything the card can price. A crew
-  // scrolling 2,472 codes picks the wrong one, and the wrong one still prices,
-  // so nothing downstream catches it. See MAIN_BILLABLE_CODES to add a code.
   /**
    * Narrowed to the market this job is in, before anything else.
    *

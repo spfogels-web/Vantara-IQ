@@ -110,8 +110,8 @@ const ES: Record<string, string> = {
   "awaiting review": "en espera de revisión",
   "Every crew's daily production, digitized from the field. The AI reads each sheet, reconciles quantities and documentation, and stages it for your team's review.":
     "La producción diaria de cada cuadrilla, digitalizada desde el campo. La IA lee cada hoja, cuadra las cantidades y la documentación, y la deja lista para que su equipo la revise.",
-  "The days your crew has filed, and where each one stands with Fortitude.":
-    "Los días que ha reportado su cuadrilla y en qué estado está cada uno con Fortitude.",
+  "The days your crew has filed, and where each one stands with {company}.":
+    "Los días que ha reportado su cuadrilla y en qué estado está cada uno con {company}.",
   All: "Todos",
   Submitted: "Enviado",
   "In review": "En revisión",
@@ -156,8 +156,8 @@ const ES: Record<string, string> = {
   "Unit code": "Código",
   Location: "Ubicación",
   Quantity: "Cantidad",
-  "Approved by Fortitude": "Aprobado por Fortitude",
-  "Sent back by Fortitude": "Devuelto por Fortitude",
+  "Approved by {company}": "Aprobado por {company}",
+  "Sent back by {company}": "Devuelto por {company}",
   "Reason — required to deny, optional to approve":
     "Motivo — obligatorio para rechazar, opcional para aprobar",
   "Delete this daily": "Eliminar este reporte",

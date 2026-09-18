@@ -13,7 +13,8 @@ import { HealthRing } from "@/components/common/health-ring";
 import { StatusPill } from "@/components/common/status-pill";
 import { Meter } from "@/components/common/metric";
 import { MarketFilter } from "@/components/projects/market-filter";
-import { isMarketId, MARKETS } from "@/lib/markets";
+import { isKnownMarket } from "@/lib/markets";
+import { getMarkets } from "@/data/markets";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Projects · Vantara IQ" };
@@ -32,15 +33,20 @@ export default async function ProjectsPage({
 }: {
   searchParams: Promise<{ market?: string; stage?: string }>;
 }) {
-  const [me, all, sp] = await Promise.all([getCurrentUser(), getProjects(), searchParams]);
+  const [me, all, sp, markets] = await Promise.all([
+    getCurrentUser(),
+    getProjects(),
+    searchParams,
+    getMarkets(),
+  ]);
   const staff = !!me && isStaff(me.role);
 
   // Counted across every job, not the filtered set — a chip has to say how many
   // it would show, which is the whole reason to read it before pressing it.
   const counts = Object.fromEntries(
-    MARKETS.map((m) => [m.id, all.filter((p) => p.market === m.id).length]),
+    markets.map((m) => [m.id, all.filter((p) => p.market === m.id).length]),
   );
-  const unassigned = all.filter((p) => !isMarketId(p.market)).length;
+  const unassigned = all.filter((p) => !isKnownMarket(markets, p.market)).length;
 
 
   /**
@@ -62,13 +68,13 @@ export default async function ProjectsPage({
 
   const choice = sp.market;
   const selected =
-    choice === "unassigned" || isMarketId(choice) ? choice : ("all" as const);
+    choice === "unassigned" || isKnownMarket(markets, choice) ? choice : ("all" as const);
 
   const projects =
     selected === "all"
       ? atStage
       : selected === "unassigned"
-        ? atStage.filter((p) => !isMarketId(p.market))
+        ? atStage.filter((p) => !isKnownMarket(markets, p.market))
         : atStage.filter((p) => p.market === selected);
 
   // The strip describes what is on screen. Leaving it on the full book while

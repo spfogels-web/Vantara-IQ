@@ -32,6 +32,7 @@ import {
   uploadBadgeDocument,
 } from "@/app/actions";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
+import { useOrgName } from "@/components/layout/org-provider";
 
 /**
  * Yard badges — the people cleared to collect material.
@@ -146,6 +147,7 @@ function BadgeRow({
   inviteToken?: string;
   onChanged: () => void;
 }) {
+  const orgName = useOrgName();
   const [busy, setBusy] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [note, setNote] = React.useState("");
@@ -254,7 +256,7 @@ function BadgeRow({
       ) : null}
       {b.reviewNote ? (
         <p className="mt-1.5 text-[11.5px] text-muted-foreground">
-          <span className="font-medium">{b.reviewedBy || "Fortitude"}:</span> {b.reviewNote}
+          <span className="font-medium">{b.reviewedBy || orgName}:</span> {b.reviewNote}
         </p>
       ) : null}
       {error ? <p className="mt-1.5 text-[11.5px] text-critical">{error}</p> : null}

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { prisma } from "@/lib/prisma";
 import { AcceptSubUserInvite } from "@/components/subcontractors/accept-user-invite";
+import { orgName } from "@/lib/org-settings";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Join your crew · Vantara IQ" };
@@ -54,7 +55,7 @@ export default async function AcceptSubUserInvitePage({
         Join {invite.subcontractor.company}
       </h1>
       <p className="mt-2 text-[13.5px] leading-relaxed text-muted-foreground">
-        Fortitude Infrastructure has added you to this crew as{" "}
+        {await orgName()} has added you to this crew as{" "}
         <span className="font-semibold text-foreground">
           {ROLE_LABEL[invite.subUserRole] ?? invite.subUserRole}
         </span>

@@ -109,7 +109,7 @@ export function RateImportView({
 
               {/* What to call it.
                   Files arrive named things like
-                  "Fortitude_A85311_EA_24042_08012026.xls (1)-compressed.pdf",
+                  "RateSheet_A85311_EA_24042_08012026.xls (1)-compressed.pdf",
                   and a list of twenty-five of those is unreadable. Optional —
                   left blank, the file name stands in as it always did. */}
               <label className="flex flex-col gap-1.5">
@@ -119,7 +119,7 @@ export function RateImportView({
                 <input
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
-                  placeholder={file ? file.name : "Trawick S Georgia rates"}
+                  placeholder={file ? file.name : "Rate sheet rates"}
                   className={inputClass}
                 />
               </label>

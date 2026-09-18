@@ -13,6 +13,7 @@ import { DocumentCenter } from "@/components/subcontractors/document-center";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { AchForm } from "@/components/subcontractors/ach-form";
 import { BadgeSection } from "@/components/subcontractors/badge-section";
+import { orgSettings } from "@/lib/org-settings";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Company profile · Vantara IQ" };
@@ -26,6 +27,10 @@ export const metadata = { title: "Company profile · Vantara IQ" };
  * with by editing one.
  */
 export default async function CompanyProfilePage() {
+  // The company this crew is actually doing business with.
+  const settings = await orgSettings();
+  const company = settings.legalName || "the office";
+  const supportPhone = settings.supportPhone;
   const me = await getCurrentUser();
   if (!me) redirect("/login");
   if (!me.subcontractorId) redirect("/subcontractors");
@@ -56,7 +61,7 @@ export default async function CompanyProfilePage() {
     <PageShell
       eyebrow="Your company"
       title="Company profile"
-      description="What Fortitude needs on file before your crew can be assigned work. Everything saves together — fill in what you can and come back for the rest."
+      description={`What ${company} needs on file before your crew can be assigned work. Everything saves together — fill in what you can and come back for the rest.`}
     >
       <div className="flex flex-col gap-3">
         {/* Their paperwork, above the form. A crew opening this page is usually
@@ -73,7 +78,7 @@ export default async function CompanyProfilePage() {
         <Panel>
           <PanelHeader
             title="Upload or update a document"
-            description="Send a new certificate, a re-signed agreement, or anything Fortitude has asked for"
+            description={`Send a new certificate, a re-signed agreement, or anything ${company} has asked for`}
             icon={<FileUp className="size-3.5" />}
           />
           <PanelBody>
@@ -116,10 +121,10 @@ export default async function CompanyProfilePage() {
               </p>
               <p className="mt-1 text-[12.5px] leading-relaxed text-muted-foreground">
                 Your EIN, bank details, signatory and addresses are on file with
-                Fortitude and are not shown here — this login is used in the field,
+                {company} and are not shown here — this login is used in the field,
                 and none of that needs to be on a phone in a truck. Documents and
                 badges above still work. If the owner needs to change any of it,
-                call the office on (864) 365-1521 and we&rsquo;ll open it up.
+                call the office{supportPhone ? ` on ${supportPhone}` : ""} and we&rsquo;ll open it up.
               </p>
             </PanelBody>
           </Panel>

@@ -1,37 +1,32 @@
 import "server-only";
 
 /**
- * The company's mark for a rate sheet header.
+ * The organisation's mark for a rate sheet header.
  *
- * Two ways in, deliberately. An upload in Settings wins, because that is
- * self-service and survives a deploy. Failing that it falls back to
- * public/fortitude-logo.png committed to the repo, so the brand can be set by
- * dropping in a file without waiting on anyone to click through a form.
+ * Only what the organisation has uploaded in Settings. There used to be a
+ * second way in: failing an upload, it read `public/fortitude-logo.png` from
+ * the repo, so that a brand could be set by dropping a file in rather than
+ * clicking through a form.
+ *
+ * That convenience put one company's logo on the top of every other
+ * organisation's rate sheets — a document that goes out to subcontractors
+ * being asked to agree a price. A sheet with no logo is plainly a sheet with
+ * no logo. A sheet with the wrong company's logo is a different document
+ * entirely.
  *
  * A logo that will not load never blocks the sheet — the rates are the point.
  */
 export async function companyLogo(
   logoUrl: string | null,
 ): Promise<{ bytes: Uint8Array; mime: string } | null> {
-  if (logoUrl) {
-    try {
-      const res = await fetch(logoUrl);
-      if (res.ok) {
-        const mime = res.headers.get("content-type") ?? "image/png";
-        if (/png|jpe?g/i.test(mime)) {
-          return { bytes: new Uint8Array(await res.arrayBuffer()), mime };
-        }
-      }
-    } catch {
-      // fall through to the bundled file
-    }
-  }
+  if (!logoUrl) return null;
 
   try {
-    const { readFile } = await import("node:fs/promises");
-    const path = await import("node:path");
-    const bytes = await readFile(path.join(process.cwd(), "public", "fortitude-logo.png"));
-    return { bytes: new Uint8Array(bytes), mime: "image/png" };
+    const res = await fetch(logoUrl);
+    if (!res.ok) return null;
+    const mime = res.headers.get("content-type") ?? "image/png";
+    if (!/png|jpe?g/i.test(mime)) return null;
+    return { bytes: new Uint8Array(await res.arrayBuffer()), mime };
   } catch {
     return null;
   }

@@ -14,18 +14,50 @@ const PROVIDERS: Record<string, LocateProvider> = {
   GA811: ga811,
 };
 
-export const DEFAULT_PROVIDER = "GA811";
+/**
+ * A centre this build has no integration for.
+ *
+ * Returned instead of quietly substituting Georgia, which is what used to
+ * happen and is worse than it sounds: an organisation working Florida would
+ * have had "Georgia 811" on its board, with a validator for the wrong ticket
+ * format and a link to the wrong search page — all of it looking like working
+ * software.
+ *
+ * Nothing automated is offered. Tickets arrive by paste or by email, which is
+ * a supported way to run this module and is exactly what an unintegrated
+ * centre means.
+ */
+function unintegrated(id: string): LocateProvider {
+  const key = id.trim().toUpperCase() || "UNKNOWN";
+  return {
+    id: key,
+    name: key,
+    state: "",
+    ready: () => false,
+    readyDetail: () =>
+      `There is no automated integration for ${key} in this build. Tickets can still be pasted or emailed in.`,
+    validateNumber: (input: string) => {
+      const number = input.trim().toUpperCase();
+      return number
+        ? { ok: true, number, revision: "" }
+        : { ok: false, number: "", revision: "", error: "Enter a ticket number." };
+    },
+    ticketUrl: () => "",
+    lookupTicket: async () => ({ status: "LOOKUP_UNAVAILABLE", ticket: null }) as never,
+    parseText: async () => [],
+  };
+}
 
 /**
- * Look up a provider.
+ * Look up a provider by id.
  *
- * Falls back to Georgia rather than throwing: a ticket saved before another
- * state existed carries "GA811", and a ticket saved with a provider we have
- * since removed should still render on the board rather than take the page
- * down. The board shows the id it holds either way.
+ * An id this build does not implement gets an unintegrated stand-in carrying
+ * that id, never another centre's. A ticket saved against a provider since
+ * removed still renders on the board rather than taking the page down.
  */
 export function providerFor(id: string | null | undefined): LocateProvider {
-  return PROVIDERS[String(id ?? "").toUpperCase()] ?? PROVIDERS[DEFAULT_PROVIDER];
+  const key = String(id ?? "").toUpperCase();
+  return PROVIDERS[key] ?? unintegrated(key);
 }
 
 export function allProviders(): LocateProvider[] {

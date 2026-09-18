@@ -2,7 +2,8 @@ import { getCurrentUser, isStaff } from "@/lib/auth";
 import { getLocateOverview, getLocatePickers, getLocateRows } from "@/data/locates-ops";
 import { getMyLocateProjects } from "@/app/locates/locate-actions";
 import { locateChatReady } from "@/lib/locate-chat";
-import { providerFor, DEFAULT_PROVIDER } from "@/lib/locate-providers";
+import { providerFor } from "@/lib/locate-providers";
+import { orgSettings } from "@/lib/org-settings";
 import { PageShell } from "@/components/common/page-shell";
 import { LocateCommandCenter } from "@/components/locates/locate-command-center";
 import { LocateChat } from "@/components/locates/locates-view";
@@ -63,7 +64,7 @@ export default async function LocatesPage({
     );
   }
 
-  const provider = providerFor(DEFAULT_PROVIDER);
+  const provider = providerFor((await orgSettings()).locateProvider);
 
   return (
     <PageShell

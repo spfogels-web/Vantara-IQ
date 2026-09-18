@@ -7,7 +7,11 @@ import { revalidatePath } from "next/cache";
 import * as XLSX from "xlsx";
 
 import { prisma } from "@/lib/prisma";
-import { isMarketId, marketLabel } from "@/lib/markets";
+import { isMarketId, marketLabel, getMarkets } from "@/data/markets";
+import { resolveMarketText } from "@/lib/markets";
+import { getCodeProfile } from "@/data/code-profile";
+import { orgName } from "@/lib/org-settings";
+import { providerFor } from "@/lib/locate-providers";
 import { SMS_CONSENT_TEXT, WELCOME_MESSAGE } from "@/lib/sms-consent";
 import { textCrew, textUser, toE164 } from "@/lib/sms";
 import { hashPassword, isStaff, setSessionCookie, signSession, type SessionRole } from "@/lib/auth";
@@ -1027,16 +1031,8 @@ export async function pushImportToCustomer(
 
   // The caller's market wins; otherwise fall back to what was typed at upload,
   // which is free text and only usable when it names a market we know.
-  const typed = (imp?.market ?? "").trim().toLowerCase().replace(/s+/g, "-");
-  const resolved = isMarketId(market)
-    ? market
-    : isMarketId(typed)
-      ? typed
-      : typed === "s-georgia" || typed === "south-georgia"
-        ? "south-ga"
-        : typed === "n-georgia" || typed === "north-georgia"
-          ? "north-ga"
-          : "";
+  const markets = await getMarkets();
+  const resolved = (await isMarketId(market)) ? market : resolveMarketText(markets, imp?.market);
 
   await prisma.customerRate.createMany({
     data: rows.map((r) => ({
@@ -1081,7 +1077,7 @@ export type ProjectInput = {
   forecast: string;
 };
 
-function projectData(input: ProjectInput) {
+async function projectData(input: ProjectInput) {
   const tone = STATUS_TONE[input.status] ?? "info";
   return {
     number: input.number,
@@ -1090,7 +1086,7 @@ function projectData(input: ProjectInput) {
     location: input.location,
     // Validated rather than trusted: this decides which rate card a job is
     // read against, and two markets share a prime.
-    market: isMarketId(input.market) ? input.market : "",
+    market: (await isMarketId(input.market)) ? input.market : "",
     status: input.status,
     tone,
     crew: input.crew || "Unassigned",
@@ -1136,7 +1132,7 @@ export async function createProject(input: ProjectInput) {
   if (!resolved.ok) return { ok: false as const, error: resolved.error };
 
   const p = await prisma.project.create({
-    data: { ...projectData(input), customerId: resolved.customer.id },
+    data: { ...(await projectData(input)), customerId: resolved.customer.id },
   });
   revalidatePath("/projects");
   return { ok: true as const, id: p.id };
@@ -1149,7 +1145,7 @@ export async function updateProject(id: string, input: ProjectInput) {
 
   await prisma.project.update({
     where: { id },
-    data: { ...projectData(input), customerId: resolved.customer.id },
+    data: { ...(await projectData(input)), customerId: resolved.customer.id },
   });
   revalidatePath("/projects");
   revalidatePath(`/projects/${id}`);
@@ -1604,7 +1600,8 @@ async function runMaterialExtraction(projectId: string, file: File) {
      * anyone clicking through them. Unrecognised, low-confidence and aerial
      * rows still wait for review.
      */
-    const profile = findJobProfile({
+    const [profileMarkets, profileCodes] = await Promise.all([getMarkets(), getCodeProfile()]);
+    const profile = findJobProfile(profileMarkets, profileCodes, {
       client: project.client,
       fileName: name,
       summary: result.summary,
@@ -2100,7 +2097,7 @@ export async function submitDailySheet(input: SheetPayload) {
           select: { company: true },
         })
       : null;
-    filedBy = filedFor?.company ?? "Fortitude Self-Perform";
+    filedBy = filedFor?.company ?? `${await orgName()} — self-perform`;
   }
 
   // A sheet that has been filed before updates the day it made rather than
@@ -3382,7 +3379,7 @@ export async function uploadRateSheet(formData: FormData) {
   // customer who only works one. Validated, because an unrecognised value
   // would quietly create a market nothing prices against.
   const marketRaw = String(formData.get("market") || "");
-  const market = isMarketId(marketRaw) ? marketRaw : "";
+  const market = (await isMarketId(marketRaw)) ? marketRaw : "";
 
   if (!file) return { ok: false as const, error: "Choose a file." };
   if (!subcontractorId && !customerId) {
@@ -5674,8 +5671,13 @@ export async function saveLocateTicket(input: LocateTicketInput) {
   const number = input.number.trim().toUpperCase();
   if (!number) return { ok: false as const, error: "A ticket number is needed." };
 
+  const centre = providerFor((await orgSettings()).locateProvider);
   const data = {
     number,
+    // This organisation's own one-call centre, at the moment the ticket is
+    // filed. It was a schema default naming Georgia.
+    provider: centre.id,
+    state: centre.state,
     revision: (input.revision ?? "").trim(),
     projectId: input.projectId || null,
     street: (input.street ?? "").trim(),
@@ -5799,8 +5801,14 @@ export async function importLocateNumbers(text: string, projectId?: string | nul
       existing++;
       continue;
     }
+    const centre = providerFor((await orgSettings()).locateProvider);
     await prisma.locateTicket.create({
-      data: { number, projectId: projectId || null },
+      data: {
+        number,
+        projectId: projectId || null,
+        provider: centre.id,
+        state: centre.state,
+      },
     });
     created++;
   }
@@ -6115,6 +6123,7 @@ export async function importDailyFromFile(input: {
   // The codes this customer will actually pay. Passed to the reader so it
   // matches against the right card — the same paper sheet means different
   // codes on a different job.
+  const sheetCodes = await getCodeProfile();
   const allowed = project.customerId
     ? (
         await prisma.customerRate.findMany({
@@ -6122,7 +6131,7 @@ export async function importDailyFromFile(input: {
           select: { code: true },
         })
       )
-        .filter((r) => isMainBillableCode(r.code))
+        .filter((r) => isMainBillableCode(sheetCodes, r.code))
         .map((r) => r.code)
     : [];
 
@@ -6150,7 +6159,9 @@ export async function importDailyFromFile(input: {
     read = await extractDailySheet(
       Buffer.from(file).toString("base64"),
       input.mediaType,
-      allowed.length ? allowed : undefined,
+      // The customer's own priced codes where there are any, otherwise every
+      // code this organisation bills. Never a list belonging to anybody else.
+      allowed.length ? allowed : sheetCodes.billableCodes,
     );
   } catch (e) {
     return {
@@ -6814,16 +6825,18 @@ export async function listCustomerRateCards() {
 
   const nameById = new Map(customers.map((c) => [c.id, c.name]));
 
-  const cards = grouped
-    .map((g) => ({
-      // One value the <select> can carry, since a card is two fields.
-      key: `${g.customerId}::${g.market}`,
-      customerName: nameById.get(g.customerId) ?? "Unknown customer",
-      marketLabel: g.market ? marketLabel(g.market) : "Every market",
-      count: g._count._all,
-      isSheet: false,
-    }))
-    .filter((c) => c.count > 0);
+  const cards = (
+    await Promise.all(
+      grouped.map(async (g) => ({
+        // One value the <select> can carry, since a card is two fields.
+        key: `${g.customerId}::${g.market}`,
+        customerName: nameById.get(g.customerId) ?? "Unknown customer",
+        marketLabel: g.market ? await marketLabel(g.market) : "Every market",
+        count: g._count._all,
+        isSheet: false,
+      })),
+    )
+  ).filter((c) => c.count > 0);
 
   /**
    * Approved rate sheets, offered alongside the live cards.
@@ -7072,7 +7085,7 @@ export async function setProjectMarket(projectId: string, market: string) {
   await assertProjectAccess(projectId);
 
   const next = market.trim();
-  if (next && !isMarketId(next)) {
+  if (next && !(await isMarketId(next))) {
     return { ok: false as const, error: "That is not a market we work in." };
   }
 

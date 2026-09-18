@@ -2,6 +2,7 @@ import "server-only";
 
 import type Anthropic from "@anthropic-ai/sdk";
 import { aiClient } from "@/lib/ai-client";
+import { orgName } from "@/lib/org-settings";
 
 import type { LocateTicketRow } from "@/data/queries";
 
@@ -21,8 +22,10 @@ import type { LocateTicketRow } from "@/data/queries";
  * which rows to talk about. It does not decide what is true about them.
  */
 
-const SYSTEM = `You answer questions about underground utility locate tickets for
-Fortitude Infrastructure, a contractor in Georgia.
+// Built per request: the prompt names the organisation whose board is being
+// read, so the assistant never speaks as, or about, a different contractor.
+const systemPrompt = (org: string) => `You answer questions about underground utility locate tickets for
+${org}.
 
 You are given the current ticket board as JSON. Answer only from it.
 
@@ -46,13 +49,13 @@ Rules you must not break:
 7. There are two separate questions and you must never merge them.
 
    "811 ready" means every outside utility we need an answer from has
-   answered. "Field ready" means that AND every locate Fortitude performs
-   itself has been walked and signed off.
+   answered. "Field ready" means that AND every locate we perform ourselves
+   has been walked and signed off.
 
-   On some projects Fortitude locates a utility's own plant — Windstream on
-   the Windstream builds. Where a ticket shows that utility as ours, it is NOT
-   a utility we are waiting on and you must never say we are waiting on them.
-   Say instead that 811 is clear and the locate is ours to complete.
+   On some projects we locate a utility's own plant. Where a ticket shows that
+   utility as ours, it is NOT a utility we are waiting on and you must never
+   say we are waiting on them. Say instead that 811 is clear and the locate is
+   ours to complete.
 
    If a ticket is 811 ready with our locate outstanding and somebody asks
    whether a street can be worked, the answer is: the ticket is 811-ready, but
@@ -119,7 +122,7 @@ export async function askAboutLocates(
   const message = await client.messages.create({
     model: "claude-opus-5",
     max_tokens: 2000,
-    system: SYSTEM,
+    system: systemPrompt(await orgName()),
     thinking: { type: "adaptive" },
     messages: [
       ...history.slice(-8),
@@ -172,7 +175,7 @@ export interface ParsedTicket {
   }[];
 }
 
-const PARSE_SYSTEM = `You read Georgia 811 locate tickets and turn them into structured
+const PARSE_SYSTEM = `You read one-call locate tickets and turn them into structured
 data. The text you are given is pasted from an email or the 811 portal, and may
 contain several tickets at once.
 

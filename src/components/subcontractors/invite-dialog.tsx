@@ -15,7 +15,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { FortitudeLogo } from "@/components/common/fortitude-logo";
+import { OrgMark } from "@/components/common/org-mark";
+import { useOrgName } from "@/components/layout/org-provider";
+import { useOrgLogo } from "@/components/layout/org-provider";
 
 /** "White Plains, SC" → "SC"; falls back to the whole string. */
 function stateOf(location: string) {
@@ -66,6 +68,8 @@ export function InviteDialog({
   defaultProjectId?: string;
   company?: string;
 }) {
+  const orgName = useOrgName();
+  const orgLogo = useOrgLogo();
   const [projectId, setProjectId] = React.useState(defaultProjectId ?? projects[0]?.id ?? "");
   const [recipientName, setRecipientName] = React.useState("");
   const [email, setEmail] = React.useState("");
@@ -180,7 +184,7 @@ export function InviteDialog({
       <DialogContent className="max-h-[88vh] overflow-y-auto overflow-x-hidden sm:max-w-lg">
         <DialogHeader className="min-w-0">
           <div className="flex items-center gap-2.5">
-            <FortitudeLogo size={30} />
+            <OrgMark size={30} logoUrl={orgLogo} />
             <DialogTitle className="truncate">Invite subcontractor</DialogTitle>
           </div>
           <DialogDescription>
@@ -308,7 +312,7 @@ export function InviteDialog({
             />
             <span className="text-[11.5px] leading-snug text-muted-foreground">
               <span className="font-medium text-foreground">Authorization confirmed.</span> This
-              subcontractor has agreed to receive onboarding messages from Fortitude by email and
+              subcontractor has agreed to receive onboarding messages from {orgName} by email and
               text. <span className="text-muted-foreground/70">(Required — TCPA / CAN-SPAM.)</span>
             </span>
           </label>

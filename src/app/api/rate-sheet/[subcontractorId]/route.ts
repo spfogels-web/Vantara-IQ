@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { notAuthorized, requireStaff } from "@/lib/authz";
 import { buildRateSheetPdf } from "@/lib/rate-sheet-pdf";
 import { companyLogo } from "@/lib/rate-sheet-logo";
+import { orgName } from "@/lib/org-settings";
 
 export const runtime = "nodejs";
 
@@ -60,7 +61,7 @@ export async function GET(
   });
 
   const pdf = await buildRateSheetPdf({
-    companyName: org?.name ?? "Fortitude Infrastructure",
+    companyName: org?.name ?? (await orgName()),
     subcontractorName: sub.legalName?.trim() || sub.company,
     title: "Subcontractor rates",
     subtitle: "Rates below apply to approved daily production on assigned projects.",

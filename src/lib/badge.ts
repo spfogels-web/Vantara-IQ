@@ -104,7 +104,7 @@ export function badgeStatusLabel(status: string, r: BadgeReadiness): { label: st
         ? { label: "Cleared — licence expiring", tone: "warning" }
         : { label: "Cleared for pickup", tone: "success" };
     case "SUBMITTED":
-      return { label: "Waiting on Fortitude", tone: "info" };
+      return { label: "Waiting on the office", tone: "info" };
     case "REJECTED":
       return { label: "Not accepted", tone: "critical" };
     case "REVOKED":

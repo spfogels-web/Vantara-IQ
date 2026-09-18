@@ -31,6 +31,7 @@ import {
   transferAction,
   verifyAction,
 } from "@/app/materials/actions";
+import { useOrgName } from "@/components/layout/org-provider";
 
 /**
  * The material operation, on one screen.
@@ -83,6 +84,7 @@ export function MaterialsView({
   yards: { id: string; name: string; primeContractor: string; market: string; city: string; onHand: number; checkedOut: number; flagged: number; total: number }[];
   canManage: boolean;
 }) {
+  const orgName = useOrgName();
   const [filter, setFilter] = React.useState<Filter>("ALL");
   const [yard, setYard] = React.useState<string>("ALL");
   const [query, setQuery] = React.useState("");
@@ -200,7 +202,7 @@ export function MaterialsView({
           <option value="ALL">All yards — {rows.length} items</option>
           {Object.entries(
             yards.reduce<Record<string, typeof yards>>((acc, y) => {
-              const k = y.primeContractor || "Fortitude";
+              const k = y.primeContractor || orgName;
               (acc[k] ??= []).push(y);
               return acc;
             }, {}),
@@ -548,6 +550,7 @@ function InstanceDrawer({
   canManage: boolean;
   onClose: () => void;
 }) {
+  const orgName = useOrgName();
   const [tab, setTab] = React.useState<"issue" | "count" | "return" | "transfer">("count");
 
   return (
@@ -590,7 +593,7 @@ function InstanceDrawer({
             Current custody
           </p>
           <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[12.5px]">
-            <Row k="Organization" v={r.custodianName || "Fortitude (yard)"} />
+            <Row k="Organization" v={r.custodianName || `${orgName} (yard)`} />
             <Row k="Crew" v={r.crew || "—"} />
             <Row k="Responsible" v={r.responsibleName || "—"} />
             <Row k="Project" v={r.projectName || "—"} />

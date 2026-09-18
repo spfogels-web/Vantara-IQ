@@ -2,19 +2,21 @@
 --
 -- NOT APPLIED. Written here, reviewed, and applied under its own gate — the
 -- same handling as 001-project-crew.sql, and for the same reason: the last
--- time something was run against this database without one, it put three test
+-- time something ran against this database without one, it put three test
 -- projects into live data.
 --
 -- Everything here is additive. No existing column changes type, nothing is
--- dropped, and no existing row is edited. The only writes are the three rows
--- at the bottom that give Fortitude the settings it has been running on all
--- along, which until now were defaults written into the shape of the product.
+-- dropped, and no existing row is edited. The only writes are the rows at the
+-- bottom, which give Fortitude the configuration it has been running on all
+-- along — until now written into the shape of the product as constants and
+-- schema defaults, and therefore inherited by every organisation after it.
 --
--- ORDER MATTERS AGAINST THE DEPLOY. The application reads these tables, and
--- an organisation with no settings row permits nothing — no texting, no
--- assistant. So this migration runs BEFORE the code that needs it, not after.
--- Applied to a database the new code is not yet serving, it does nothing at
--- all, which is the safe direction to be wrong in.
+-- ORDER MATTERS AGAINST THE DEPLOY. The application reads these tables, and an
+-- organisation with no rows permits nothing and offers nothing: no texting, no
+-- assistant, no markets on a project form, no codes on a daily sheet. So this
+-- runs BEFORE the code that needs it, not after. Applied to a database the new
+-- code is not yet serving it does nothing at all, which is the safe direction
+-- to be wrong in.
 
 BEGIN;
 
@@ -30,6 +32,7 @@ CREATE TABLE IF NOT EXISTS "public"."OrgSettings" (
   "retainagePct"     DOUBLE PRECISION NOT NULL,
   "locateProvider"   TEXT    NOT NULL,
   "defaultState"     TEXT    NOT NULL,
+  "supportPhone"     TEXT    NOT NULL DEFAULT '',
   "updatedAt"        TIMESTAMP(3) NOT NULL
 );
 
@@ -47,6 +50,7 @@ CREATE TABLE IF NOT EXISTS "public"."Market" (
 CREATE TABLE IF NOT EXISTS "public"."OrgCodeProfile" (
   "id"            TEXT PRIMARY KEY DEFAULT 'singleton',
   "priorityCodes" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+  "billableCodes" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
   "families"      JSONB  NOT NULL DEFAULT '{}'::JSONB,
   "updatedAt"     TIMESTAMP(3) NOT NULL
 );
@@ -58,21 +62,20 @@ ALTER TABLE "public"."User"
   ADD COLUMN IF NOT EXISTS "isPlatformAdmin" BOOLEAN NOT NULL DEFAULT false;
 
 -- ---------------------------------------------------------------------------
--- Fortitude's own row.
+-- Fortitude's own configuration.
 --
--- These are not new values. They are the terms this deployment has been
--- running on since it was built, read out of the schema defaults they were
--- written into: Net 30 to customers, ten percent retainage, Net 21 to crews,
--- GA811, Georgia. Moving them here changes nothing about how Fortitude
--- behaves; it stops them being the shape every future organisation inherits.
+-- None of this is new. It is what the deployment has been running on since it
+-- was built, read out of the constants and schema defaults it was written
+-- into. Moving it here changes nothing about how Fortitude behaves; it stops
+-- it being the shape every future organisation inherits.
 --
--- ON CONFLICT DO NOTHING so a re-run is harmless and so this can never
+-- ON CONFLICT DO NOTHING throughout, so a re-run is harmless and nothing can
 -- overwrite a value somebody has since changed in the application.
 -- ---------------------------------------------------------------------------
 INSERT INTO "public"."OrgSettings" (
   "id", "legalName", "shortName", "isDemo", "smsEnabled", "assistantEnabled",
   "customerTerms", "subTerms", "retainagePct", "locateProvider", "defaultState",
-  "updatedAt"
+  "supportPhone", "updatedAt"
 ) VALUES (
   'singleton',
   'Fortitude Infrastructure LLC',
@@ -90,27 +93,36 @@ INSERT INTO "public"."OrgSettings" (
   0.1,
   'GA811',
   'GA',
+  '(864) 365-1521',
   NOW()
 ) ON CONFLICT ("id") DO NOTHING;
 
--- Fortitude's three markets, exactly as the constant held them.
+-- The three markets, exactly as the constant held them.
 INSERT INTO "public"."Market" ("id", "label", "prime", "hint", "state", "towns", "customers", "sortOrder")
 VALUES
   ('north-ga', 'North Georgia', 'Globe Communications', 'Globe', 'GA',
-   ARRAY['toccoa','eastanollee','colbert','lexington','white plains','hartwell','royston','carnesville','clarkesville','cornelia'],
-   ARRAY['globe communications','globe'], 0)
+   ARRAY['toccoa', 'eastanollee', 'colbert', 'lexington', 'white plains', 'hartwell', 'royston', 'carnesville', 'clarkesville', 'cornelia']::TEXT[],
+   ARRAY['globe communications', 'globe']::TEXT[], 0),
+  ('south-ga', 'South Georgia', 'Trawick Construction', 'Trawick', 'GA',
+   ARRAY['milledgeville', 'dublin', 'sandersville', 'eatonton', 'gray', 'macon', 'swainsboro', 'vidalia']::TEXT[],
+   -- Trawick runs two markets, so the customer alone cannot place a job — the
+   -- town is what separates this from Alabama. Listed anyway so a Trawick
+   -- project with an unfamiliar town lands somewhere reviewable rather than
+   -- nowhere.
+   ARRAY['trawick construction', 'trawick']::TEXT[], 1),
+  ('alabama', 'Alabama', 'Trawick Construction', 'Trawick · Odenville & Springville', 'AL',
+   ARRAY['odenville', 'springville', 'moody', 'trussville', 'pell city', 'ashville']::TEXT[],
+   ARRAY[]::TEXT[], 2)
 ON CONFLICT ("id") DO NOTHING;
 
-COMMIT;
+-- The unit-code vocabulary, exactly as the constants held it.
+INSERT INTO "public"."OrgCodeProfile" ("id", "priorityCodes", "billableCodes", "families", "updatedAt")
+VALUES (
+  'singleton',
+  ARRAY['BFO12', 'BFO24', 'BFO48', 'BFO144', 'BMFAF', 'BFOV', 'BM5F1', 'BD5MPF', 'BD4MPF', 'BM60', 'BM61', 'BM2', 'BM26', 'BM53', 'BHF', 'BDO']::TEXT[],
+  ARRAY['BFOV(12.7)(2W)12"DEPTH', 'BFOV(12.7)(2W)12"DEPTH(D)', 'BFOV(8.5)(1W)12"DEPTH', 'BFOV(1)(1.25)', 'BM61(2)F', 'BM61(2)F12IN DEPTH', 'BM60(1)(1 1/4)P', 'BM60(1)(1 1/4)PFF', 'BM60(2)(1 1/4)PF', 'BFO12', 'BFO24', 'BFO48', 'BFO144', 'BFO12I', 'BFO24I', 'BFO36I', 'BFO48I', 'BFO60I', 'BFO72I', 'BFO96I', 'BFO144I', 'BFO192I', 'BFO216I', 'BFO288I', 'BFO12RI', 'BFO24RI', 'BM2F', 'BM2AF', 'BM26F', 'BM53F', 'BMFAF', 'BD4MPF', 'BD5MPF', 'BHF(6)P', 'BHF(10)P', 'BHF(14x19x12)P', 'BHF(17X30X18)T', 'BHF(17X30X24)T', 'BHF(24X36X24)T', 'BHF(30x48x24)T', 'BHF(30X48X30)ST', 'BHF(30X48X36)ST', 'BDO']::TEXT[],
+  '{"BFO-MAIN":["BFO12","BFO24","BFO48","BFO96","BFO144"],"BFOV-12.7-12IN":["BFOV(12.7)(1W)12IN DEPTH","BFOV(12.7)(2W)12IN DEPTH"]}'::JSONB,
+  NOW()
+) ON CONFLICT ("id") DO NOTHING;
 
--- ---------------------------------------------------------------------------
--- NOT YET WRITTEN, and deliberately so.
---
--- The remaining two markets and the code profile are left out because the
--- application does not read either table yet — the markets constant and the
--- unit-code lists are still in TypeScript. Seeding rows that nothing reads
--- would mean two sources of truth for the same answer, and the one that is
--- wrong would be the one nobody is looking at.
---
--- They belong in the migration that lands alongside the code that reads them.
--- ---------------------------------------------------------------------------
+COMMIT;

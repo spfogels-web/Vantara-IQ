@@ -47,6 +47,8 @@ export type Fixtures = { a: Tenant; b: Tenant };
 
 type Spec = {
   key: Tenant["key"];
+  /** The one-call centre this contractor files with, and its state. */
+  centre: { provider: string; state: string };
   org: string;
   staffEmail: string;
   customer: string;
@@ -61,6 +63,7 @@ type Spec = {
 const SPECS: Spec[] = [
   {
     key: "northgate",
+    centre: { provider: "GA811", state: "GA" },
     org: "Northgate Utility Group",
     staffEmail: "office@northgate-utility.test",
     customer: "Calder Broadband",
@@ -75,6 +78,7 @@ const SPECS: Spec[] = [
   },
   {
     key: "barrow",
+    centre: { provider: "GA811", state: "GA" },
     org: "Barrow Line Services",
     staffEmail: "office@barrow-line.test",
     customer: "Merrick Fiber",
@@ -226,7 +230,16 @@ async function buildTenant(db: PrismaClient, s: Spec): Promise<Tenant> {
   });
 
   const ticket = await db.locateTicket.create({
-    data: { number: `${s.shortCode}-811-0001`, projectId: project.id, crewId: crews[0].subcontractorId },
+    data: {
+      number: `${s.shortCode}-811-0001`,
+      projectId: project.id,
+      crewId: crews[0].subcontractorId,
+      // Each contractor files with its own centre. Left to a default, every
+      // ticket in the suite would carry Georgia and the leak test would be
+      // asserting against data it had itself planted.
+      provider: s.centre.provider,
+      state: s.centre.state,
+    },
   });
 
   return {
@@ -264,6 +277,7 @@ export async function seedTwoTenants(db: PrismaClient): Promise<Fixtures> {
  */
 const OTHER_SPEC: Spec = {
   key: "halloway",
+  centre: { provider: "Sunshine811", state: "FL" },
   org: "Halloway Civil Partners",
   staffEmail: "office@halloway-civil.test",
   customer: "Stroud Telecom",
@@ -314,6 +328,7 @@ export async function seedWorkingOrgSettings(db: PrismaClient): Promise<void> {
       retainagePct: 0.1,
       locateProvider: "GA811",
       defaultState: "GA",
+      supportPhone: "(864) 365-1521",
     },
   });
 }
@@ -339,6 +354,79 @@ export async function seedDemoOrgSettings(db: PrismaClient): Promise<void> {
       retainagePct: 0.05,
       locateProvider: "Sunshine811",
       defaultState: "FL",
+      supportPhone: "(850) 555-0143",
+    },
+  });
+}
+
+/**
+ * The incumbent's real configuration, as it was when it lived in TypeScript.
+ *
+ * Seeded verbatim so the suite proves backward compatibility: the organisation
+ * that had these markets and codes still behaves exactly as it did, and the
+ * leak test has something true to find under it.
+ */
+export async function seedIncumbentConfig(db: PrismaClient): Promise<void> {
+  await db.market.createMany({
+    data: [
+      {
+        id: "north-ga",
+        label: "North Georgia",
+        prime: "Globe Communications",
+        hint: "Globe",
+        state: "GA",
+        towns: ["toccoa", "eastanollee", "colbert", "hartwell", "royston"],
+        customers: ["globe communications", "globe"],
+        sortOrder: 0,
+      },
+      {
+        id: "south-ga",
+        label: "South Georgia",
+        prime: "Trawick Construction",
+        hint: "Trawick",
+        state: "GA",
+        towns: ["milledgeville", "dublin", "macon"],
+        customers: ["trawick construction", "trawick"],
+        sortOrder: 1,
+      },
+    ],
+  });
+
+  await db.orgCodeProfile.create({
+    data: {
+      priorityCodes: ["BFO12","BFO24","BFO48","BFO144","BMFAF","BFOV","BM5F1","BD5MPF","BD4MPF","BM60","BM61","BM2","BM26","BM53","BHF","BDO"],
+      billableCodes: ["BFOV(12.7)(2W)12\"DEPTH","BFOV(12.7)(2W)12\"DEPTH(D)","BFOV(8.5)(1W)12\"DEPTH","BFOV(1)(1.25)","BM61(2)F","BM61(2)F12IN DEPTH","BM60(1)(1 1/4)P","BM60(1)(1 1/4)PFF","BM60(2)(1 1/4)PF","BFO12","BFO24","BFO48","BFO144","BFO12I","BFO24I","BFO36I","BFO48I","BFO60I","BFO72I","BFO96I","BFO144I","BFO192I","BFO216I","BFO288I","BFO12RI","BFO24RI","BM2F","BM2AF","BM26F","BM53F","BMFAF","BD4MPF","BD5MPF","BHF(6)P","BHF(10)P","BHF(14x19x12)P","BHF(17X30X18)T","BHF(17X30X24)T","BHF(24X36X24)T","BHF(30x48x24)T","BHF(30X48X30)ST","BHF(30X48X36)ST","BDO"],
+      families: {"BFO-MAIN":["BFO12","BFO24","BFO48","BFO96","BFO144"],"BFOV-12.7-12IN":["BFOV(12.7)(1W)12IN DEPTH","BFOV(12.7)(2W)12IN DEPTH"]},
+    },
+  });
+}
+
+/**
+ * The other organisation's configuration — different everything.
+ *
+ * Aerial and splicing work in Florida through a different prime, because the
+ * point of the leak test is that two contractors share no vocabulary. If any
+ * of these matched, a leak would look like a pass.
+ */
+export async function seedOtherConfig(db: PrismaClient): Promise<void> {
+  await db.market.create({
+    data: {
+      id: "gulf-coast",
+      label: "Gulf Coast",
+      prime: "Stroud Telecom",
+      hint: "Stroud",
+      state: "FL",
+      towns: ["pensacola", "navarre", "milton"],
+      customers: ["stroud telecom", "stroud"],
+      sortOrder: 0,
+    },
+  });
+
+  await db.orgCodeProfile.create({
+    data: {
+      priorityCodes: ["AFO24", "AFO48", "SPL12", "STRM8"],
+      billableCodes: ["AFO24", "AFO48", "SPL12", "STRM8", "AFO24I"],
+      families: { "AFO-MAIN": ["AFO24", "AFO48"] },
     },
   });
 }

@@ -16,6 +16,7 @@ import {
 import { cn } from "@/lib/utils";
 import { importDailyFromFile } from "@/app/actions";
 import { useT } from "@/components/layout/language-provider";
+import { useOrgName } from "@/components/layout/org-provider";
 
 /**
  * Drop in the daily a crew emailed over and let the system read it.
@@ -54,6 +55,7 @@ export function ImportDaily({
    */
   startOpen?: boolean;
 }) {
+  const orgName = useOrgName();
   const blobUpload = useBlobUpload();
   const router = useRouter();
   const t = useT();
@@ -146,7 +148,7 @@ export function ImportDaily({
               onChange={(e) => setFiledForId(e.target.value)}
               className="h-9 rounded-lg border border-border bg-transparent px-2.5 text-[13px] text-foreground outline-none focus:border-brand"
             >
-              <option value="">Fortitude — self-perform</option>
+              <option value="">{orgName} — self-perform</option>
               {crews.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.company}

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Loader2, MapPin } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { MARKETS } from "@/lib/markets";
+import { useMarkets } from "@/components/layout/org-provider";
 import { setProjectMarket } from "@/app/actions";
 
 /**
@@ -29,6 +29,7 @@ export function MarketPicker({
   market: string;
   canEdit: boolean;
 }) {
+  const MARKETS = useMarkets();
   const router = useRouter();
   const [value, setValue] = React.useState(market);
   const [busy, setBusy] = React.useState(false);

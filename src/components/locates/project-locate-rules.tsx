@@ -8,6 +8,7 @@ import { AlertTriangle, Loader2, Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { PanelBody } from "@/components/common/panel";
 import { removeProjectLocateRule, setProjectLocateRule } from "@/app/locates/locate-actions";
+import { useOrgName } from "@/components/layout/org-provider";
 
 /**
  * Who locates what on this job.
@@ -43,6 +44,7 @@ export function ProjectLocateRules({
     expired: number;
   };
 }) {
+  const orgName = useOrgName();
   const router = useRouter();
   const [adding, setAdding] = React.useState(false);
   const [name, setName] = React.useState("");
@@ -113,7 +115,7 @@ export function ProjectLocateRules({
               onChange={(e) => setWho(e.target.value as typeof who)}
               className="focus-ring h-8 rounded-lg border border-border bg-transparent px-2 text-[12px] text-foreground"
             >
-              <option value="CONTRACTOR">Fortitude</option>
+              <option value="CONTRACTOR">{orgName}</option>
               <option value="THIRD_PARTY">Another contractor</option>
               <option value="MEMBER">The 811 member</option>
             </select>

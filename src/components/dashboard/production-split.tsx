@@ -42,7 +42,8 @@ export function ProductionSplitPanel({ split }: { split: ProductionSplit }) {
           />
           <Method
             label="Bore & missile"
-            hint="BM60 / BM61 crossings"
+            // Named by the work, not by one organisation's code list.
+            hint="Road and rail crossings"
             feet={split.bore.feet}
             tone="text-brand-bright"
             bar="bg-brand"

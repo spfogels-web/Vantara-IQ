@@ -14,6 +14,7 @@ import {
 import { cn } from "@/lib/utils";
 import { uploadSubDocument, deleteSubDocument } from "@/app/actions";
 import { StatusPill } from "@/components/common/status-pill";
+import { useOrgName } from "@/components/layout/org-provider";
 
 export type SubDoc = {
   id: string;
@@ -37,12 +38,14 @@ export type SubDoc = {
  * chased after submission instead, and they still block *work* rather than
  * signup.
  */
-export const DOC_SECTIONS = [
+// Built from the organisation rather than fixed, because three of these
+// sentences name the company a crew is doing business with.
+export const docSections = (orgName: string) => [
   {
     key: "agreement",
     label: "Signed subcontractor agreement",
     detail:
-      "Download it, fill in your company details, sign it by hand, and upload the signed copy. A typed name is not accepted — Fortitude requires a wet signature.",
+      `Download it, fill in your company details, sign it by hand, and upload the signed copy. A typed name is not accepted — ${orgName} requires a wet signature.`,
     required: true,
     canFollow: false,
   },
@@ -65,7 +68,7 @@ export const DOC_SECTIONS = [
   {
     key: "insurance",
     label: "Certificate of insurance (COI)",
-    detail: "General liability and workers' comp, naming Fortitude as additional insured.",
+    detail: `General liability and workers' comp, naming ${orgName} as additional insured.`,
     required: true,
     canFollow: true,
   },
@@ -79,11 +82,11 @@ export const DOC_SECTIONS = [
   {
     key: "other",
     label: "Other documents",
-    detail: "Anything else Fortitude requests.",
+    detail: `Anything else ${orgName} requests.`,
     required: false,
     canFollow: true,
   },
-] as const;
+];
 
 const ACCEPT = ".pdf,.jpg,.jpeg,.png,.webp,.gif,.doc,.docx,.xls,.xlsx,.csv,.heic";
 
@@ -112,6 +115,7 @@ export function DocumentCenter({
   /** Reports what is still outstanding so a parent can gate its own button. */
   onStatusChange?: (status: { canSubmit: boolean; blockers: string[] }) => void;
 }) {
+  const orgName = useOrgName();
   const [docs, setDocs] = React.useState<SubDoc[]>(initialDocs);
   const [busy, setBusy] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -138,15 +142,17 @@ export function DocumentCenter({
   // Two different questions. "Can they submit" only looks at the items that
   // must be in hand now; "are they cleared to work" looks at everything
   // required, including the ones allowed to arrive later.
-  const submitBlockers = DOC_SECTIONS.filter(
+  // One list, built once for this organisation.
+  const sections = docSections(orgName);
+  const submitBlockers = sections.filter(
     (s) => s.required && !s.canFollow && !docs.some((d) => d.section === s.key),
   );
-  const requiredDone = DOC_SECTIONS.filter((s) => s.required).every((s) =>
+  const requiredDone = sections.filter((s) => s.required).every((s) =>
     docs.some((d) => d.section === s.key),
   );
 
   /** Uploaded under a heading this form no longer lists, so shown separately. */
-  const orphaned = docs.filter((d) => !DOC_SECTIONS.some((s) => s.key === d.section));
+  const orphaned = docs.filter((d) => !sections.some((s) => s.key === d.section));
 
   // Tell the parent whenever the picture changes, so the submit button and this
   // list can never disagree about what is missing.
@@ -162,7 +168,7 @@ export function DocumentCenter({
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <p className="text-[12px] text-muted-foreground">
-          Upload PDF, image, or Word/Excel. Both you and Fortitude can review and download.
+          Upload PDF, image, or Word/Excel. Both you and {orgName} can review and download.
         </p>
         <StatusPill
           label={requiredDone ? "All required uploaded" : "Documents outstanding"}
@@ -229,7 +235,7 @@ export function DocumentCenter({
         </div>
       ) : null}
 
-      {DOC_SECTIONS.map((section) => {
+      {sections.map((section) => {
         const sectionDocs = docs.filter((d) => d.section === section.key);
         const has = sectionDocs.length > 0;
         return (
@@ -291,7 +297,7 @@ export function DocumentCenter({
                     <span className="min-w-0 flex-1 truncate text-[12px] text-foreground">{d.fileName}</span>
                     <span className="num shrink-0 text-[10.5px] text-muted-foreground">{formatBytes(d.sizeBytes)}</span>
                     <span className="shrink-0 rounded bg-foreground/[0.06] px-1.5 py-0.5 text-[9.5px] font-medium text-muted-foreground">
-                      {d.uploadedBy === "contractor" ? "Fortitude" : "Sub"}
+                      {d.uploadedBy === "contractor" ? orgName : "Sub"}
                     </span>
                     <a
                       href={d.url}

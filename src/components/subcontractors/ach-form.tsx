@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { saveAchAuthorization, uploadSubDocument } from "@/app/actions";
 import type { AchView } from "@/app/actions";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
+import { useOrgName } from "@/components/layout/org-provider";
 
 /**
  * ACH authorisation — where a crew's money goes, signed.
@@ -77,6 +78,7 @@ export function AchForm({
   inviteToken?: string;
   onSaved?: () => void;
 }) {
+  const orgName = useOrgName();
   const router = useRouter();
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -169,7 +171,7 @@ export function AchForm({
     <Panel>
       <PanelHeader
         title="ACH authorisation"
-        description="Where Fortitude sends your payments, and your authorisation to send them"
+        description={`Where ${orgName} sends your payments, and your authorisation to send them`}
         icon={<Landmark className="size-3.5" />}
       />
 
@@ -227,7 +229,7 @@ export function AchForm({
             <Lock className="mt-px size-3 shrink-0 text-success" />
             <span>
               Your account and routing numbers are encrypted before they are stored and are never
-              shown again — not to you here, and not to anyone at Fortitude except at the moment a
+              shown again — not to you here, and not to anyone at {orgName} except at the moment a
               payment is set up, which is recorded. Everything else on this form is ordinary
               business information.
             </span>
@@ -397,10 +399,10 @@ export function AchForm({
           </p>
 
           <p className="rounded-lg border border-border/60 bg-foreground/[0.02] px-3 py-2.5 text-[11.5px] leading-relaxed text-muted-foreground">
-            I authorise Fortitude Infrastructure LLC to send payments owed to the company named
+            I authorise {orgName} to send payments owed to the company named
             above by electronic transfer to the account given above, and if necessary to reverse an
             entry made in error. This authorisation stays in effect until I cancel it in writing
-            with enough notice for Fortitude to act on it. I confirm I am authorised to bind the
+            with enough notice for {orgName} to act on it. I confirm I am authorised to bind the
             company and that the account details are correct.
           </p>
 

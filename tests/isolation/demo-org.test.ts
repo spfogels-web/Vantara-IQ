@@ -155,6 +155,9 @@ describe("the settings belong to the organisation asking", () => {
     const b = await runWithOrg("apex", () => orgSettings());
 
     expect(a.customerTerms).not.toBe(b.customerTerms);
+    // The office number a crew is told to ring: one company's is not another's.
+    expect(a.supportPhone).not.toBe(b.supportPhone);
+    expect(a.supportPhone, "the incumbent has no office number to contrast").not.toBe("");
     expect(a.locateProvider).not.toBe(b.locateProvider);
     expect(a.defaultState).not.toBe(b.defaultState);
     expect(a.legalName).not.toBe(b.legalName);

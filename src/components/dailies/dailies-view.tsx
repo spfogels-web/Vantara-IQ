@@ -26,6 +26,7 @@ import { formatCurrency, formatFeet, formatNumber, formatWhen, todayET } from "@
 import { addDays } from "@/lib/billing";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { useT } from "@/components/layout/language-provider";
+import { useOrgName } from "@/components/layout/org-provider";
 import { StatusPill } from "@/components/common/status-pill";
 import { Button } from "@/components/ui/button";
 import { deleteDaily, reopenDailyReview, reviewDaily, setDailyBillingWeek } from "@/app/actions";
@@ -637,6 +638,12 @@ function DailyDetail({
 }) {
   const router = useRouter();
   const t = useT();
+  const orgName = useOrgName();
+  // Translated with the company as a placeholder rather than baked into the
+  // sentence, so the Spanish reads correctly and the name stays this
+  // organisation's own.
+  const approvedLabel = t("Approved by {company}").replace("{company}", orgName);
+  const sentBackLabel = t("Sent back by {company}").replace("{company}", orgName);
   const [note, setNote] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -939,8 +946,8 @@ function DailyDetail({
                     )}
                   >
                     {d.status === "Approved"
-                      ? "Approved by Fortitude"
-                      : "Sent back by Fortitude"}
+                      ? approvedLabel
+                      : sentBackLabel}
                     {d.reviewedAt ? ` · ${formatWhen(d.reviewedAt)}` : ""}
                   </p>
                   {d.reviewNote ? (
@@ -956,7 +963,7 @@ function DailyDetail({
                 </>
               ) : (
                 <p className="text-[12.5px] text-muted-foreground">
-                  Filed and waiting on Fortitude to review it. You will see the
+                  Filed and waiting on {orgName} to review it. You will see the
                   decision here, and the reason if anything needs changing.
                 </p>
               )}

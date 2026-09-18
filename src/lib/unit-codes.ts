@@ -1,62 +1,60 @@
 /**
- * Underground unit codes.
+ * Unit codes: reading them, classifying them, ordering them.
  *
- * Fortitude's work is underground, and a short list of codes carries most of
- * it. Those get surfaced first everywhere a code is picked, because scrolling
- * 59 codes to find BFO48 is how a crew ends up typing it from memory instead.
+ * A short list of codes carries most of any one contractor's work, and those
+ * get surfaced first everywhere a code is picked — scrolling sixty codes to
+ * find the common one is how a crew ends up typing it from memory instead.
+ * *Which* codes those are is the organisation's business and lives in its own
+ * database; see `CodeProfile` below.
  *
- * The families below are matched by *prefix*, because the real sheets carry
- * variants the base code doesn't predict — BM61(2)F, BFOV(1)(1.25), BFO12I.
- * That's a deliberate distinction: prefixes decide what gets highlighted and
+ * Priority families are matched by *prefix*, because real sheets carry
+ * variants the base code does not predict — BM61(2)F, BFOV(1)(1.25), BFO12I.
+ * That is a deliberate distinction: prefixes decide what gets highlighted and
  * suggested, never what gets added together. Merging BFO12 and BFO12I would
  * quietly mis-bill "place cable" as "pull cable in duct".
  */
 
 /**
- * The codes that carry Fortitude's invoicing, in the order crews think of them.
+ * The codes this organisation actually bills, and how they group.
  *
- * Deliberately a named list rather than "anything starting with B". A B prefix
- * is buried work, but a material list carries plenty of buried work Fortitude
- * does not do — splice closures, distribution hubs, all-inclusive pricing
- * lines. Pulling those in would inflate a job with work nobody is going to
- * build. These families are the majority of what gets billed; the handful
- * outside them are added here by name when they turn up, which is a decision
- * someone makes once rather than a rule that quietly widens.
+ * Three lists used to sit in this file as constants: the priority codes, the
+ * codes offered on a daily sheet, and the families that price together. All
+ * three were one contractor's underground vocabulary — 231 codes off one
+ * prime's card, the handholes and pedestals that particular company stocks,
+ * and the plow families it sells. A contractor running aerial, splicing,
+ * blowing and storm work has different answers to all three, and the pickers
+ * and the rate-card grouping were shaped around the first one.
+ *
+ * Everything else in this file stays shared, because it is not a matter of
+ * opinion: BM is buried, CO is aerial, an inch mark and the letters IN are the
+ * same character in a code, BFOV(12.7) is microduct. That is the industry's
+ * vocabulary, not a company's.
  */
-export const PRIORITY_UNDERGROUND_CODES = [
-  "BFO12",
-  "BFO24",
-  "BFO48",
-  "BFO144",
-  "BMFAF",
-  "BFOV",
-  "BM5F1",
-  "BD5MPF",
-  "BD4MPF",
-  "BM60",
-  "BM61",
-  "BM2",
-  "BM26",
-  "BM53",
-  // Handholes and the BDO pedestal: not on every list, but ours when they are.
-  "BHF",
-  "BDO",
-] as const;
+export type CodeProfile = {
+  /** Ordered: the first is what a picker offers first. */
+  priorityCodes: string[];
+  /** { family: [code, …] } — codes that must be priced together. */
+  families: Record<string, string[]>;
+};
+
+/** An organisation that has told us nothing. Offers nothing, groups nothing. */
+export const EMPTY_CODE_PROFILE: CodeProfile = {
+  priorityCodes: [],
+  families: {},
+};
 
 /**
- * The codes offered on a daily sheet. Exact codes, not prefixes.
+ * Is this one of the codes a crew is offered on a daily sheet?
  *
- * PRIORITY_UNDERGROUND_CODES matches by family, which pulls 231 codes off the
- * Globe card — every duct size and depth variant Windstream has ever priced,
- * most of which Fortitude will never build. A crew scrolling that to find
- * BM61(2)F is a crew about to pick the wrong one, and the wrong one still
- * prices, so nothing catches it.
+ * Exact codes, not prefixes. Matching by family pulls every duct size and
+ * depth variant a prime has ever priced onto the dropdown — hundreds of them,
+ * most of which a given contractor will never build — and a crew scrolling
+ * that to find the one they want is a crew about to pick the wrong one. The
+ * wrong one still prices, so nothing downstream catches it.
  *
- * This is the work we actually sell: every code billed on a daily so far, plus
- * every code a subcontractor carries a rate for. Adding one is a decision
- * someone makes on purpose — put the exact code here, spelled the way the
- * customer's card spells it, and it appears in the dropdown. Spell it wrong
- * here and it simply won't show up, which is the safe direction to fail.
+ * So the list is exact and deliberate: adding a code is a decision somebody
+ * makes on purpose. Spelled wrong, it simply does not appear, which is the
+ * safe direction to fail.
  */
 export const MAIN_BILLABLE_CODES = [
   // Plow / vibratory bore — the bulk of the linear footage.
@@ -184,11 +182,11 @@ export function normalizeCode(code: string): string {
  * The priority family a code belongs to, or null. Longest match wins so
  * BFO144 doesn't get filed under BFO12's shorter sibling by accident.
  */
-export function priorityFamily(code: string): string | null {
+export function priorityFamily(profile: CodeProfile, code: string): string | null {
   const c = normalizeCode(code);
   if (!c) return null;
   let best: string | null = null;
-  for (const fam of PRIORITY_UNDERGROUND_CODES) {
+  for (const fam of profile.priorityCodes) {
     if (c.startsWith(fam) && (best === null || fam.length > best.length)) best = fam;
   }
   return best;
@@ -286,13 +284,13 @@ export function isOutOfScopeCode(code: string): boolean {
   return isRiserGuardCode(c) || isRibbonInDuctCode(c);
 }
 
-export function isPriorityCode(code: string): boolean {
+export function isPriorityCode(profile: CodeProfile, code: string): boolean {
   const c = normalizeCode(code);
   if (!c) return false;
   if (isAerialCode(c) || isPoleMounted(c) || isOutOfScopeCode(c)) return false;
   // Labour, equipment and hourly lines are not material at all.
   if (isLabourOrEquipmentCode(c)) return false;
-  return priorityFamily(c) !== null;
+  return priorityFamily(profile, c) !== null;
 }
 
 /**
@@ -457,19 +455,11 @@ export function isLabourOrEquipmentCode(code: string): boolean {
   return false;
 }
 
-export type CodeClass = "underground" | "aerial" | "other";
-
-export function codeClass(code: string): CodeClass {
-  if (isAerialCode(code)) return "aerial";
-  if (isPriorityCode(code)) return "underground";
-  return "other";
-}
-
 /**
  * Sort helper: priority families first in the order listed above, variants
  * grouped under their family, everything else after in alphabetical order.
  */
-export function compareByPriority(a: string, b: string): number {
+export function compareByPriority(profile: CodeProfile, a: string, b: string): number {
   // Aerial sinks below everything — on an underground job it's the last thing
   // anyone is looking for.
   const aerialA = isAerialCode(a);
@@ -477,19 +467,16 @@ export function compareByPriority(a: string, b: string): number {
   if (aerialA !== aerialB) return aerialA ? 1 : -1;
 
   // Then the rest of the underground set (all BM*, all *RI) above unclassified.
-  const undA = isPriorityCode(a);
-  const undB = isPriorityCode(b);
+  const undA = isPriorityCode(profile, a);
+  const undB = isPriorityCode(profile, b);
   if (undA !== undB) return undA ? -1 : 1;
 
-  const fa = priorityFamily(a);
-  const fb = priorityFamily(b);
+  const fa = priorityFamily(profile, a);
+  const fb = priorityFamily(profile, b);
   if (fa && !fb) return -1;
   if (!fa && fb) return 1;
   if (fa && fb && fa !== fb) {
-    return (
-      PRIORITY_UNDERGROUND_CODES.indexOf(fa as (typeof PRIORITY_UNDERGROUND_CODES)[number]) -
-      PRIORITY_UNDERGROUND_CODES.indexOf(fb as (typeof PRIORITY_UNDERGROUND_CODES)[number])
-    );
+    return profile.priorityCodes.indexOf(fa) - profile.priorityCodes.indexOf(fb);
   }
   return normalizeCode(a).localeCompare(normalizeCode(b));
 }
@@ -583,34 +570,21 @@ export function depthAdderDue(items: { code: string; quantity: number }[]): Adde
  * In-duct (BFO..I), ribbon (BFO..RI) and microduct (BFOV..) are deliberately
  * not in here. They are different work at different money.
  */
-export const RATE_FAMILIES: Record<string, string[]> = {
-  /** Plow main — placing buried fibre optic cable, any count. */
-  "BFO-MAIN": ["BFO12", "BFO24", "BFO48", "BFO96", "BFO144"],
-
-  /**
-   * Microduct at 12.7mm, 12 inch depth — one way or two.
-   *
-   * The plow makes one pass at one depth; whether one duct goes in the
-   * ground or two is a difference in what is on the trailer, not in the work.
-   *
-   * The depth adder (D) is not in here. That is a separate line for a deeper
-   * pass and is priced on its own, and folding it in would bill the adder at
-   * the full plow rate.
-   */
-  "BFOV-12.7-12IN": ["BFOV(12.7)(1W)12IN DEPTH", "BFOV(12.7)(2W)12IN DEPTH"],
-};
+/**
+ * Code families live on the organisation. See CodeProfile above.
+ */
 
 /** The family a code belongs to, or null when it prices on its own. */
-export function rateFamilyOf(code: string): string | null {
+export function rateFamilyOf(profile: CodeProfile, code: string): string | null {
   const c = normalizeCode(code);
-  for (const [family, members] of Object.entries(RATE_FAMILIES)) {
+  for (const [family, members] of Object.entries(profile.families)) {
     if (members.some((m) => normalizeCode(m) === c)) return family;
   }
   return null;
 }
 
 /** Every code that shares a price with this one, including itself. */
-export function rateSiblings(code: string): string[] {
-  const family = rateFamilyOf(code);
-  return family ? RATE_FAMILIES[family] : [code];
+export function rateSiblings(profile: CodeProfile, code: string): string[] {
+  const family = rateFamilyOf(profile, code);
+  return family ? profile.families[family] : [code];
 }

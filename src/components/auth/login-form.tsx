@@ -5,6 +5,7 @@ import { useActionState } from "react";
 import { Loader2 } from "lucide-react";
 
 import { login } from "@/app/auth-actions";
+import { useOrgName } from "@/components/layout/org-provider";
 
 const inputClass =
   "w-full rounded-lg border border-foreground/[0.1] bg-foreground/[0.03] px-3 py-2.5 text-[13px] text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-brand/40";
@@ -21,7 +22,7 @@ export function LoginForm() {
           type="email"
           required
           autoComplete="email"
-          placeholder="you@fortitude-infra.com"
+          placeholder="you@company.com"
           className={inputClass}
         />
       </label>

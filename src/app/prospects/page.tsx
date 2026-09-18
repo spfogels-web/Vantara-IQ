@@ -4,6 +4,7 @@ import { getProspectOverview, getProspectRows } from "@/data/prospects-crm";
 import { getProspectSummary, getProspects } from "@/data/queries";
 import { PageShell } from "@/components/common/page-shell";
 import { ProspectsCrm } from "@/components/prospects/prospects-crm";
+import { orgName } from "@/lib/org-settings";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Prospects · Vantara IQ" };
@@ -27,7 +28,7 @@ export default async function ProspectsPage() {
         description="Build and manage your network of crews, workers and prime contractors."
       >
         <p className="rounded-xl border border-border bg-foreground/[0.02] px-4 py-10 text-center text-[13px] text-muted-foreground">
-          The prospect pipeline is internal to Fortitude.
+          The prospect pipeline is internal to {await orgName()}.
         </p>
       </PageShell>
     );

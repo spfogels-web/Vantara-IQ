@@ -41,6 +41,7 @@ import {
   parseShapes,
   type Shape,
 } from "@/components/projects/map-markup";
+import { useOrgName } from "@/components/layout/org-provider";
 
 /**
  * Digital replica of the Globe Communications, LLC "Subcontractor Daily Billing
@@ -136,14 +137,16 @@ export const CREW_NUMBER = "24208171927-A27-311";
  * on every sheet, so it is prefilled alongside the crew number. The remaining
  * slots stay blank for the individual crew members who worked that day.
  */
-export const SUBCONTRACTOR_NAME = "Fortitude Infrastructure LLC";
+// Whoever is filing the sheet. Was one company's name, printed at the top of
+// every crew's paperwork whichever organisation they actually work for.
+export const selfPerformName = (orgName: string) => orgName;
 
 /**
  * A fresh sheet. Picking a job off the list means the identity fields arrive
  * already filled — the crew only ever writes down production. Every one of
  * them stays editable, because the paper form gets corrected in the field too.
  */
-const blankHeader = (project?: SheetProject): SheetHeader => ({
+const blankHeader = (project: SheetProject | undefined, orgName: string): SheetHeader => ({
   exchange: project?.number ?? "",
   crewNumber: CREW_NUMBER,
   customer: project?.client ?? "",
@@ -151,7 +154,7 @@ const blankHeader = (project?: SheetProject): SheetHeader => ({
   projectNumber: project?.number ?? "",
   jobName: project?.name ?? "",
   employees: [
-    SUBCONTRACTOR_NAME,
+    selfPerformName(orgName),
     ...Array(CREW_SLOTS - 1).fill(""),
   ],
   complete: "",
@@ -336,8 +339,8 @@ export type SavedSheet = {
  * threw, and a throw during render is a blank page with a client-side
  * exception rather than a missing name.
  */
-function asHeader(stored: unknown, project?: SheetProject): SheetHeader {
-  const base = blankHeader(project);
+function asHeader(stored: unknown, project: SheetProject | undefined, orgName: string): SheetHeader {
+  const base = blankHeader(project, orgName);
   const raw = (stored ?? {}) as Partial<SheetHeader>;
   const names = Array.isArray(raw.employees) ? raw.employees : [];
   return {
@@ -423,13 +426,14 @@ export function DailyBillingSheet({
    */
   billableCodes?: BillableCode[];
 }) {
+  const orgName = useOrgName();
   const t = useT();
   /** The horizontal scroller for Globe's form, driven by the strip above it. */
   const sheetRef = React.useRef<HTMLDivElement>(null);
   const [filedForId, setFiledForId] = React.useState(initialFiledForId ?? "");
   const [roads, setRoads] = React.useState(initialRoads ?? "");
   const [header, setHeader] = React.useState<SheetHeader>(() =>
-    asHeader(saved?.header, project),
+    asHeader(saved?.header, project, orgName),
   );
   const [labor, setLabor] = React.useState<LaborRow[]>(() =>
     saved ? asLaborRows(saved.laborRows, UNIT_COLS) : Array.from({ length: LABOR_ROWS }, blankLaborRow),
@@ -732,7 +736,7 @@ export function DailyBillingSheet({
   }, [billableCodes, laborCodes, matCodes]);
 
   function reset() {
-    setHeader(blankHeader(project));
+    setHeader(blankHeader(project, orgName));
     setLabor(Array.from({ length: LABOR_ROWS }, blankLaborRow));
     setLaborCodes(Array(UNIT_COLS).fill(""));
     setMat(Array.from({ length: MAT_ROWS }, blankMatRow));
@@ -755,7 +759,7 @@ export function DailyBillingSheet({
             onChange={(e) => setFiledForId(e.target.value)}
             className="focus-ring h-8 rounded-lg border border-border bg-foreground/[0.03] px-2 text-[12px] text-foreground"
           >
-            <option value="">Fortitude — self-perform</option>
+            <option value="">{orgName} — self-perform</option>
             {crews.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.company}

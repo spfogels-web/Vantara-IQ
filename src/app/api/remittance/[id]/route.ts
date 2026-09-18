@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser, isStaff } from "@/lib/auth";
 import { buildRemittancePdf } from "@/lib/remittance-pdf";
+import { orgName } from "@/lib/org-settings";
 
 export const runtime = "nodejs";
 
@@ -58,7 +59,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
   const org = await prisma.organization.findFirst({ select: { name: true, logoUrl: true } });
   const pdf = await buildRemittancePdf(
     inv,
-    org?.name || "Fortitude Infrastructure LLC",
+    org?.name || (await orgName()),
     org?.logoUrl,
     new URL(req.url).origin,
   );

@@ -49,6 +49,7 @@ import { DocumentCenter, type SubDoc } from "@/components/subcontractors/documen
 import { BadgeSection } from "@/components/subcontractors/badge-section";
 import { SubPayPanel } from "@/components/subcontractors/sub-pay-panel";
 import { listCrewContacts, setCrewOwnerDetailsVisibility, setCrewPayVisibility, approveSubcontractor, deleteSubcontractor, listCrewBadges, listSubDocuments, listSubInvoices } from "@/app/actions";
+import { useOrgName } from "@/components/layout/org-provider";
 
 const complianceTone: Record<ComplianceStatus, "success" | "warning" | "critical" | "neutral"> = {
   valid: "success",
@@ -90,7 +91,7 @@ function workReadiness(s: Subcontractor) {
       ok: s.equipment.length > 0,
       required: false,
     },
-    { label: "Fortitude review & approval", ok: s.state === "Active", required: true },
+    { label: "Office review & approval", ok: s.state === "Active", required: true },
   ];
   const outstanding = items.filter((i) => i.required && !i.ok);
   return { items, outstanding, eligible: outstanding.length === 0 };
@@ -373,6 +374,7 @@ function SubDetail({
   onEdit: () => void;
   onDeleted: () => void;
 }) {
+  const orgName = useOrgName();
   const sc = s.scorecard;
   const active = s.state === "Active";
   const gate = workReadiness(s);
@@ -578,7 +580,7 @@ function SubDetail({
               <p className="text-[11.5px] text-muted-foreground">
                 {gate.eligible
                   ? "Onboarding complete and approved. This crew can be assigned to projects and submit production."
-                  : "This crew cannot be assigned a project or submit dailies until every item below is complete and Fortitude-approved."}
+                  : `This crew cannot be assigned a project or submit dailies until every item below is complete and approved by ${orgName}.`}
               </p>
             </div>
             <div className="flex items-center gap-2">

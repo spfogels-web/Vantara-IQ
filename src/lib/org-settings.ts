@@ -47,6 +47,8 @@ export type OrgSettingsView = {
   retainagePct: number;
   locateProvider: string;
   defaultState: string;
+  /** The number a crew is told to ring. Empty when unset. */
+  supportPhone: string;
   /** False when no settings row exists, so callers can say so plainly. */
   configured: boolean;
 };
@@ -64,6 +66,7 @@ const UNCONFIGURED: OrgSettingsView = {
   retainagePct: 0,
   locateProvider: "",
   defaultState: "",
+  supportPhone: "",
   configured: false,
 };
 
@@ -85,6 +88,7 @@ export const orgSettings = cache(async (): Promise<OrgSettingsView> => {
     retainagePct: row.retainagePct,
     locateProvider: row.locateProvider,
     defaultState: row.defaultState,
+    supportPhone: row.supportPhone,
     configured: true,
   };
 });

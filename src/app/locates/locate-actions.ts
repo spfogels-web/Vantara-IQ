@@ -6,7 +6,8 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser, isStaff } from "@/lib/auth";
 import { notifyStaff } from "@/lib/notify";
-import { providerFor, DEFAULT_PROVIDER } from "@/lib/locate-providers";
+import { providerFor } from "@/lib/locate-providers";
+import { orgSettings } from "@/lib/org-settings";
 import type { ProviderTicket } from "@/lib/locate-providers";
 import { readiness, type LocateRule } from "@/lib/locate-readiness";
 import { todayIn, zoneForState } from "@/data/locates-ops";
@@ -367,7 +368,7 @@ export async function addLocateTickets(input: {
   provider?: string;
 }) {
   await requireStaff();
-  const provider = providerFor(input.provider ?? DEFAULT_PROVIDER);
+  const provider = providerFor(input.provider ?? (await orgSettings()).locateProvider);
 
   const tokens = [
     ...new Set(
@@ -519,7 +520,7 @@ export async function importLocatePaste(input: {
   const me = await requireStaff();
   if (!input.text?.trim()) return { ok: false as const, error: "Paste a ticket first." };
 
-  const provider = providerFor(input.provider ?? DEFAULT_PROVIDER);
+  const provider = providerFor(input.provider ?? (await orgSettings()).locateProvider);
   let parsed: ProviderTicket[];
   try {
     parsed = await provider.parseText(input.text);
@@ -1158,7 +1159,7 @@ export async function submitCrewLocateTickets(input: {
     select: { company: true },
   });
   const company = crew?.company ?? "A crew";
-  const provider = providerFor(DEFAULT_PROVIDER);
+  const provider = providerFor((await orgSettings()).locateProvider);
 
   const created: string[] = [];
   const updated: string[] = [];

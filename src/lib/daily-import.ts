@@ -3,7 +3,7 @@ import "server-only";
 import type Anthropic from "@anthropic-ai/sdk";
 import { aiClient } from "@/lib/ai-client";
 
-import { MAIN_BILLABLE_CODES } from "@/lib/unit-codes";
+
 
 /**
  * Read a filled-in daily billing sheet — a photo, a scan, or the PDF a crew
@@ -197,7 +197,10 @@ function fileBlock(base64: string, mediaType: string): Anthropic.ContentBlockPar
 export async function extractDailySheet(
   base64: string,
   mediaType: string,
-  allowedCodes: string[] = [...MAIN_BILLABLE_CODES],
+  // No default: which codes a sheet may carry is the organisation's answer,
+  // and a default here would be one contractor's list read onto everyone's
+  // paperwork.
+  allowedCodes: string[],
 ): Promise<ImportedSheet> {
   if (!dailyImportReady()) {
     throw new Error("ANTHROPIC_API_KEY is not set, so daily sheets cannot be read.");

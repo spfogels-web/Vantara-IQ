@@ -33,6 +33,7 @@ import {
   startContractorLocate,
   verifyContractorLocate,
 } from "@/app/locates/locate-actions";
+import { useOrgName } from "@/components/layout/org-provider";
 
 type Detail = {
   ticket: Record<string, unknown> & {
@@ -124,6 +125,7 @@ export function LocateDetail({
   crews: { id: string; company: string }[];
   users: { id: string; name: string }[];
 }) {
+  const orgName = useOrgName();
   const router = useRouter();
   const t = detail.ticket;
   const [busy, setBusy] = React.useState(false);
@@ -285,7 +287,7 @@ export function LocateDetail({
                       </td>
                       <td className="px-3 py-2 text-[12px]">
                         {ours ? (
-                          <span className="font-semibold text-warning">Fortitude locates this</span>
+                          <span className="font-semibold text-warning">{orgName} locates this</span>
                         ) : (
                           <span className="text-muted-foreground">811 member</span>
                         )}
@@ -395,6 +397,7 @@ function StatusPanel({
   tone: "success" | "warning" | "critical" | "muted";
   detail: string;
 }) {
+  const orgName = useOrgName();
   return (
     <div
       className={cn(
