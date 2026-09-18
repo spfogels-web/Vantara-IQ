@@ -9,6 +9,7 @@ import { getCurrentUser, isStaff } from "@/lib/auth";
 import { alertsState } from "@/lib/alerts-switch";
 import { getNavBadges, getOrganizationLogo , getNotifications } from "@/data/queries";
 import { getLocale } from "@/lib/i18n-server";
+import { organisationChoices, switchOrganisation } from "@/app/org-actions";
 import { LanguageProvider } from "@/components/layout/language-provider";
 
 export const metadata: Metadata = {
@@ -33,13 +34,25 @@ export default async function RootLayout({
 }>) {
   // Read once here so the shell can show who is signed in without every page
   // re-querying it.
-  const [user, logoUrl, badges, notifications, locale] = await Promise.all([
-    getCurrentUser(),
-    getOrganizationLogo(),
-    getNavBadges(),
-    getNotifications(),
-    getLocale(),
-  ]);
+  /**
+   * The shell's own data, and only when there is somebody to render it for.
+   *
+   * These four all reach the database, and the layout wraps every route —
+   * including the marketing homepage, the sign-in page and the public policy
+   * pages, none of which have a session and therefore none of which have an
+   * organisation to read from. They used to work by falling back to
+   * Fortitude's database; with that fallback gone they would throw, and a
+   * visitor would get a 500 where the homepage should be.
+   *
+   * Asking who it is first, and reading the rest only if there is an answer,
+   * is both correct and less work: a logged-out visitor was never going to be
+   * shown a nav badge or a notification.
+   */
+  const [user, locale] = await Promise.all([getCurrentUser(), getLocale()]);
+
+  const [logoUrl, badges, notifications] = user
+    ? await Promise.all([getOrganizationLogo(), getNavBadges(), getNotifications()])
+    : [null, undefined, undefined];
 
   // The alerts light in the top bar. Staff only — a crew has their own consent
   // and no say in the master switch, and a control they cannot use is a
@@ -49,6 +62,10 @@ export default async function RootLayout({
   // Whether this crew may see their own pay. Off unless the office has
   // turned it on — several owners have their own people fill in the
   // billing and would rather no rate card was in front of them.
+  // Empty for everyone but a platform operator, and the account card renders
+  // no switcher for a list of one.
+  const organisations = user ? await organisationChoices() : [];
+
   const showPay = user?.subcontractorId
     ? Boolean(
         (
@@ -83,6 +100,8 @@ export default async function RootLayout({
             notifications={notifications}
             showPay={showPay}
             alertsLive={alertsLive}
+            organisations={organisations}
+            onSwitchOrganisation={switchOrganisation}
           >
             {children}
           </AppShell>

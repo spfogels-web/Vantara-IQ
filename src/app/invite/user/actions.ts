@@ -1,6 +1,8 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { runWithOrg } from "@/lib/org-context";
+import { PLATFORM_HOME_ORG } from "@/lib/org-registry";
 import { hashPassword, signSession, setSessionCookie } from "@/lib/auth";
 
 /**
@@ -19,6 +21,19 @@ export async function acceptSubUserInvite(input: {
   name: string;
   password: string;
 }) {
+  /**
+   * An invitation link arrives with no session, so nothing has told this
+   * request which organisation it belongs to — and unlike a page, it cannot
+   * be refused, because having no account yet is the entire point.
+   *
+   * Invitations are minted by staff in the platform's home organisation, and
+   * the account this creates has to land in the same database as the crew it
+   * belongs to. Said here, once, where it is checkable.
+   */
+  return runWithOrg(PLATFORM_HOME_ORG, () => accept(input));
+}
+
+async function accept(input: { token: string; name: string; password: string }) {
   const invite = await prisma.subUserInvite.findUnique({
     where: { token: input.token },
     select: {
@@ -82,6 +97,13 @@ export async function acceptSubUserInvite(input: {
     return { ok: false as const, error: "That invitation has already been used." };
   }
 
-  await setSessionCookie(await signSession({ userId, role: "SUBCONTRACTOR" }));
+  await setSessionCookie(
+    await signSession({
+      userId,
+      role: "SUBCONTRACTOR",
+      org: PLATFORM_HOME_ORG,
+      home: PLATFORM_HOME_ORG,
+    }),
+  );
   return { ok: true as const };
 }

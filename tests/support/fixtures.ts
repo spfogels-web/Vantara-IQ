@@ -25,7 +25,7 @@ export type Crew = {
 };
 
 export type Tenant = {
-  key: "northgate" | "barrow";
+  key: "northgate" | "barrow" | "halloway";
   orgId: string;
   orgName: string;
   staffUserId: string;
@@ -254,3 +254,42 @@ export async function seedTwoTenants(db: PrismaClient): Promise<Fixtures> {
   const b = await buildTenant(db, SPECS[1]);
   return { a, b };
 }
+
+/**
+ * The contractor who lives in the *other* database.
+ *
+ * Every name, code and number is different from the two above, because the
+ * switch round-trip proves itself by what changes on screen. If the second
+ * database held the same names, a switcher that did nothing at all would pass.
+ */
+const OTHER_SPEC: Spec = {
+  key: "halloway",
+  org: "Halloway Civil Partners",
+  staffEmail: "office@halloway-civil.test",
+  customer: "Stroud Telecom",
+  shortCode: "STR",
+  project: "Kedleston Ring",
+  invoiceNumber: "HC-7001",
+  customerRate: 11.75,
+  crews: [
+    { company: "Marden Bore", email: "lead@marden.test", rate: 7.2, subInvoice: "HC-S-9001" },
+    { company: "Teale Directional", email: "lead@teale.test", rate: 6.95, subInvoice: "HC-S-9002" },
+  ],
+};
+
+/** Seeds the second organisation's database. One tenant, wholly its own. */
+export async function seedOtherDatabase(db: PrismaClient): Promise<Tenant> {
+  return buildTenant(db, OTHER_SPEC);
+}
+
+/**
+ * Read off the specs rather than retyped, so a test asserting on a name cannot
+ * drift from the name actually seeded and start passing for no reason.
+ */
+export const OTHER_ORG_NAME = OTHER_SPEC.org;
+
+/** The one account the test deployment treats as a platform operator. */
+export const PLATFORM_ADMIN_EMAIL = SPECS[0].staffEmail;
+
+/** A staff account that is deliberately *not* on the allowlist. */
+export const NON_ADMIN_EMAIL = SPECS[1].staffEmail;

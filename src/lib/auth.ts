@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
 
 import { prisma } from "@/lib/prisma";
+import { runWithOrg } from "@/lib/org-context";
 
 /**
  * Session handling.
@@ -27,6 +28,37 @@ export type SessionRole = "ADMIN" | "PM" | "OFFICE" | "SUPERVISOR" | "SUBCONTRAC
 export interface SessionPayload {
   userId: string;
   role: SessionRole;
+  /**
+   * Which organisation's database this session reads.
+   *
+   * In the token because the token is signed: the browser holds it, cannot
+   * edit it, and middleware can read it at the edge without a database round
+   * trip — which matters, since resolving it *is* how we decide which database
+   * to round-trip to. A cookie or a header the client could set would let
+   * anyone type another company's id and be served their books.
+   *
+   * Switching organisations re-signs the token. There is no other way to
+   * change it.
+   */
+  org: string;
+  /**
+   * Which organisation's database this account *lives* in.
+   *
+   * Identity and data are not the same question, and conflating them breaks
+   * the switcher outright: a platform operator's user row exists in one
+   * database, so the moment they switch to another, looking themselves up
+   * there finds nothing and the session reads as signed out. Every screen goes
+   * blank and the switcher appears to have logged them out.
+   *
+   * So `home` answers "who is this", `org` answers "whose data are they
+   * looking at", and they are equal for everybody who never switches.
+   *
+   * This is the one place step 3 goes beyond the approved blueprint, which
+   * names only `org`. The alternative — mirroring operator accounts into every
+   * organisation's database — would put real people's credentials in the demo
+   * tenant, which is worse.
+   */
+  home: string;
 }
 
 function secret() {
@@ -48,7 +80,10 @@ export async function verifyPassword(plain: string, hash: string) {
 }
 
 export async function signSession(payload: SessionPayload) {
-  return new SignJWT({ role: payload.role })
+  if (!payload.org || !payload.home) {
+    throw new Error("Refusing to sign a session with no organisation on it.");
+  }
+  return new SignJWT({ role: payload.role, org: payload.org, home: payload.home })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(payload.userId)
     .setIssuedAt()
@@ -56,12 +91,27 @@ export async function signSession(payload: SessionPayload) {
     .sign(secret());
 }
 
-/** Edge-safe: verifies the token only, no database access. */
+/**
+ * Edge-safe: verifies the token only, no database access.
+ *
+ * A token with no `org` is rejected outright rather than repaired. Those are
+ * the sessions issued before organisations existed, and the repair — assuming
+ * they meant Fortitude — is exactly the silent defaulting this whole step
+ * removes. They are a week from expiring at most, and the cost of rejecting
+ * one is a sign-in.
+ */
 export async function readSessionToken(token: string): Promise<SessionPayload | null> {
   try {
     const { payload } = await jwtVerify(token, secret());
     if (!payload.sub || typeof payload.role !== "string") return null;
-    return { userId: payload.sub, role: payload.role as SessionRole };
+    if (typeof payload.org !== "string" || !payload.org) return null;
+    if (typeof payload.home !== "string" || !payload.home) return null;
+    return {
+      userId: payload.sub,
+      role: payload.role as SessionRole,
+      org: payload.org,
+      home: payload.home,
+    };
   } catch {
     return null; // expired, tampered with, or signed by a different secret
   }
@@ -89,10 +139,14 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
   const session = await getSession();
   if (!session) return null;
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.userId },
-    include: { organization: true, subcontractor: true },
-  });
+  // Identity comes from where the account lives, never from the organisation
+  // currently being looked at — see `home` on SessionPayload.
+  const user = await runWithOrg(session.home, () =>
+    prisma.user.findUnique({
+      where: { id: session.userId },
+      include: { organization: true, subcontractor: true },
+    }),
+  );
   if (!user) return null;
 
   return {

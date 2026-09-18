@@ -29,6 +29,8 @@ function ShellFrame({
   notifications,
   showPay,
   alertsLive,
+  organisations,
+  onSwitchOrganisation,
 }: {
   children: React.ReactNode;
   user: CurrentUser | null;
@@ -39,6 +41,9 @@ function ShellFrame({
   showPay?: boolean;
   /** Whether outbound texts are on. Undefined for anyone who cannot change it. */
   alertsLive?: boolean;
+  /** Organisations this person may enter. One or none means no switcher. */
+  organisations?: { id: string; label: string; active: boolean }[];
+  onSwitchOrganisation?: (id: string) => Promise<unknown>;
 }) {
   const { collapsed } = useSidebar();
   const isDesktop = useIsDesktop();
@@ -55,9 +60,23 @@ function ShellFrame({
    * business.
    */
   const isCrew = user?.role === "SUBCONTRACTOR";
+
+  /**
+   * When someone can move between organisations, the card has to name the one
+   * they are looking at rather than the one their account lives in — otherwise
+   * switching to Apex leaves "Fortitude Infrastructure" on screen, which is the
+   * single most misleading thing this card could say.
+   *
+   * For everyone else there is one organisation and nothing changes.
+   */
+  const active = organisations?.find((o) => o.active);
+  const workspace = organisations && organisations.length > 1 ? active?.label : null;
+
   const account = user
     ? {
-        name: (isCrew ? user.subcontractorName : user.organizationName) || user.organizationName,
+        name:
+          (isCrew ? user.subcontractorName : workspace || user.organizationName) ||
+          user.organizationName,
         plan: isCrew ? null : user.organizationPlan,
       }
     : null;
@@ -70,6 +89,8 @@ function ShellFrame({
         role={user?.role}
         showPay={showPay}
         account={account}
+        organisations={organisations}
+        onSwitchOrganisation={onSwitchOrganisation}
       />
 
       <div
@@ -100,6 +121,8 @@ export function AppShell({
   notifications,
   showPay,
   alertsLive,
+  organisations,
+  onSwitchOrganisation,
 }: {
   children: React.ReactNode;
   user: CurrentUser | null;
@@ -109,6 +132,8 @@ export function AppShell({
   /** Whether this crew may see their own pay. Off unless the office says so. */
   showPay?: boolean;
   alertsLive?: boolean;
+  organisations?: { id: string; label: string; active: boolean }[];
+  onSwitchOrganisation?: (id: string) => Promise<unknown>;
 }) {
   const pathname = usePathname();
 
@@ -140,10 +165,18 @@ export function AppShell({
     <TooltipProvider delayDuration={300} skipDelayDuration={200}>
       <SidebarProvider>
         <CommandMenuProvider role={user?.role}>
-          <ShellFrame user={user} logoUrl={logoUrl} badges={badges} notifications={notifications}
-        showPay={showPay}
-      alertsLive={alertsLive}
-      >{children}</ShellFrame>
+          <ShellFrame
+            user={user}
+            logoUrl={logoUrl}
+            badges={badges}
+            notifications={notifications}
+            showPay={showPay}
+            alertsLive={alertsLive}
+            organisations={organisations}
+            onSwitchOrganisation={onSwitchOrganisation}
+          >
+            {children}
+          </ShellFrame>
         </CommandMenuProvider>
       </SidebarProvider>
     </TooltipProvider>

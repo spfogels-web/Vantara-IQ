@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
 import { prisma } from "@/lib/prisma";
+import { runWithOrg } from "@/lib/org-context";
+import { PLATFORM_HOME_ORG } from "@/lib/org-registry";
 import {
   clearSessionCookie,
   getSession,
@@ -36,7 +38,17 @@ export async function login(_prev: unknown, formData: FormData) {
     };
   }
 
-  const user = await prisma.user.findUnique({ where: { email } });
+  /**
+   * Sign-in is the one request that cannot be told which organisation it
+   * belongs to, because working that out is what it is for. So it says so
+   * itself: accounts live in the platform's home organisation, and this is the
+   * only place that fact is used to reach a database.
+   *
+   * Everything after the session is issued travels on the session instead.
+   */
+  const user = await runWithOrg(PLATFORM_HOME_ORG, () =>
+    prisma.user.findUnique({ where: { email } }),
+  );
   const ok = user?.passwordHash ? await verifyPassword(password, user.passwordHash) : false;
 
   if (!user || !ok) {
@@ -45,7 +57,12 @@ export async function login(_prev: unknown, formData: FormData) {
 
   let token: string;
   try {
-    token = await signSession({ userId: user.id, role: user.role as SessionRole });
+    token = await signSession({
+      userId: user.id,
+      role: user.role as SessionRole,
+      org: PLATFORM_HOME_ORG,
+      home: PLATFORM_HOME_ORG,
+    });
   } catch {
     return { error: "Couldn't start a session. Check the server configuration and try again." };
   }
@@ -55,12 +72,16 @@ export async function login(_prev: unknown, formData: FormData) {
   // not a reason to refuse somebody a session they have correctly earned, and
   // this number is an operational signal rather than a security record — the
   // session itself is the security record.
-  await prisma.user
-    .update({
-      where: { id: user.id },
-      data: { loginCount: { increment: 1 }, lastLoginAt: new Date() },
-    })
-    .catch(() => undefined);
+  // Still inside the sign-in request, which carries no organisation header —
+  // the session that would have supplied one was issued a line ago.
+  await runWithOrg(PLATFORM_HOME_ORG, () =>
+    prisma.user
+      .update({
+        where: { id: user.id },
+        data: { loginCount: { increment: 1 }, lastLoginAt: new Date() },
+      })
+      .catch(() => undefined),
+  );
 
   redirect("/");
 }
@@ -80,13 +101,20 @@ export async function updateProfile(input: { name: string; email: string }) {
   if (!name) return { ok: false as const, error: "Name can't be empty." };
   if (!email.includes("@")) return { ok: false as const, error: "That doesn't look like an email." };
 
-  const clash = await prisma.user.findFirst({
-    where: { email, NOT: { id: session.userId } },
-    select: { id: true },
-  });
+  // The account lives in its home organisation, not in whichever one is being
+  // looked at. Editing yourself while visiting another tenant must still edit
+  // you.
+  const clash = await runWithOrg(session.home, () =>
+    prisma.user.findFirst({
+      where: { email, NOT: { id: session.userId } },
+      select: { id: true },
+    }),
+  );
   if (clash) return { ok: false as const, error: "Another account already uses that email." };
 
-  await prisma.user.update({ where: { id: session.userId }, data: { name, email } });
+  await runWithOrg(session.home, () =>
+    prisma.user.update({ where: { id: session.userId }, data: { name, email } }),
+  );
   revalidatePath("/", "layout");
   return { ok: true as const };
 }
@@ -102,15 +130,17 @@ export async function changePassword(input: { current: string; next: string }) {
     return { ok: false as const, error: "Use at least 10 characters." };
   }
 
-  const user = await prisma.user.findUnique({ where: { id: session.userId } });
+  const user = await runWithOrg(session.home, () =>
+    prisma.user.findUnique({ where: { id: session.userId } }),
+  );
   if (!user?.passwordHash) return { ok: false as const, error: "No password set on this account." };
 
   const ok = await verifyPassword(input.current, user.passwordHash);
   if (!ok) return { ok: false as const, error: "Current password is wrong." };
 
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { passwordHash: await hashPassword(input.next) },
-  });
+  const nextHash = await hashPassword(input.next);
+  await runWithOrg(session.home, () =>
+    prisma.user.update({ where: { id: user.id }, data: { passwordHash: nextHash } }),
+  );
   return { ok: true as const };
 }

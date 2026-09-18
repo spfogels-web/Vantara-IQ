@@ -11,6 +11,7 @@ import { isMarketId, marketLabel } from "@/lib/markets";
 import { SMS_CONSENT_TEXT, WELCOME_MESSAGE } from "@/lib/sms-consent";
 import { textCrew, textUser, toE164 } from "@/lib/sms";
 import { hashPassword, isStaff, setSessionCookie, signSession } from "@/lib/auth";
+import { resolveOrg } from "@/lib/org-context";
 import {
   extractDocument,
   isConfigured,
@@ -641,7 +642,12 @@ export async function createSubcontractorDraft(input: {
          * than being asked to log in with the password they set ninety seconds
          * ago.
          */
-        await setSessionCookie(await signSession({ userId: user.id, role: "SUBCONTRACTOR" }));
+        // The account was just created in this request's own database, so the
+        // session that reads it belongs to the same organisation.
+        const here = await resolveOrg();
+        await setSessionCookie(
+          await signSession({ userId: user.id, role: "SUBCONTRACTOR", org: here, home: here }),
+        );
       }
     } catch {
       // A duplicate email is the common case and is not fatal here.

@@ -75,17 +75,52 @@ export function orgRecord(id: OrgId): OrgRecord {
 }
 
 /**
- * The organisation this deployment falls back to while step 3 is outstanding.
+ * Where the platform's own accounts live.
  *
- * Deliberately named, exported and asserted against rather than buried as a
- * default inside the proxy. Step 3 puts the organisation on the session and
- * this constant stops being consulted — at which point a request that arrives
- * without one is refused rather than quietly served somebody's live data.
+ * This is **not** a fallback. Nothing consults it to recover from a request
+ * that lost its organisation — such a request now throws. It names the one
+ * thing that genuinely has no organisation to read from yet: a person typing
+ * their email into the sign-in form, before there is a session to say who they
+ * are or which company they belong to.
  *
- * Until then the honest description is: this deployment serves Fortitude, and
- * says so in one place.
+ * The same applies to the handful of other doors that open without a session —
+ * an invitation link, a carrier's webhook. Each one wraps itself in this
+ * organisation explicitly and visibly, at the point where the decision is
+ * actually made. That is the difference from the fallback it replaced: a
+ * default inside the client made every query a candidate for reading the wrong
+ * company's data, silently. Four named call sites cannot.
+ *
+ * When a second organisation has its own logins, this becomes a lookup rather
+ * than a constant. Nothing else has to change for that.
  */
-export const INCUMBENT_ORG: OrgId = FORTITUDE;
+export const PLATFORM_HOME_ORG: OrgId = FORTITUDE;
+
+/**
+ * Who may move between organisations, by email.
+ *
+ * Empty unless `PLATFORM_ADMIN_EMAILS` says otherwise, so a deployment that
+ * has not been told who the platform operators are lets nobody switch rather
+ * than guessing. Being an ADMIN of a company is not the same as operating the
+ * platform, and only the second is grounds for seeing another company's books.
+ */
+export function platformAdmins(): Set<string> {
+  const raw = process.env.PLATFORM_ADMIN_EMAILS ?? "";
+  return new Set(
+    raw
+      .split(",")
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
+/** The organisations this person may enter. Their own, plus any they operate. */
+export function organisationsFor(email: string, homeOrg: OrgId): OrgRecord[] {
+  if (!platformAdmins().has(email.trim().toLowerCase())) {
+    const own = REGISTRY.get(homeOrg);
+    return own ? [own] : [];
+  }
+  return knownOrgs();
+}
 
 /**
  * One client per organisation, cached across invocations.

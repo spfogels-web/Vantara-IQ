@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { runScheduledLocateChecks } from "@/app/locates/locate-actions";
+import { runWithOrg } from "@/lib/org-context";
+import { knownOrgs } from "@/lib/org-registry";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -34,16 +36,36 @@ export async function GET(request: Request) {
     return NextResponse.json({ ok: false, error: "Not authorised." }, { status: 401 });
   }
 
-  try {
-    const result = await runScheduledLocateChecks();
-    return NextResponse.json(result);
-  } catch (e) {
-    // Logged as a failure rather than swallowed: a sweep that silently stopped
-    // running is a board that silently stopped being true.
-    console.error("[cron/locates]", e);
-    return NextResponse.json(
-      { ok: false, error: e instanceof Error ? e.message : "The sweep failed." },
-      { status: 500 },
-    );
+  /**
+   * One sweep per organisation.
+   *
+   * There is no session here and no organisation on the request, so this is
+   * the one path that has to say which databases it means — and the answer is
+   * all of them, in turn. A sweep that ran against only one would leave the
+   * other's board quietly stale, which is the failure this job exists to
+   * prevent.
+   *
+   * Each organisation is caught separately. One database being unreachable is
+   * not a reason to skip the rest, and a partial sweep that says which half
+   * failed is worth more than a 500 that says nothing ran.
+   */
+  const results: Record<string, unknown> = {};
+  const failures: Record<string, string> = {};
+
+  for (const org of knownOrgs()) {
+    try {
+      results[org.id] = await runWithOrg(org.id, () => runScheduledLocateChecks());
+    } catch (e) {
+      // Logged as a failure rather than swallowed: a sweep that silently
+      // stopped running is a board that silently stopped being true.
+      console.error(`[cron/locates] ${org.id}`, e);
+      failures[org.id] = e instanceof Error ? e.message : "The sweep failed.";
+    }
   }
+
+  const ok = Object.keys(failures).length === 0;
+  return NextResponse.json(
+    ok ? { ok, organisations: results } : { ok, organisations: results, failures },
+    { status: ok ? 200 : 500 },
+  );
 }

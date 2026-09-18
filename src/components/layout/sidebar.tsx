@@ -3,7 +3,15 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronsLeft, MessageSquarePlus, PanelLeft, Settings, UserRound } from "lucide-react";
+import {
+  Building2,
+  Check,
+  ChevronsLeft,
+  MessageSquarePlus,
+  PanelLeft,
+  Settings,
+  UserRound,
+} from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { getIcon } from "@/lib/icons";
@@ -118,6 +126,8 @@ export function SidebarContent({
   role,
   showPay,
   account,
+  organisations,
+  onSwitchOrganisation,
 }: {
   collapsed: boolean;
   onNavigate?: () => void;
@@ -138,10 +148,20 @@ export function SidebarContent({
    * a crew saw the prime's name rather than their own.
    */
   account?: { name: string; plan?: string | null } | null;
+  /**
+   * The organisations this person may enter, with the live one marked.
+   *
+   * Empty or single for everyone but a platform operator, and the card then
+   * renders no switcher — there is nothing to choose between. The list is
+   * decided on the server; this component only shows what it is given.
+   */
+  organisations?: { id: string; label: string; active: boolean }[];
+  onSwitchOrganisation?: (id: string) => Promise<unknown>;
 }) {
   const { toggle } = useSidebar();
   const t = useT();
   const [feedbackOpen, setFeedbackOpen] = React.useState(false);
+  const [switching, setSwitching] = React.useState<string | null>(null);
 
   // No account resolved means a screen rendered outside a session. Fall back
   // to the product's own name — never to a company's, which is precisely the
@@ -272,6 +292,40 @@ export function SidebarContent({
                 </span>
               ) : null}
             </DropdownMenuLabel>
+            {/* The switcher. Only rendered when there is genuinely more than
+                one organisation to choose between, so for everybody except a
+                platform operator the card is exactly what it was. */}
+            {organisations && organisations.length > 1 ? (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel className="text-[10.5px] font-normal uppercase tracking-wide text-muted-foreground">
+                  Organization
+                </DropdownMenuLabel>
+                {organisations.map((org) => (
+                  <DropdownMenuItem
+                    key={org.id}
+                    disabled={org.active || switching !== null}
+                    onSelect={(e) => {
+                      // The menu would close before the action runs, and the
+                      // page is about to be replaced anyway.
+                      e.preventDefault();
+                      if (org.active) return;
+                      setSwitching(org.id);
+                      void onSwitchOrganisation?.(org.id).finally(() => setSwitching(null));
+                    }}
+                    className="gap-2.5 py-2 text-[12.5px]"
+                  >
+                    <Building2 className="size-4 text-muted-foreground" />
+                    <span className="min-w-0 flex-1 truncate">{org.label}</span>
+                    {org.active ? (
+                      <Check className="size-3.5 text-brand-bright" aria-label="Active" />
+                    ) : switching === org.id ? (
+                      <span className="text-[10.5px] text-muted-foreground">Switching…</span>
+                    ) : null}
+                  </DropdownMenuItem>
+                ))}
+              </>
+            ) : null}
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild className="gap-2.5 py-2 text-[12.5px]">
               <Link href="/settings">
@@ -311,12 +365,16 @@ export function DesktopSidebar({
   role,
   showPay,
   account,
+  organisations,
+  onSwitchOrganisation,
 }: {
   logoUrl?: string | null;
   badges?: Record<string, number>;
   role?: string | null;
   showPay?: boolean;
   account?: { name: string; plan?: string | null } | null;
+  organisations?: { id: string; label: string; active: boolean }[];
+  onSwitchOrganisation?: (id: string) => Promise<unknown>;
 }) {
   const { collapsed, toggle } = useSidebar();
 
@@ -335,6 +393,8 @@ export function DesktopSidebar({
         badges={badges}
         role={role}
         account={account}
+        organisations={organisations}
+        onSwitchOrganisation={onSwitchOrganisation}
       />
 
       {/* Expand affordance, only visible while collapsed */}

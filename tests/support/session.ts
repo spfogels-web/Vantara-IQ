@@ -11,10 +11,36 @@ import { SignJWT } from "jose";
 
 export type Role = "ADMIN" | "PM" | "OFFICE" | "SUPERVISOR" | "SUBCONTRACTOR";
 
-export async function sessionCookie(userId: string, role: Role): Promise<string> {
+/**
+ * @param org Which organisation's database this session reads. Defaults to the
+ *   incumbent, which is where every existing fixture lives.
+ */
+export async function sessionCookie(
+  userId: string,
+  role: Role,
+  org: string = "fortitude",
+): Promise<string> {
+  // `home` stays the incumbent even when `org` does not: that is precisely the
+  // shape the switcher produces — the account lives in one database while the
+  // screens read from another.
+  return mint({ role, org, home: "fortitude" }, userId);
+}
+
+/**
+ * A session from before organisations existed — no `org` claim at all.
+ *
+ * Exists so a test can prove such a token is refused rather than quietly
+ * repaired into meaning Fortitude. Real ones are out there: anybody signed in
+ * when this shipped is holding one.
+ */
+export async function legacySessionCookie(userId: string, role: Role): Promise<string> {
+  return mint({ role }, userId);
+}
+
+async function mint(claims: Record<string, unknown>, userId: string): Promise<string> {
   const secret = process.env.AUTH_SECRET;
   if (!secret) throw new Error("AUTH_SECRET is not set; the tests cannot mint a session.");
-  const jwt = await new SignJWT({ role })
+  const jwt = await new SignJWT(claims)
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(userId)
     .setIssuedAt()

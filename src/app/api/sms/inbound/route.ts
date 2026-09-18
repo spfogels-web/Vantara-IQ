@@ -5,6 +5,8 @@ import { applyOptOut } from "@/lib/sms";
 import { HELP_REPLY } from "@/lib/sms-consent";
 import { notifyStaff } from "@/lib/notify";
 import { handleInboundSms } from "@/lib/sms-inbound";
+import { runWithOrg } from "@/lib/org-context";
+import { PLATFORM_HOME_ORG } from "@/lib/org-registry";
 
 export const runtime = "nodejs";
 
@@ -52,6 +54,14 @@ const empty = () =>
   });
 
 export async function POST(request: Request) {
+  // Twilio carries no session, so nothing has told this request which
+  // organisation it belongs to. There is one Twilio account, one number and
+  // one A2P registration, and they are the home organisation's — a text can
+  // only ever have come from a conversation there.
+  return runWithOrg(PLATFORM_HOME_ORG, () => handleWebhook(request));
+}
+
+async function handleWebhook(request: Request) {
   const form = await request.formData();
   const params: Record<string, string> = {};
   for (const [k, v] of form.entries()) params[k] = typeof v === "string" ? v : "";

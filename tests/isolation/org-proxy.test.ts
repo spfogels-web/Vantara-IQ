@@ -16,7 +16,7 @@
  */
 import { afterAll, describe, expect, it } from "vitest";
 
-import { SECOND_ORG_NAME } from "../support/second-org";
+import { OTHER_ORG_NAME } from "../support/fixtures";
 import { TEST_SCHEMA, TEST_SCHEMA_B, testClient, testDatabaseUrl } from "../support/test-db";
 
 /**
@@ -31,7 +31,7 @@ process.env.APEX_DATABASE_URL = URL_B;
 
 const { prisma } = await import("@/lib/prisma");
 const { runWithOrg, resolveOrg } = await import("@/lib/org-context");
-const { INCUMBENT_ORG, knownOrgs } = await import("@/lib/org-registry");
+const { knownOrgs } = await import("@/lib/org-registry");
 
 /** Direct clients, to check each database from outside the proxy. */
 const dbA = testClient(TEST_SCHEMA);
@@ -60,8 +60,8 @@ describe("which database answers", () => {
     const namesA = a.map((o) => o.name);
     const namesB = b.map((o) => o.name);
 
-    expect(namesB, "the second organisation should hold exactly its own row").toEqual([SECOND_ORG_NAME]);
-    expect(namesA, "the second organisation's row is visible from the first").not.toContain(SECOND_ORG_NAME);
+    expect(namesB, "the second organisation should hold exactly its own row").toEqual([OTHER_ORG_NAME]);
+    expect(namesA, "the second organisation's row is visible from the first").not.toContain(OTHER_ORG_NAME);
     expect(namesA.length, "fixture problem: the first organisation has no rows to confuse").toBeGreaterThan(0);
     for (const n of namesA) {
       expect(namesB, `"${n}" leaked into the other organisation`).not.toContain(n);
@@ -112,10 +112,18 @@ describe("the proxy never guesses", () => {
     expect(() => runWithOrg("northgate-utilities", () => null)).toThrow(/unknown organisation/i);
   });
 
-  it("falls back to the incumbent, and only to the incumbent", async () => {
-    // No frame and no request: a script, a seed, the cron sweep.
-    expect(await resolveOrg()).toBe(INCUMBENT_ORG);
-    expect(INCUMBENT_ORG).toBe("fortitude");
+  it("refuses to read anything when nothing says which organisation", async () => {
+    // No frame and no request: a script, a seed, a background job. This used
+    // to fall back to Fortitude, which meant any request that lost its
+    // organisation quietly served a real company's live data.
+    await expect(resolveOrg()).rejects.toThrow(/No organisation on this request/);
+  });
+
+  it("throws before reading a row, not after", async () => {
+    // The distinction that matters: a query with no organisation must fail on
+    // the way in. Reading first and failing later would already have touched
+    // somebody's database.
+    await expect(prisma.organization.findMany()).rejects.toThrow(/No organisation on this request/);
   });
 
   it("knows exactly the two organisations it was configured with", () => {
@@ -173,7 +181,7 @@ describe("queries do not run until they are awaited", () => {
 
     // The frame is gone by the time either of these is awaited.
     expect((await pendingRaw)[0].s, "awaited outside the frame and lost the organisation").toBe(TEST_SCHEMA_B);
-    expect((await pendingRows).map((o) => o.name)).toEqual([SECOND_ORG_NAME]);
+    expect((await pendingRows).map((o) => o.name)).toEqual([OTHER_ORG_NAME]);
   });
 
   it("works inside Promise.all, which is how most of the app reads", async () => {
@@ -183,7 +191,7 @@ describe("queries do not run until they are awaited", () => {
         prisma.$queryRaw<{ s: string }[]>`SELECT current_schema() AS s`,
       ]),
     );
-    expect(orgs.map((o) => o.name)).toEqual([SECOND_ORG_NAME]);
+    expect(orgs.map((o) => o.name)).toEqual([OTHER_ORG_NAME]);
     expect(schema[0].s).toBe(TEST_SCHEMA_B);
   });
 });

@@ -51,3 +51,4 @@ _*.mjs
 tests/.fixtures.json
 tests/.schema
 tests/.schema-b
+tests/.fixtures-other.json

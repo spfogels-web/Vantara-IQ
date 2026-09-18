@@ -2,7 +2,7 @@ import "server-only";
 
 import { AsyncLocalStorage } from "node:async_hooks";
 
-import { INCUMBENT_ORG, isKnownOrg, type OrgId } from "@/lib/org-registry";
+import { isKnownOrg, type OrgId } from "@/lib/org-registry";
 
 /**
  * Which organisation the current request belongs to.
@@ -26,7 +26,8 @@ import { INCUMBENT_ORG, isKnownOrg, type OrgId } from "@/lib/org-registry";
  * made in a synchronous property access.
  */
 
-export const ORG_HEADER = "x-vq-org";
+export { ORG_HEADER } from "@/lib/org-header";
+import { ORG_HEADER } from "@/lib/org-header";
 
 const storage = new AsyncLocalStorage<OrgId>();
 
@@ -43,44 +44,61 @@ export function explicitOrg(): OrgId | undefined {
   return storage.getStore();
 }
 
+/** Thrown when a query is attempted with no organisation to send it to. */
+export class NoOrganisationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "NoOrganisationError";
+  }
+}
+
 /**
  * The organisation for the current request.
  *
- * Order: an explicit `runWithOrg` frame, then the request header, then the
- * incumbent.
+ * An explicit `runWithOrg` frame, then the request header middleware set from
+ * the signed session. If neither says, this throws.
  *
- * The last step is the one to watch. Today it is honest — this deployment
- * serves Fortitude and nothing else has a way in. It is a single named
- * constant rather than a literal buried here, so that when step 3 puts the
- * organisation on the session, removing the fallback is one deletion and the
- * compiler finds anything that depended on it. At that point a request with no
- * organisation is refused instead.
+ * It used to fall back to Fortitude. That fallback was the single most
+ * dangerous line in the tenancy work: a request that lost its organisation for
+ * any reason — a missed header, a background job, a route nobody thought about
+ * — would not fail, it would quietly serve a real company's live data to
+ * whoever asked. Nothing about that looks wrong in a log. Throwing is loud,
+ * happens before a single row is read, and is trivially fixed by naming the
+ * organisation at the call site that lacked one.
+ *
+ * The doors that legitimately have no session behind them — signing in,
+ * accepting an invitation, a carrier's webhook — say which organisation they
+ * mean, in their own code, where the decision is visible.
  */
 export async function resolveOrg(): Promise<OrgId> {
   const explicit = storage.getStore();
   if (explicit) return explicit;
 
+  let named: string | null = null;
   try {
     // Imported here rather than at the top of the file so that everything with
     // no request behind it — the cron sweep, seed scripts, the test suite —
     // can import this module without dragging Next's request machinery in.
     const { headers } = await import("next/headers");
-    const h = await headers();
-    const named = h.get(ORG_HEADER);
-    if (named) {
-      if (!isKnownOrg(named)) {
-        // A header naming an organisation we do not have is not something to
-        // paper over by serving a different one.
-        throw new Error(`Request names unknown organisation "${named}".`);
-      }
-      return named;
-    }
-  } catch (e) {
+    named = (await headers()).get(ORG_HEADER);
+  } catch {
     // `headers()` throws outside a request scope — a script, a test, a
-    // background job. That is expected and falls through. A genuine
-    // unknown-organisation error is re-thrown.
-    if (e instanceof Error && e.message.startsWith("Request names unknown organisation")) throw e;
+    // background job. Those must use `runWithOrg`, and the throw below says so.
   }
 
-  return INCUMBENT_ORG;
+  if (!named) {
+    throw new NoOrganisationError(
+      "No organisation on this request, so there is no database to read from. " +
+        "A signed-in request carries one in its session; anything without a session — " +
+        "a script, the cron sweep, a webhook — must name one with runWithOrg().",
+    );
+  }
+
+  if (!isKnownOrg(named)) {
+    // A header naming an organisation we do not have is not something to paper
+    // over by serving a different one.
+    throw new NoOrganisationError(`Request names unknown organisation "${named}".`);
+  }
+
+  return named;
 }

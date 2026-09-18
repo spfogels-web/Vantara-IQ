@@ -1,4 +1,6 @@
 import { serveOperativeDocument } from "@/lib/operative-document";
+import { runWithOrg } from "@/lib/org-context";
+import { PLATFORM_HOME_ORG } from "@/lib/org-registry";
 
 export const runtime = "nodejs";
 
@@ -10,8 +12,13 @@ export const runtime = "nodejs";
  * every sub — nothing about any particular crew, project or rate.
  */
 export async function GET() {
-  return serveOperativeDocument(
-    "MASTER_SUBCONTRACTOR_AGREEMENT",
-    "fortitude-subcontractor-agreement.pdf",
+  // No session behind this request — it is opened by someone who has not
+  // signed in, or posted by a carrier. Phase One serves these from the
+  // platform's home organisation, said here rather than defaulted anywhere.
+  return runWithOrg(PLATFORM_HOME_ORG, () =>
+    serveOperativeDocument(
+      "MASTER_SUBCONTRACTOR_AGREEMENT",
+      "fortitude-subcontractor-agreement.pdf",
+    ),
   );
 }

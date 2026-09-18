@@ -23,15 +23,13 @@ import {
   publishSchemaName,
   testDatabaseUrl,
 } from "./support/test-db";
-import { seedTwoTenants } from "./support/fixtures";
+import { PLATFORM_ADMIN_EMAIL, seedOtherDatabase, seedTwoTenants } from "./support/fixtures";
 
 const PORT = 3111;
 export const BASE_URL = `http://localhost:${PORT}`;
 const FIXTURE_FILE = join(process.cwd(), "tests", ".fixtures.json");
 
-/** The only row in the second organisation's database. See `SECOND_ORG_NAME`. */
-export { SECOND_ORG_NAME } from "./support/second-org";
-import { SECOND_ORG_NAME } from "./support/second-org";
+const OTHER_FIXTURE_FILE = join(process.cwd(), "tests", ".fixtures-other.json");
 
 let server: ChildProcess | null = null;
 
@@ -83,14 +81,14 @@ export async function setup() {
     await db.$disconnect();
   }
 
-  // A second organisation's database, for the proxy's routing tests. Only an
-  // organisation row is seeded: the assertion is which connection answered,
-  // and one row nobody else can see says that unambiguously.
+  // The second organisation's database — a whole contractor of its own, so the
+  // switch round-trip can prove that every screen changed and changed back.
   console.log(`  second organisation's schema: ${TEST_SCHEMA_B}`);
   await createTestSchema(TEST_SCHEMA_B);
   const other = testClient(TEST_SCHEMA_B);
   try {
-    await other.organization.create({ data: { name: SECOND_ORG_NAME } });
+    const tenant = await seedOtherDatabase(other);
+    writeFileSync(OTHER_FIXTURE_FILE, JSON.stringify(tenant, null, 2));
   } finally {
     await other.$disconnect();
   }
@@ -100,7 +98,19 @@ export async function setup() {
     process.execPath,
     [require.resolve("next/dist/bin/next"), "dev", "--turbopack", "--port", String(PORT)],
     {
-      env: { ...process.env, DATABASE_URL: url, DATABASE_URL_UNPOOLED: url, NODE_ENV: "development" },
+      env: {
+        ...process.env,
+        DATABASE_URL: url,
+        DATABASE_URL_UNPOOLED: url,
+        // The second organisation, under the id the registry knows it by. The
+        // server must be able to reach both or the switcher has nowhere to go.
+        APEX_DATABASE_URL: testDatabaseUrl(TEST_SCHEMA_B),
+        // Who may switch. Named explicitly so the test exercises the allowlist
+        // rather than a deployment that happens to let everyone through — and
+        // so the "not on the list" case has something real to be refused by.
+        PLATFORM_ADMIN_EMAILS: PLATFORM_ADMIN_EMAIL,
+        NODE_ENV: "development",
+      },
       stdio: "ignore",
       detached: process.platform !== "win32",
     },
@@ -113,6 +123,7 @@ export async function teardown() {
   stopServer();
   try {
     rmSync(FIXTURE_FILE, { force: true });
+    rmSync(OTHER_FIXTURE_FILE, { force: true });
   } catch {
     /* nothing to clean */
   }

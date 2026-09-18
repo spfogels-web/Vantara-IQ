@@ -1,8 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { jwtVerify } from "jose";
 
+import { ORG_HEADER } from "@/lib/org-header";
+
 /**
- * Route protection at the edge.
+ * Route protection at the edge, and the one place the organisation enters the
+ * request.
  *
  * Verifies the session cookie's signature only — no database access, because
  * middleware runs on the edge runtime where Prisma can't. Pages still read the
@@ -12,6 +15,23 @@ import { jwtVerify } from "jose";
  * Subcontractors are held to the crew-facing routes. Everything else — the
  * financials, the customer list, the whole subcontractor roster — is staff
  * only, and a sub who guesses a URL lands back on their dailies.
+ *
+ * ## The organisation
+ *
+ * Each organisation is a separate database, so which one a request belongs to
+ * decides which database every query in it reaches. It is read from the signed
+ * session and forwarded as a request header, because that is the only channel
+ * that survives into server-component rendering.
+ *
+ * Two rules make that safe, and both are absolute:
+ *
+ *   1. Any inbound copy of the header is **deleted**, on every path, before
+ *      anything else happens. Otherwise sending `x-vq-org: apex` by hand would
+ *      be enough to read another company's books.
+ *   2. The value is only ever taken from a token this server signed.
+ *
+ * A session predating organisations has no such claim, and is sent to sign in
+ * rather than assumed to mean Fortitude.
  */
 
 const SESSION_COOKIE = "vq_session";
@@ -111,24 +131,46 @@ function isPublic(pathname: string) {
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  if (isPublic(pathname)) return NextResponse.next();
+
+  // Before anything else, and regardless of where this request is going: a
+  // client does not get to say which organisation it belongs to.
+  const headers = new Headers(request.headers);
+  headers.delete(ORG_HEADER);
+  const forward = () => NextResponse.next({ request: { headers } });
 
   const token = request.cookies.get(SESSION_COOKIE)?.value;
-  if (!token) return redirectToLogin(request);
-
   const secret = process.env.AUTH_SECRET;
-  if (!secret) {
-    // Misconfigured rather than unauthorised — fail closed either way.
-    return redirectToLogin(request);
-  }
 
   let role: string | null = null;
-  try {
-    const { payload } = await jwtVerify(token, new TextEncoder().encode(secret));
-    role = typeof payload.role === "string" ? payload.role : null;
-  } catch {
-    return redirectToLogin(request);
+  let org: string | null = null;
+  if (token && secret) {
+    try {
+      const { payload } = await jwtVerify(token, new TextEncoder().encode(secret));
+      role = typeof payload.role === "string" ? payload.role : null;
+      // Both, or neither. A token carrying one without the other was not
+      // issued by this application in a state we recognise.
+      const home = typeof payload.home === "string" && payload.home ? payload.home : null;
+      org = home && typeof payload.org === "string" && payload.org ? payload.org : null;
+    } catch {
+      // Expired, tampered with, or signed by a different secret. Treated as no
+      // session at all rather than as a reason to trust any part of it.
+    }
   }
+
+  // Set even on public paths: the root serves the Operations Center to anyone
+  // signed in, and it needs a database to read. A visitor with no session gets
+  // no header, and the marketing page it renders for them asks for no data.
+  if (org) headers.set(ORG_HEADER, org);
+
+  if (isPublic(pathname)) return forward();
+
+  if (!token || !secret) return redirectToLogin(request);
+  if (!role) return redirectToLogin(request);
+
+  // A session issued before organisations existed. Repairing it would mean
+  // assuming it meant Fortitude, which is the silent defaulting this exists to
+  // remove. It costs the holder one sign-in.
+  if (!org) return redirectToLogin(request);
 
   if (role === "SUBCONTRACTOR") {
     const allowed =
@@ -142,7 +184,7 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  return NextResponse.next();
+  return forward();
 }
 
 function redirectToLogin(request: NextRequest) {

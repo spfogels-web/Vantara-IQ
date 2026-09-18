@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 
 import { handleDeliveryCallback } from "@/lib/sms-inbound";
+import { runWithOrg } from "@/lib/org-context";
+import { PLATFORM_HOME_ORG } from "@/lib/org-registry";
 
 export const runtime = "nodejs";
 
@@ -50,11 +52,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Bad signature." }, { status: 403 });
   }
 
-  await handleDeliveryCallback({
-    providerMessageId: params.MessageSid ?? params.SmsSid ?? "",
-    status: params.MessageStatus ?? params.SmsStatus ?? "",
-    errorCode: params.ErrorCode ?? "",
-  }).catch(() => undefined);
+  // Twilio carries no session. One account, one number, one registration —
+  // texting belongs to the home organisation and Apex never sends at all.
+  await runWithOrg(PLATFORM_HOME_ORG, () =>
+    handleDeliveryCallback({
+      providerMessageId: params.MessageSid ?? params.SmsSid ?? "",
+      status: params.MessageStatus ?? params.SmsStatus ?? "",
+      errorCode: params.ErrorCode ?? "",
+    }),
+  ).catch(() => undefined);
 
   // Twilio wants a 2xx and nothing else. Anything we could not match is not
   // its problem to retry — it is ours to look at in the event log.
