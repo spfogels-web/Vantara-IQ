@@ -72,6 +72,37 @@ export const SUBS = [
 export type SubKey = (typeof SUBS)[number]["key"];
 export const subOf = (key: SubKey) => SUBS.find((s) => s.key === key)!;
 
+/**
+ * Crew logins, so the subcontractor's own view of the product exists.
+ *
+ * Two of them, on purpose, belonging to different subcontractors. One proves
+ * a crew sees its own work; two prove a crew cannot see the other's — rates,
+ * payments, dailies or jobs — which is the property a prime contractor will
+ * want demonstrated before they put their subs on somebody else's software.
+ *
+ * Demo identities. The addresses are on a .test domain that cannot receive
+ * mail, there is no password hash, and nothing in the seed invites, texts or
+ * emails anybody: these rows are written directly.
+ */
+export const SUB_USERS = [
+  {
+    key: "vanmeer-lead",
+    name: "Sam Van Meer",
+    email: "sam.vanmeer@vanmeer.test",
+    sub: "vanmeer" as SubKey,
+    subUserRole: "OWNER",
+  },
+  {
+    key: "ridgeline-lead",
+    name: "Ana Ridge",
+    email: "ana.ridge@ridgelineaerial.test",
+    sub: "ridgeline" as SubKey,
+    subUserRole: "OWNER",
+  },
+] as const;
+
+export type SubUserKey = (typeof SUB_USERS)[number]["key"];
+
 /** Yards, so materials have somewhere to live. */
 export const YARDS = [
   { key: "tampa-yard", name: "Apex Tampa Yard", market: "tampa-bay" as MarketId, city: "Plant City", state: "FL", manager: "Toby Marchetti" },

@@ -25,7 +25,7 @@ import { identityOf, refuseForbiddenHost, targetFor, urlFor } from "../provision
 import { buildApexDataset, datasetCounts } from "./apex/dataset";
 import { CUSTOMERS, MARKETS, codeOf } from "./apex/catalog";
 import { anchorOf, on } from "./apex/dates";
-import { IN_HOUSE_CREWS, ORG, PROSPECTS, STAFF, SUBS, YARDS, subOf } from "./apex/org";
+import { IN_HOUSE_CREWS, ORG, PROSPECTS, STAFF, SUB_USERS, SUBS, YARDS, subOf } from "./apex/org";
 import { PROJECTS } from "./apex/projects";
 
 const MODULES = [
@@ -237,6 +237,40 @@ async function runModules(
         });
       }
     }
+    /**
+     * A crew's login, and the assignments it reads through.
+     *
+     * Access for a subcontractor is not a role check — it is ProjectCrew. A
+     * user with no assignment sees no job, whatever its role says, so seeding
+     * the login without the assignment would prove only that the empty case
+     * works. Each subcontractor is assigned exactly the jobs it performs.
+     */
+    for (const u of SUB_USERS) {
+      await db.user.upsert({
+        where: { email: u.email },
+        create: {
+          id: `apex-user-${u.key}`,
+          email: u.email,
+          name: u.name,
+          role: "SUBCONTRACTOR",
+          subUserRole: u.subUserRole as never,
+          subcontractorId: `apex-sub-${u.sub}`,
+          organizationId: "apex-org",
+        },
+        update: { name: u.name, role: "SUBCONTRACTOR", subcontractorId: `apex-sub-${u.sub}` },
+      });
+    }
+
+    for (const p of PROJECTS) {
+      if (p.performedBy.kind !== "sub") continue;
+      const id = `apex-pcrew-${p.key}`;
+      await db.projectCrew.upsert({
+        where: { id },
+        create: { id, projectId: `apex-proj-${p.key}`, subcontractorId: `apex-sub-${p.performedBy.key}` },
+        update: { subcontractorId: `apex-sub-${p.performedBy.key}` },
+      });
+    }
+
     await mark(db, "people");
     ran.push("people");
   }
