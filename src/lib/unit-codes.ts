@@ -62,6 +62,9 @@ export const MAIN_BILLABLE_CODES = [
   // Plow / vibratory bore — the bulk of the linear footage.
   'BFOV(12.7)(2W)12"DEPTH',
   'BFOV(12.7)(2W)12"DEPTH(D)', // the 12" depth adder, billed on every foot
+  // One-way 12.7mm microduct. The two-way was on this list and this was not,
+  // so a crew placing both had a code for one of them and typed the other.
+  "BFOV(12.7)(1W)12IN DEPTH",
   'BFOV(8.5)(1W)12"DEPTH',
   "BFOV(1)(1.25)",
   // Missile / directional bore.
@@ -70,10 +73,15 @@ export const MAIN_BILLABLE_CODES = [
   "BM60(1)(1 1/4)P",
   "BM60(1)(1 1/4)PFF",
   "BM60(2)(1 1/4)PF",
+  // Resi-bore crossing. Priced on the card and not offered until now.
+  "BM60(12.7)(2W)24IN",
   // Cable placement — pulling new cable into the ground.
   "BFO12",
   "BFO24",
   "BFO48",
+  // Priced on the card and absent here, so a 96-count pull had no code to
+  // pick — the one count in the family that could not be billed by choosing.
+  "BFO96",
   "BFO144",
   // The same fibre counts placed through vacant or existing pipe. The "I"
   // suffix is the whole difference and it is worth $1.75 a foot: Globe pays
@@ -125,16 +133,35 @@ export const MAIN_BILLABLE_CODES = [
   "BHF(30x48x24)T",
   "BHF(30X48X30)ST",
   "BHF(30X48X36)ST",
+  // The larger handholes. Every one is priced on the card and none was on this
+  // list, so a crew placing a 36x60 or a 48x96 had nothing to pick.
+  "BHF(30X48X36)T",
+  "BHF(36x60x30)T",
+  "BHF(36X60X36)ST",
+  "BHF(36x60x36)T",
+  "BHF(48X60X36)ST",
+  "BHF(48X60X36)T",
+  "BHF(48x96x36)T",
+  "BHF(48X96X48)ST",
+  "BHF(48x96x48)T",
   "BDO",
 ] as const;
 
-const MAIN_CODE_SET = new Set(
-  MAIN_BILLABLE_CODES.map((c) => c.toUpperCase().replace(/\s+/g, "")),
-);
+/**
+ * Compared through `normalizeCode`, not a looser spelling of it.
+ *
+ * This used to upper-case and strip whitespace and stop there, which left the
+ * inch mark alone — so `BFOV(12.7)(2W)12"DEPTH` on this list never matched
+ * `BFOV(12.7)(2W)12IN DEPTH` on the card, and three of the most-billed
+ * microduct codes on Trawick's sheet were absent from the picker while sitting
+ * in this very list. The two spellings are one code everywhere else in this
+ * file; they have to be one code here too.
+ */
+const MAIN_CODE_SET = new Set(MAIN_BILLABLE_CODES.map((c) => normalizeCode(c)));
 
 /** Is this one of the codes a crew is offered on a daily sheet? */
 export function isMainBillableCode(code: string): boolean {
-  return MAIN_CODE_SET.has(String(code).toUpperCase().replace(/\s+/g, ""));
+  return MAIN_CODE_SET.has(normalizeCode(code));
 }
 
 /** Uppercase, strip whitespace — "bm61(2)f " and "BM61(2)F" are the same code. */

@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 import { defineConfig } from "vitest/config";
 
@@ -22,6 +23,12 @@ for (const file of [".env.local", ".env"]) {
 }
 
 export default defineConfig({
+  resolve: {
+    // Anchored to "@/" rather than "@", or "@prisma/client" would resolve into
+    // src/ and nothing would import Prisma again. Test-only: the application
+    // build resolves this through tsconfig already.
+    alias: [{ find: /^@\//, replacement: resolve(process.cwd(), "src") + "/" }],
+  },
   test: {
     include: ["tests/**/*.test.ts"],
     globalSetup: ["tests/global-setup.ts"],

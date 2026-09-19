@@ -4483,24 +4483,48 @@ export async function getBillableCodes(
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },
-    select: { customerId: true },
+    // The market decides which of the customer's cards this job is priced
+    // against — the same two fields getProjectRates reads for its "we bill"
+    // column, so the picker and the job's rate panel cannot disagree about
+    // what this job bills.
+    select: { customerId: true, market: true, client: true },
   });
-  if (!project?.customerId) return [];
+  if (!project) return [];
+
+  // A job created before customers were linked still names its client. The
+  // rate panel already falls back this way; the picker has to as well.
+  const customerId =
+    project.customerId ??
+    (await prisma.customer.findFirst({ where: { name: project.client }, select: { id: true } }))
+      ?.id ??
+    null;
+  if (!customerId) return [];
 
   // No rate is selected. The picker only has to name the code correctly, and a
   // rate on an <option> ends up in the collapsed select, which is what the
   // browser prints onto the sheet Globe receives. Nobody is sent the number.
   const rows = await prisma.customerRate.findMany({
-    where: { customerId: project.customerId },
-    select: { code: true, description: true },
+    where: { customerId },
+    select: { code: true, description: true, market: true },
     orderBy: { code: "asc" },
   });
 
   // The work we actually sell, not everything the card can price. A crew
   // scrolling 2,472 codes picks the wrong one, and the wrong one still prices,
   // so nothing downstream catches it. See MAIN_BILLABLE_CODES to add a code.
+  /**
+   * Narrowed to the market this job is in, before anything else.
+   *
+   * A customer can hold more than one card: a market-specific row beats a
+   * blank one, and a row for some *other* market is excluded outright. Trawick
+   * prices South Georgia and Alabama differently under one customer, and
+   * without this an Alabama job was offered the South Georgia codes — which
+   * puts the wrong rate on the invoice rather than no rate at all.
+   */
+  const card = ratesForMarket(rows, project.market);
+
   const seen = new Set<string>();
-  return rows
+  return card
     .filter((r) => isMainBillableCode(r.code))
     .filter((r) => {
       const k = normalizeCode(r.code);

@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { CodeCombobox } from "@/components/dailies/code-combobox";
 import { Button } from "@/components/ui/button";
 import { QualityControl } from "@/components/dailies/quality-control";
 import { useT } from "@/components/layout/language-provider";
@@ -199,6 +200,8 @@ function Cell({
 export type BillableCode = {
   code: string;
   description: string;
+  /** One of the families we bill most. Breaks ties in the ordering only. */
+  preferred?: boolean;
 };
 
 /**
@@ -226,52 +229,7 @@ function CodeSelect({
   codes: BillableCode[];
   label: string;
 }) {
-  const onCard = React.useMemo(
-    () => codes.some((c) => c.code.toUpperCase() === value.trim().toUpperCase()),
-    [codes, value],
-  );
-
-
-  // No card loaded (a blank sheet with no project) — fall back to typing rather
-  // than offering an empty dropdown with no way out.
-  if (codes.length === 0) {
-    return (
-      <Cell
-        aria-label={label}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="mt-0.5 h-8 px-0.5 text-[12px] font-semibold uppercase text-foreground print:h-5"
-      />
-    );
-  }
-
-  return (
-    <select
-      aria-label={label}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className={cn(
-        // Looks like the cell next to it, not like a form control: no chrome,
-        // no arrow, inherits the table border. Tall enough to hit with gloves.
-        "mt-0.5 h-8 w-full cursor-pointer appearance-none bg-transparent px-0.5 text-center",
-        "text-[12px] font-semibold uppercase outline-none focus:bg-brand/10",
-        "print:h-5 print:text-[9px]",
-        value && !onCard ? "text-warning" : "text-foreground",
-      )}
-    >
-      <option value="">—</option>
-      {value && !onCard ? <option value={value}>{value} (not on card)</option> : null}
-      {/* The code and nothing else. The rate used to ride along as a find-me
-          aid, which a <select> then showed in the collapsed box — and that box
-          is what the browser prints. Our rate was landing on the sheet that
-          goes to Globe. */}
-      {codes.map((c) => (
-        <option key={c.code} value={c.code}>
-          {c.code}
-        </option>
-      ))}
-    </select>
-  );
+  return <CodeCombobox value={value} onChange={onChange} options={codes} label={label} />;
 }
 
 /** A labeled box from the header block: micro caps label above a write-in line. */
