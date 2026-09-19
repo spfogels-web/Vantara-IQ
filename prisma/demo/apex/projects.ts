@@ -61,15 +61,15 @@ export const PROJECTS: ProjectSeed[] = [
     codes: ["AFO144I", "AFOSTR", "FTHDRP", "FTHNAP", "FTHONT", "SPLRIB"],
     performedBy: { kind: "crew", key: "apex-aerial-1" }, pm: "pm-south",
     status: "Active", storylines: ["healthy"],
-    totalFt: 42000, remainingFt: 11800, requiredFtPerDay: 1350, historyDays: 18, deadlineDays: 24,
+    totalFt: 42000, remainingFt: 11800, requiredFtPerDay: 1350, historyDays: 45, deadlineDays: 24,
   },
   {
     key: "brandon-backbone", number: "APX-1042", name: "Brandon Backbone Reroute",
     customer: "calderon", market: "tampa-bay", location: "Brandon, FL",
     codes: ["UFO288I", "UFOCND2", "DD4IN", "UFOVLT", "RSTASP"],
     performedBy: { kind: "sub", key: "vanmeer" }, pm: "pm-south",
-    status: "Active", storylines: ["behind-production", "punch-list"],
-    totalFt: 28000, remainingFt: 17400, requiredFtPerDay: 900, historyDays: 16, deadlineDays: 9,
+    status: "Active", storylines: ["behind-production", "punch-list", "sub-payment-pending"],
+    totalFt: 28000, remainingFt: 17400, requiredFtPerDay: 900, historyDays: 42, deadlineDays: 9,
   },
   {
     key: "plantcity-drop", number: "APX-1043", name: "Plant City Drop Build",
@@ -77,7 +77,7 @@ export const PROJECTS: ProjectSeed[] = [
     codes: ["FTHDRP", "FTHONT", "PLW12"],
     performedBy: { kind: "sub", key: "colter" }, pm: "pm-south",
     status: "Active", storylines: ["missing-daily", "awaiting-verification"],
-    totalFt: 16500, remainingFt: 6100, requiredFtPerDay: 620, historyDays: 14, deadlineDays: 20,
+    totalFt: 16500, remainingFt: 6100, requiredFtPerDay: 620, historyDays: 38, deadlineDays: 20,
   },
   {
     key: "lutz-crossing", number: "APX-1044", name: "Lutz Highway Crossings",
@@ -85,7 +85,7 @@ export const PROJECTS: ProjectSeed[] = [
     codes: ["DD4IN", "DDRCK", "MSL2IN", "RSTASP"],
     performedBy: { kind: "sub", key: "vanmeer" }, pm: "pm-south",
     status: "Active", storylines: ["waiting-on-locates", "locate-expiring"],
-    totalFt: 4200, remainingFt: 3100, requiredFtPerDay: 180, historyDays: 8, deadlineDays: 15,
+    totalFt: 4200, remainingFt: 3100, requiredFtPerDay: 180, historyDays: 24, deadlineDays: 15,
   },
   // ---- Calderon · Gulf Coast ------------------------------------------------
   {
@@ -95,15 +95,15 @@ export const PROJECTS: ProjectSeed[] = [
     codes: ["AFO144I", "AFO288I", "AFOANC", "AFOSTR", "RSTCON"],
     performedBy: { kind: "sub", key: "ridgeline" }, pm: "pm-south",
     status: "Active", storylines: ["ready-to-bill", "sub-payment-pending"],
-    totalFt: 31000, remainingFt: 9200, requiredFtPerDay: 1100, historyDays: 20, deadlineDays: 18,
+    totalFt: 31000, remainingFt: 9200, requiredFtPerDay: 1100, historyDays: 48, deadlineDays: 18,
   },
   {
     key: "venice-restore", number: "APX-1052", name: "Venice Restoration Package",
     customer: "calderon", market: "gulf-coast", location: "Venice, FL",
     codes: ["RSTASP", "RSTCON", "RSTSOD"],
     performedBy: { kind: "sub", key: "quarry" }, pm: "pm-south",
-    status: "Active", storylines: ["punch-list", "awaiting-verification"],
-    totalFt: 9800, remainingFt: 2400, requiredFtPerDay: 420, historyDays: 12, deadlineDays: 11,
+    status: "Active", storylines: ["punch-list", "awaiting-verification", "sub-payment-pending"],
+    totalFt: 9800, remainingFt: 2400, requiredFtPerDay: 420, historyDays: 34, deadlineDays: 11,
   },
   {
     key: "northport-blow", number: "APX-1053", name: "North Port Fiber Blow",
@@ -111,7 +111,7 @@ export const PROJECTS: ProjectSeed[] = [
     codes: ["BLW144", "BLW288", "SPLCAS", "SPLTST"],
     performedBy: { kind: "crew", key: "apex-splice-1" }, pm: "pm-south",
     status: "Active", storylines: ["material-constrained"],
-    totalFt: 22000, remainingFt: 13500, requiredFtPerDay: 800, historyDays: 11, deadlineDays: 22,
+    totalFt: 22000, remainingFt: 13500, requiredFtPerDay: 800, historyDays: 30, deadlineDays: 22,
   },
   // ---- Mereside · Orlando Metro --------------------------------------------
   {
@@ -120,7 +120,7 @@ export const PROJECTS: ProjectSeed[] = [
     codes: ["FTHDRP", "FTHNAP", "FTHONT", "AFO48I", "SPLRIB"],
     performedBy: { kind: "sub", key: "tarpon" }, pm: "pm-north",
     status: "Active", storylines: ["healthy", "ready-to-bill"],
-    totalFt: 38000, remainingFt: 12900, requiredFtPerDay: 1250, historyDays: 19, deadlineDays: 26,
+    totalFt: 38000, remainingFt: 12900, requiredFtPerDay: 1250, historyDays: 46, deadlineDays: 26,
   },
   {
     key: "apopka-splice", number: "APX-2012", name: "Apopka Splice & Test",
@@ -128,7 +128,7 @@ export const PROJECTS: ProjectSeed[] = [
     codes: ["SPLRIB", "SPLCAS", "SPLTST"],
     performedBy: { kind: "sub", key: "pelham" }, pm: "pm-north",
     status: "Active", storylines: ["billed-unpaid"],
-    totalFt: 0, remainingFt: 0, requiredFtPerDay: 0, historyDays: 15, deadlineDays: 6,
+    totalFt: 0, remainingFt: 0, requiredFtPerDay: 0, historyDays: 70, deadlineDays: 6,
   },
   {
     key: "clermont-ug", number: "APX-2013", name: "Clermont Underground Extension",
@@ -136,7 +136,7 @@ export const PROJECTS: ProjectSeed[] = [
     codes: ["UFO144I", "UFOCND2", "UFOHH24", "TRN24", "RSTSOD"],
     performedBy: { kind: "crew", key: "apex-ug-1" }, pm: "pm-north",
     status: "Active", storylines: ["behind-production", "missing-asbuilt"],
-    totalFt: 26500, remainingFt: 16800, requiredFtPerDay: 850, historyDays: 17, deadlineDays: 7,
+    totalFt: 26500, remainingFt: 16800, requiredFtPerDay: 850, historyDays: 44, deadlineDays: 7,
   },
   // ---- Mereside · Space Coast ----------------------------------------------
   {
@@ -145,7 +145,7 @@ export const PROJECTS: ProjectSeed[] = [
     codes: ["AFO48I", "AFO144I", "AFOSTR", "AFOANC"],
     performedBy: { kind: "sub", key: "ridgeline" }, pm: "pm-north",
     status: "Active", storylines: ["healthy", "sub-payment-pending"],
-    totalFt: 19500, remainingFt: 5400, requiredFtPerDay: 700, historyDays: 16, deadlineDays: 19,
+    totalFt: 19500, remainingFt: 5400, requiredFtPerDay: 700, historyDays: 42, deadlineDays: 19,
   },
   {
     key: "palmbay-drop", number: "APX-2022", name: "Palm Bay Drop Program",
@@ -161,16 +161,16 @@ export const PROJECTS: ProjectSeed[] = [
     customer: "halstead", market: "north-florida", location: "Gainesville, FL",
     codes: ["UFOCND2", "UFO144I", "UFOVLT", "DD2IN", "RSTASP"],
     performedBy: { kind: "sub", key: "colter" }, pm: "pm-north",
-    status: "Active", storylines: ["waiting-on-locates", "material-constrained"],
-    totalFt: 21000, remainingFt: 14200, requiredFtPerDay: 720, historyDays: 13, deadlineDays: 17,
+    status: "Active", storylines: ["waiting-on-locates", "material-constrained", "sub-payment-pending"],
+    totalFt: 21000, remainingFt: 14200, requiredFtPerDay: 720, historyDays: 36, deadlineDays: 17,
   },
   {
     key: "ocala-bore", number: "APX-3012", name: "Ocala Rock Bore Series",
     customer: "halstead", market: "north-florida", location: "Ocala, FL",
     codes: ["DDRCK", "DD4IN", "RSTASP"],
     performedBy: { kind: "sub", key: "vanmeer" }, pm: "pm-north",
-    status: "Active", storylines: ["locate-expiring", "awaiting-verification"],
-    totalFt: 3600, remainingFt: 1500, requiredFtPerDay: 150, historyDays: 10, deadlineDays: 13,
+    status: "Active", storylines: ["locate-expiring", "awaiting-verification", "billed-unpaid"],
+    totalFt: 3600, remainingFt: 1500, requiredFtPerDay: 150, historyDays: 70, deadlineDays: 13,
   },
   {
     key: "lakecity-plow", number: "APX-3013", name: "Lake City Plow Route",
@@ -178,7 +178,7 @@ export const PROJECTS: ProjectSeed[] = [
     codes: ["PLW12", "TRN24", "MSL2IN", "RSTSOD"],
     performedBy: { kind: "crew", key: "apex-ug-1" }, pm: "pm-north",
     status: "Completed", storylines: ["completed"],
-    totalFt: 18000, remainingFt: 0, requiredFtPerDay: 750, historyDays: 22, deadlineDays: -12,
+    totalFt: 18000, remainingFt: 0, requiredFtPerDay: 750, historyDays: 52, deadlineDays: -12,
   },
   // ---- Brightwater · Gulf Coast (no crew number on file) --------------------
   {
@@ -186,8 +186,8 @@ export const PROJECTS: ProjectSeed[] = [
     customer: "brightwater", market: "gulf-coast", location: "Osprey, FL",
     codes: ["CIVPAD", "CIVBOL", "RSTSOD", "TRN24"],
     performedBy: { kind: "sub", key: "sable" }, pm: "pm-south",
-    status: "Active", storylines: ["missing-asbuilt", "punch-list"],
-    totalFt: 0, remainingFt: 0, requiredFtPerDay: 0, historyDays: 12, deadlineDays: 14,
+    status: "Active", storylines: ["missing-asbuilt", "punch-list", "billed-unpaid"],
+    totalFt: 0, remainingFt: 0, requiredFtPerDay: 0, historyDays: 70, deadlineDays: 14,
   },
   // ---- Ardent · North Florida ----------------------------------------------
   {
@@ -196,7 +196,7 @@ export const PROJECTS: ProjectSeed[] = [
     codes: ["UFOCND2", "UFOVLT", "DD4IN", "CIVPAD", "RSTASP"],
     performedBy: { kind: "sub", key: "sable" }, pm: "pm-north",
     status: "Active", storylines: ["billed-unpaid", "ready-to-bill"],
-    totalFt: 12500, remainingFt: 4800, requiredFtPerDay: 520, historyDays: 18, deadlineDays: 21,
+    totalFt: 12500, remainingFt: 4800, requiredFtPerDay: 520, historyDays: 74, deadlineDays: 21,
   },
   {
     key: "ardent-restore", number: "APX-5012", name: "Ardent Restoration Closeout",
@@ -204,7 +204,7 @@ export const PROJECTS: ProjectSeed[] = [
     codes: ["RSTASP", "RSTSOD", "CIVBOL"],
     performedBy: { kind: "sub", key: "quarry" }, pm: "pm-north",
     status: "Completed", storylines: ["completed"],
-    totalFt: 7400, remainingFt: 0, requiredFtPerDay: 380, historyDays: 16, deadlineDays: -25,
+    totalFt: 7400, remainingFt: 0, requiredFtPerDay: 380, historyDays: 40, deadlineDays: -25,
   },
 ];
 

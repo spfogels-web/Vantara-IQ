@@ -53,7 +53,7 @@ export type DemoInvoice = {
   projectKey: string;
   periodStart: DateString;
   periodEnd: DateString;
-  status: "DRAFT" | "SENT" | "PAID";
+  status: "DRAFT" | "SENT" | "PARTIAL" | "PAID";
   dailyKeys: string[];
   subtotal: number;
   retainagePct: number;
@@ -211,9 +211,18 @@ export function buildApexDataset(anchor: Date) {
     });
   }
 
-  // ---- Invoices: built from approved dailies, never typed -------------------
+  // ---- Invoices: one per billing period, built from approved dailies --------
   const invoices: DemoInvoice[] = [];
   let invoiceNo = 4100;
+
+  /** Dailies in billing runs of twenty working days, oldest run first. */
+  const PERIOD_DAYS = 20;
+  function byPeriod(rows: DemoDaily[]): DemoDaily[][] {
+    const sorted = [...rows].sort((a, b) => a.workDate.localeCompare(b.workDate));
+    const out: DemoDaily[][] = [];
+    for (let i = 0; i < sorted.length; i += PERIOD_DAYS) out.push(sorted.slice(i, i + PERIOD_DAYS));
+    return out;
+  }
 
   for (const p of PROJECTS) {
     const mine = dailies.filter((d) => d.projectKey === p.key && d.status === "Approved");
@@ -221,41 +230,72 @@ export function buildApexDataset(anchor: Date) {
     const cust = customerOf(p.customer);
 
     /**
-     * "Ready to bill" means approved work with no invoice against it — so
-     * those projects deliberately leave their most recent fortnight uninvoiced
-     * rather than carrying a flag.
+     * A contractor bills monthly, so the demo does too — and that is what puts
+     * an age on the money. One invoice per job would show a balance; a run of
+     * them shows which periods were paid, which is still open, and how long it
+     * has been open, which is the question somebody actually asks.
+     */
+    const periods = byPeriod(mine);
+
+    /**
+     * "Ready to bill" means approved work with no invoice against it, so those
+     * jobs leave their most recent period uninvoiced rather than carrying a
+     * flag saying so.
      */
     const readyToBill = p.storylines.includes("ready-to-bill");
-    const billed = readyToBill ? mine.slice(Math.ceil(mine.length / 2)) : mine;
-    if (!billed.length) continue;
+    const billable = readyToBill ? periods.slice(0, -1) : periods;
 
-    const sorted = [...billed].sort((a, b) => a.workDate.localeCompare(b.workDate));
-    const subtotal = money(sorted.reduce((s, d) => s + d.billableAmount, 0));
-    const retainagePct = cust.retainagePct;
-    const retainageHeld = money(subtotal * retainagePct);
+    billable.forEach((group, i) => {
+      const isLast = i === billable.length - 1;
+      const subtotal = money(group.reduce((s, d) => s + d.billableAmount, 0));
+      const retainagePct = cust.retainagePct;
+      const retainageHeld = money(subtotal * retainagePct);
+      const net = money(subtotal - retainageHeld);
 
-    const unpaid = p.storylines.includes("billed-unpaid");
-    const completed = p.status === "Completed";
-    const status: DemoInvoice["status"] = unpaid ? "SENT" : completed ? "PAID" : "SENT";
-    const paidAmount = status === "PAID" ? money(subtotal - retainageHeld) : 0;
+      /**
+       * Older periods are settled, the newest is outstanding, and one in the
+       * middle is part-paid — the shape of a real ledger rather than a row of
+       * identical statuses.
+       */
+      const unpaidStory = p.storylines.includes("billed-unpaid");
+      let status: DemoInvoice["status"];
+      let paidAmount: number;
+      if (unpaidStory && i === 0) {
+        // The oldest run, still open — long past its terms.
+        status = "SENT";
+        paidAmount = 0;
+      } else if (isLast && p.status !== "Completed") {
+        status = "SENT";
+        paidAmount = 0;
+      } else if (i === 1 && billable.length > 2) {
+        status = "PARTIAL";
+        paidAmount = money(net * 0.6);
+      } else {
+        status = "PAID";
+        paidAmount = net;
+      }
 
-    invoices.push({
-      key: `inv-${p.key}`,
-      number: `APX-${invoiceNo++}`,
-      customer: p.customer,
-      projectKey: p.key,
-      periodStart: sorted[0].workDate,
-      periodEnd: sorted[sorted.length - 1].workDate,
-      status,
-      dailyKeys: sorted.map((d) => d.key),
-      subtotal,
-      retainagePct,
-      retainageHeld,
-      amountDue: money(subtotal - retainageHeld - paidAmount),
-      // An overdue invoice is overdue by its dates, not by a label.
-      issuedDays: unpaid ? -52 : -30,
-      dueDays: unpaid ? -22 : 5,
-      paidAmount,
+      // Age follows the period: each one issued at its close, due on terms.
+      const periodEnd = group[group.length - 1].workDate;
+      const ageDays = Math.round((anchor.getTime() - new Date(periodEnd + "T12:00:00Z").getTime()) / 864e5);
+
+      invoices.push({
+        key: `inv-${p.key}-${i}`,
+        number: `APX-${invoiceNo++}`,
+        customer: p.customer,
+        projectKey: p.key,
+        periodStart: group[0].workDate,
+        periodEnd,
+        status,
+        dailyKeys: group.map((d) => d.key),
+        subtotal,
+        retainagePct,
+        retainageHeld,
+        amountDue: money(subtotal - retainageHeld - paidAmount),
+        issuedDays: -ageDays,
+        dueDays: -ageDays + (cust.terms === "Net 60" ? 60 : cust.terms === "Net 45" ? 45 : 30),
+        paidAmount,
+      });
     });
   }
 
@@ -265,32 +305,35 @@ export function buildApexDataset(anchor: Date) {
 
   for (const p of PROJECTS) {
     if (p.performedBy.kind !== "sub") continue;
-    const sub = subOf(p.performedBy.key);
     const mine = dailies.filter((d) => d.projectKey === p.key && d.subCost !== null && d.status === "Approved");
     if (!mine.length) continue;
 
-    const sorted = [...mine].sort((a, b) => a.workDate.localeCompare(b.workDate));
-    const subtotal = money(sorted.reduce((s, d) => s + (d.subCost ?? 0), 0));
-    const retainagePct = 0.05;
-    const retainageHeld = money(subtotal * retainagePct);
+    const periods = byPeriod(mine);
+    periods.forEach((group, i) => {
+      const isLast = i === periods.length - 1;
+      const subtotal = money(group.reduce((s, d) => s + (d.subCost ?? 0), 0));
+      const retainagePct = 0.05;
+      const retainageHeld = money(subtotal * retainagePct);
+      const net = money(subtotal - retainageHeld);
 
-    const pending = p.storylines.includes("sub-payment-pending");
-    const status: DemoSubInvoice["status"] = pending ? "ACCEPTED" : p.status === "Completed" ? "PAID" : "ISSUED";
-    const paidAmount = status === "PAID" ? money(subtotal - retainageHeld) : 0;
+      const pending = p.storylines.includes("sub-payment-pending");
+      const status: DemoSubInvoice["status"] = isLast && pending ? "ACCEPTED" : isLast ? "ISSUED" : "PAID";
+      const paidAmount = status === "PAID" ? net : 0;
 
-    subInvoices.push({
-      key: `sinv-${p.key}`,
-      number: `APXS-${subNo++}`,
-      sub: p.performedBy.key,
-      projectKey: p.key,
-      periodStart: sorted[0].workDate,
-      periodEnd: sorted[sorted.length - 1].workDate,
-      status,
-      subtotal,
-      retainagePct,
-      retainageHeld,
-      paidAmount,
-      dailyKeys: sorted.map((d) => d.key),
+      subInvoices.push({
+        key: `sinv-${p.key}-${i}`,
+        number: `APXS-${subNo++}`,
+        sub: (p.performedBy as { kind: "sub"; key: SubKey }).key,
+        projectKey: p.key,
+        periodStart: group[0].workDate,
+        periodEnd: group[group.length - 1].workDate,
+        status,
+        subtotal,
+        retainagePct,
+        retainageHeld,
+        paidAmount,
+        dailyKeys: group.map((d) => d.key),
+      });
     });
   }
 
