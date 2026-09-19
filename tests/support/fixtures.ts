@@ -395,7 +395,6 @@ export async function seedIncumbentConfig(db: PrismaClient): Promise<void> {
   await db.orgCodeProfile.create({
     data: {
       priorityCodes: ["BFO12","BFO24","BFO48","BFO144","BMFAF","BFOV","BM5F1","BD5MPF","BD4MPF","BM60","BM61","BM2","BM26","BM53","BHF","BDO"],
-      billableCodes: ["BFOV(12.7)(2W)12\"DEPTH","BFOV(12.7)(2W)12\"DEPTH(D)","BFOV(8.5)(1W)12\"DEPTH","BFOV(1)(1.25)","BM61(2)F","BM61(2)F12IN DEPTH","BM60(1)(1 1/4)P","BM60(1)(1 1/4)PFF","BM60(2)(1 1/4)PF","BFO12","BFO24","BFO48","BFO144","BFO12I","BFO24I","BFO36I","BFO48I","BFO60I","BFO72I","BFO96I","BFO144I","BFO192I","BFO216I","BFO288I","BFO12RI","BFO24RI","BM2F","BM2AF","BM26F","BM53F","BMFAF","BD4MPF","BD5MPF","BHF(6)P","BHF(10)P","BHF(14x19x12)P","BHF(17X30X18)T","BHF(17X30X24)T","BHF(24X36X24)T","BHF(30x48x24)T","BHF(30X48X30)ST","BHF(30X48X36)ST","BDO"],
       families: {"BFO-MAIN":["BFO12","BFO24","BFO48","BFO96","BFO144"],"BFOV-12.7-12IN":["BFOV(12.7)(1W)12IN DEPTH","BFOV(12.7)(2W)12IN DEPTH"]},
     },
   });
@@ -425,7 +424,6 @@ export async function seedOtherConfig(db: PrismaClient): Promise<void> {
   await db.orgCodeProfile.create({
     data: {
       priorityCodes: ["AFO24", "AFO48", "SPL12", "STRM8"],
-      billableCodes: ["AFO24", "AFO48", "SPL12", "STRM8", "AFO24I"],
       families: { "AFO-MAIN": ["AFO24", "AFO48"] },
     },
   });

@@ -198,22 +198,24 @@ model Market {
   sortOrder Int      @default(0)
 }
 
-/// This organisation's unit-code vocabulary.
+/// How this organisation *presents* unit codes: which it leads with, and which
+/// belong together on a rate card. A contractor running aerial, splicing and
+/// storm work answers both differently, and the pickers and the rate-family
+/// grouping were shaped around one contractor's underground vocabulary.
 ///
-/// The code lists were one contractor's underground vocabulary — which codes
-/// matter, and which belong together on a rate card. A contractor running
-/// aerial, splicing and storm work has a different answer to both, and the
-/// pickers and the rate-family grouping were shaped around the first one.
+/// Presentation and configuration only. What a crew may bill is not decided
+/// here — it is the customer's rate card for the project's market, narrowed to
+/// the work the organisation performs. This model once carried a `billableCodes`
+/// list as well, which made it a second, hand-maintained source of truth for
+/// money; it drifted from the rate cards, and twelve codes went missing from
+/// the daily sheet. A profile that is missing or empty must never be able to
+/// take a code off a sheet the customer is invoiced for.
 model OrgCodeProfile {
   id String @id @default("singleton")
 
   /// The codes this organisation bills most, in the order the pickers offer
   /// them. Matched by prefix, so BFO12 covers BFO12I and BFO12RI.
   priorityCodes String[]
-  /// Exactly the codes a crew may put on a daily sheet. Exact, not prefixes:
-  /// matching by family puts hundreds of variants on a dropdown and a crew
-  /// picks the wrong one, which still prices.
-  billableCodes String[]
   /// Code families, as `{ familyName: [code, …] }`. Codes in one family are
   /// priced together, so a rate card that sets one and not its siblings is
   /// incomplete rather than wrong.
