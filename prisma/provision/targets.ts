@@ -67,6 +67,47 @@ export function targetFor(key: string): ProvisionTarget {
   return t;
 }
 
+/**
+ * The kill switch. Throws before any connection is opened.
+ *
+ * Shared by every tool that resolves a tenant database, so provisioning and
+ * verification refuse on identical grounds — a read-only tool pointed at a
+ * live tenant is still a tool reporting the wrong database's state as if it
+ * were the one being built.
+ */
+export function refuseForbiddenHost(host: string, where: string): void {
+  for (const { mark, who } of NEVER_PROVISION) {
+    if (host.includes(mark)) {
+      throw new Error(
+        `REFUSING: ${where} resolves to ${host}, which contains "${mark}" — ${who}.`,
+      );
+    }
+  }
+}
+
+/** The positive half: it must be the endpoint this organisation lives on. */
+export function refuseUnexpectedHost(t: ProvisionTarget, host: string, where: string): void {
+  if (!host.includes(t.expectHostMark)) {
+    throw new Error(
+      `REFUSING: ${where} resolves to ${host}, which is not ${t.label}'s endpoint ("${t.expectHostMark}").`,
+    );
+  }
+}
+
+/**
+ * The connection string for a target, checked before it is handed to anything.
+ * There is no code path that returns a URL without these two refusals.
+ */
+export function urlFor(t: ProvisionTarget, kind: "pooled" | "direct"): string {
+  const v = kind === "pooled" ? t.urlVar : t.directUrlVar;
+  const url = process.env[v];
+  if (!url) throw new Error(`${v} is not set — refusing to guess a target`);
+  const { host } = identityOf(url);
+  refuseForbiddenHost(host, `${t.label} (${kind})`);
+  refuseUnexpectedHost(t, host, `${t.label} (${kind})`);
+  return url;
+}
+
 /** Host and database of a connection string, never its credentials. */
 export function identityOf(url: string): { host: string; database: string; user: string } {
   const u = new URL(url);
