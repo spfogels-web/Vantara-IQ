@@ -4494,6 +4494,37 @@ export async function getLocateSummary(): Promise<LocateSummary> {
  * a code and BFOV(12.7)(2W)12"DEPTH is. Offering the real strings is what stops
  * that happening again.
  */
+/**
+ * What this project's customer knows us by, for the daily sheet header.
+ *
+ * Resolved through the project's customer, the same way the rate card is, and
+ * with the same fallback for a job created before customers were linked. Two
+ * primes issue two different numbers, so there is nothing here to share and
+ * nothing to default to: a customer with no number on file gets a blank field
+ * the crew can fill, never the number some other customer issued.
+ */
+export async function getProjectCrewNumber(projectId: string): Promise<string> {
+  await assertProjectAccess(projectId);
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { customerId: true, client: true },
+  });
+  if (!project) return "";
+
+  const customer = project.customerId
+    ? await prisma.customer.findUnique({
+        where: { id: project.customerId },
+        select: { crewNumber: true },
+      })
+    : await prisma.customer.findFirst({
+        where: { name: project.client },
+        select: { crewNumber: true },
+      });
+
+  return customer?.crewNumber ?? "";
+}
+
 export async function getBillableCodes(
   projectId: string,
 ): Promise<{ code: string; description: string }[]> {

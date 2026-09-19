@@ -2529,7 +2529,10 @@ export async function saveVendorPacket(subcontractorId: string, input: VendorPac
       billingOfficePhone: clean(input.billingOfficePhone),
       billingMailingAddress: clean(input.billingMailingAddress),
       paymentMethod: clean(input.paymentMethod),
-      paymentTerms: clean(input.paymentTerms) || 'Net 21',
+      // This organisation's own terms when the packet leaves it blank. Was
+      // a literal 'Net 21', which is one contractor's agreement with its
+      // crews printed onto everybody else's.
+      paymentTerms: clean(input.paymentTerms) || (await orgSettings()).subTerms,
       remittanceEmail: clean(input.remittanceEmail),
       contractorLicense: clean(input.contractorLicense),
       dotNumber: clean(input.dotNumber),

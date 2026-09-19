@@ -117,20 +117,22 @@ export type SheetProject = {
   client: string;
   location: string;
   crew: string;
+  /** What this project's customer knows us by. Blank when they have not said. */
+  crewNumber: string;
   mapUrl?: string | null;
   markups?: unknown;
 };
 
 /**
- * Fortitude's crew number with Globe. It is the same on every sheet, so it is
- * prefilled rather than retyped — and the field stays editable for the day a
- * second crew number exists.
+ * The crew number comes from the project's customer, not from here.
  *
- * This used to be filled with the project's crew *name* ("Garcia"), which is a
- * different thing entirely and meant every sheet went out with the wrong value
- * in a field Globe bills against.
+ * It was a constant holding one contractor's number with Globe, so every
+ * prime and every organisation shared it — and a Trawick sheet went out
+ * carrying the number Globe issued, in a field the prime bills against.
+ *
+ * Still prefilled rather than retyped, still editable, and blank when the
+ * customer has no number on file. See Customer.crewNumber.
  */
-export const CREW_NUMBER = "24208171927-A27-311";
 
 /**
  * The subcontractor Globe is billed under. It goes in the first employee slot
@@ -146,9 +148,13 @@ export const selfPerformName = (orgName: string) => orgName;
  * already filled — the crew only ever writes down production. Every one of
  * them stays editable, because the paper form gets corrected in the field too.
  */
-const blankHeader = (project: SheetProject | undefined, orgName: string): SheetHeader => ({
+const blankHeader = (
+  project: SheetProject | undefined,
+  orgName: string,
+  crewNumber: string,
+): SheetHeader => ({
   exchange: project?.number ?? "",
-  crewNumber: CREW_NUMBER,
+  crewNumber,
   customer: project?.client ?? "",
   dateWorked: "",
   projectNumber: project?.number ?? "",
@@ -339,8 +345,13 @@ export type SavedSheet = {
  * threw, and a throw during render is a blank page with a client-side
  * exception rather than a missing name.
  */
-function asHeader(stored: unknown, project: SheetProject | undefined, orgName: string): SheetHeader {
-  const base = blankHeader(project, orgName);
+function asHeader(
+  stored: unknown,
+  project: SheetProject | undefined,
+  orgName: string,
+  crewNumber: string,
+): SheetHeader {
+  const base = blankHeader(project, orgName, crewNumber);
   const raw = (stored ?? {}) as Partial<SheetHeader>;
   const names = Array.isArray(raw.employees) ? raw.employees : [];
   return {
@@ -433,7 +444,7 @@ export function DailyBillingSheet({
   const [filedForId, setFiledForId] = React.useState(initialFiledForId ?? "");
   const [roads, setRoads] = React.useState(initialRoads ?? "");
   const [header, setHeader] = React.useState<SheetHeader>(() =>
-    asHeader(saved?.header, project, orgName),
+    asHeader(saved?.header, project, orgName, project?.crewNumber ?? ""),
   );
   const [labor, setLabor] = React.useState<LaborRow[]>(() =>
     saved ? asLaborRows(saved.laborRows, UNIT_COLS) : Array.from({ length: LABOR_ROWS }, blankLaborRow),
@@ -736,7 +747,7 @@ export function DailyBillingSheet({
   }, [billableCodes, laborCodes, matCodes]);
 
   function reset() {
-    setHeader(blankHeader(project, orgName));
+    setHeader(blankHeader(project, orgName, project?.crewNumber ?? ""));
     setLabor(Array.from({ length: LABOR_ROWS }, blankLaborRow));
     setLaborCodes(Array(UNIT_COLS).fill(""));
     setMat(Array.from({ length: MAT_ROWS }, blankMatRow));

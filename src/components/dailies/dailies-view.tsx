@@ -872,7 +872,7 @@ function DailyDetail({
           <Panel>
             <PanelBody className="flex flex-wrap items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="text-[13px] font-medium text-foreground">{t("Globe billing sheet")}</p>
+                <p className="text-[13px] font-medium text-foreground">{d.customer ? t("{customer} billing sheet").replace("{customer}", d.customer) : t("Billing sheet")}</p>
                 <p className="mt-0.5 text-[12px] text-muted-foreground">
                   {t("The filled-in form and the day's redlined map, as submitted.")}
                 </p>

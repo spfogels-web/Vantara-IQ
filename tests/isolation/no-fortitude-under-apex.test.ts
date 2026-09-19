@@ -127,17 +127,31 @@ async function textOf(path: string, cookie: string, attempts = 4): Promise<strin
 }
 
 /**
- * Just the page body — what the screen is about, without the surrounding
- * chrome. Empty string when the screen has no `<main>`, which reads as
- * "nothing to check" rather than as a pass.
+ * What the screen actually renders.
+ *
+ * This was the `<main>` slice, and that slice is a shell: 26,602 bytes, byte
+ * for byte identical across /projects, /subcontractors, /invoicing, /dailies
+ * and /settings, carrying none of their data — the lists stream in behind
+ * Suspense and land after `</main>`. Asserting a name was absent from it was
+ * asserting a name was absent from a skeleton, which it always is.
+ *
+ * So: the rendered markup, with the RSC flight payload stripped out. The
+ * payload is where the switcher's list of organisations lives — every company
+ * this operator may enter, by name — and that list is the switcher doing its
+ * job and the only way back. What is *rendered* belongs to the organisation
+ * signed in; what is serialized for the switcher does not have to.
+ *
+ * The rest of the incumbent's configuration is not let off this lightly: the
+ * assertion above reads the whole reply, payload included, and no market,
+ * prime, code, one-call centre or phone number may appear anywhere in it.
+ *
+ * Empty string when the screen did not render, which the non-vacuity guard
+ * below turns into a failure rather than a pass.
  */
-async function mainOf(path: string, cookie: string): Promise<string> {
+async function renderedOf(path: string, cookie: string): Promise<string> {
   const r = await readOnce(path, cookie);
   if (r.status !== 200) return "";
-  const open = r.body.indexOf("<main");
-  const close = r.body.lastIndexOf("</main>");
-  if (open < 0 || close <= open) return "";
-  return r.body.slice(open, close);
+  return r.body.replace(/<script[^>]*>self\.__next_f\.push\([\s\S]*?\)<\/script>/g, "");
 }
 
 /**
@@ -152,7 +166,7 @@ async function mainOf(path: string, cookie: string): Promise<string> {
 const under = {
   incumbent: {} as Record<string, string>,
   other: {} as Record<string, string>,
-  /** Just the `<main>` of each screen under the other organisation. */
+  /** What each screen under the other organisation actually renders. */
   otherBody: {} as Record<string, string>,
 };
 
@@ -162,7 +176,7 @@ beforeAll(async () => {
   for (const screen of SCREENS) {
     under.incumbent[screen] = await textOf(screen, mine);
     under.other[screen] = await textOf(screen, theirs);
-    under.otherBody[screen] = await mainOf(screen, theirs);
+    under.otherBody[screen] = await renderedOf(screen, theirs);
   }
 }, 900_000);
 
@@ -188,6 +202,35 @@ describe("the two databases are configured differently", () => {
       expect(codesA?.priorityCodes.length, "the incumbent has no code profile").toBeGreaterThan(0);
       expect(codesB?.priorityCodes.length, "the other organisation has no code profile").toBeGreaterThan(0);
       expect(codesA?.priorityCodes).not.toEqual(codesB?.priorityCodes);
+
+      /**
+       * The crew number, which is the plainest commercial relationship there
+       * is — an identifier issued by somebody else's billing department, in a
+       * field the prime bills against.
+       *
+       * It belongs to the customer, not the organisation: a contractor working
+       * for two primes is two different numbers to them. It was a constant in
+       * the sheet component, so every prime and every organisation shared one.
+       * A wrong number here does not look wrong on the paperwork — it looks
+       * like a sheet from a company that did not do the work.
+       */
+      const [custA, custB] = await Promise.all([
+        a.customer.findMany({ select: { name: true, crewNumber: true } }),
+        b.customer.findMany({ select: { name: true, crewNumber: true } }),
+      ]);
+      const numbersA = custA.map((c) => c.crewNumber).filter(Boolean);
+      const numbersB = custB.map((c) => c.crewNumber).filter(Boolean);
+
+      expect(numbersA.length, "no customer of the incumbent has a crew number, so nothing below is a contrast").toBeGreaterThan(0);
+      expect(numbersB.length, "no customer of the other organisation has one of its own").toBeGreaterThan(0);
+      for (const n of numbersB) {
+        expect(numbersA, `both organisations file under crew number ${n}`).not.toContain(n);
+      }
+
+      // And the terms they bill on, which were schema defaults before this.
+      const [setA, setB] = await Promise.all([a.orgSettings.findFirst(), b.orgSettings.findFirst()]);
+      expect(setA?.subTerms).not.toEqual(setB?.subTerms);
+      expect(setA?.customerTerms).not.toEqual(setB?.customerTerms);
     } finally {
       await Promise.all([a.$disconnect(), b.$disconnect()]);
     }
@@ -237,6 +280,20 @@ describe("under another organisation", () => {
       .map(([screen]) => screen);
 
     expect(named, `the incumbent was named in the body of: ${named.join(", ")}`).toEqual([]);
+
+    // Absence proves nothing about a region that holds nothing. The previous
+    // version of this test read the <main> skeleton, which carried none of any
+    // screen's data, so it could not have found the incumbent's name there
+    // whether or not it leaked. What is read now has to be shown to carry the
+    // other organisation's own work.
+    const carrying = Object.entries(under.otherBody)
+      .filter(([, text]) => text.includes(other.customerName) || text.includes(other.projectName))
+      .map(([screen]) => screen);
+
+    expect(
+      carrying.length,
+      "no screen rendered the other organisation's own customer or project, so looking for the incumbent's name in them proves nothing",
+    ).toBeGreaterThan(0);
   }, 300_000);
 
   it("shows the other organisation's own configuration instead", async () => {

@@ -40,6 +40,10 @@ export type Tenant = {
   taskId: string;
   locateTicketId: string;
   customerRate: number;
+  crewNumber: string;
+  customer2Name: string;
+  project2Id: string;
+  project2Name: string;
   crews: [Crew, Crew];
 };
 
@@ -57,6 +61,18 @@ type Spec = {
   invoiceNumber: string;
   /** What this contractor bills its customer for one unit code. */
   customerRate: number;
+  /** What this customer knows the contractor by on their paperwork. */
+  crewNumber: string;
+  /**
+   * A second prime, deliberately with no crew number on file.
+   *
+   * One customer's identifier must never stand in for another's, and the
+   * only way to show that is a customer that has none: if the sheet for this
+   * job shows the first customer's number, the fallback is back.
+   */
+  customer2: string;
+  shortCode2: string;
+  project2: string;
   crews: { company: string; email: string; rate: number; subInvoice: string }[];
 };
 
@@ -71,6 +87,10 @@ const SPECS: Spec[] = [
     project: "Whitfield Loop",
     invoiceNumber: "NG-1001",
     customerRate: 8.5,
+    crewNumber: "NG-4471-A12-908",
+    customer2: "Halvern Networks",
+    shortCode2: "HLV",
+    project2: "Ardley Cut",
     crews: [
       { company: "Pellham Boring", email: "lead@pellham.test", rate: 6.0, subInvoice: "NG-S-4001" },
       { company: "Orsett Underground", email: "lead@orsett.test", rate: 5.75, subInvoice: "NG-S-4002" },
@@ -86,6 +106,10 @@ const SPECS: Spec[] = [
     project: "Denholm Extension",
     invoiceNumber: "BL-2001",
     customerRate: 9.25,
+    crewNumber: "APX-8820-C04-115",
+    customer2: "Sowerby Telecom",
+    shortCode2: "SWB",
+    project2: "Kestrel Spur",
     crews: [
       { company: "Vance Trenching", email: "lead@vance.test", rate: 6.4, subInvoice: "BL-S-5001" },
       { company: "Kittle Directional", email: "lead@kittle.test", rate: 6.15, subInvoice: "BL-S-5002" },
@@ -109,6 +133,39 @@ async function buildTenant(db: PrismaClient, s: Spec): Promise<Tenant> {
       status: "Active",
       logoTint: "#3b6ea5",
       location: "Invented County",
+      // What this prime knows the contractor by.
+      crewNumber: s.crewNumber,
+    },
+  });
+
+  /**
+   * A second prime with no crew number on file.
+   *
+   * Its job exists so a sheet can be rendered for a customer that has none.
+   * A blank field there is correct; the other customer's number appearing is
+   * the cross-customer fallback this whole step exists to remove.
+   */
+  const customer2 = await db.customer.create({
+    data: {
+      name: s.customer2,
+      shortCode: s.shortCode2,
+      industry: "Telecom",
+      tone: "info",
+      status: "Active",
+      logoTint: "#7a5ea5",
+      location: "Invented County",
+    },
+  });
+
+  const project2 = await db.project.create({
+    data: {
+      name: s.project2,
+      client: s.customer2,
+      location: "Invented County",
+      status: "Active",
+      tone: "info",
+      customerId: customer2.id,
+      crew: s.crews[0].company,
     },
   });
 
@@ -258,6 +315,10 @@ async function buildTenant(db: PrismaClient, s: Spec): Promise<Tenant> {
     taskId: task.id,
     locateTicketId: ticket.id,
     customerRate: s.customerRate,
+    crewNumber: s.crewNumber,
+    customer2Name: s.customer2,
+    project2Id: project2.id,
+    project2Name: s.project2,
     crews: [crews[0], crews[1]],
   };
 }
@@ -285,6 +346,10 @@ const OTHER_SPEC: Spec = {
   project: "Kedleston Ring",
   invoiceNumber: "HC-7001",
   customerRate: 11.75,
+  crewNumber: "HC-2290-D71-604",
+  customer2: "Brindle Fibre",
+  shortCode2: "BRN",
+  project2: "Ledwich Tie-in",
   crews: [
     { company: "Marden Bore", email: "lead@marden.test", rate: 7.2, subInvoice: "HC-S-9001" },
     { company: "Teale Directional", email: "lead@teale.test", rate: 6.95, subInvoice: "HC-S-9002" },

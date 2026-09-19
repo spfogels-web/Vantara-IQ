@@ -4,6 +4,7 @@ import {
   getBillableCodes,
   getDailySheet,
   getProject,
+  getProjectCrewNumber,
   getProjectCrews,
 } from "@/data/queries";
 import { getCurrentUser, isStaff } from "@/lib/auth";
@@ -27,13 +28,15 @@ export default async function ProjectDailySheetPage({
   const project = await getProject(projectId);
   if (!project) notFound();
 
-  const [saved, me, billableCodes, locates] = await Promise.all([
+  const [saved, me, billableCodes, locates, crewNumber] = await Promise.all([
     sp.sheet ? getDailySheet(sp.sheet) : Promise.resolve(null),
     getCurrentUser(),
     getBillableCodes(project.id),
     // What the locates say about this job. Scoped by the same project access
     // the rest of the page uses, so a crew sees their own jobs and no others.
     getLocateRows({ projectId: project.id, take: 200 }),
+    // What this job's customer knows us by. Theirs, not the organisation's.
+    getProjectCrewNumber(project.id),
   ]);
   // Staff review filed sheets; the crew that submitted one cannot reopen it.
   const canReview = me ? isStaff(me.role) : false;
@@ -68,6 +71,7 @@ export default async function ProjectDailySheetPage({
           client: project.client,
           location: project.location,
           crew: project.crew,
+          crewNumber,
           mapUrl: project.mapUrl ?? null,
           markups: project.markups ?? null,
         }}

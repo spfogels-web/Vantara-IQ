@@ -148,7 +148,7 @@ const ES: Record<string, string> = {
     "Las cantidades, la documentación y los códigos cuadran. Listo para facturar.",
   "Nothing is approved automatically — the AI prepares, your team decides.":
     "Nada se aprueba solo — la IA prepara y su equipo decide.",
-  "Globe billing sheet": "Hoja de facturación de Globe",
+  "{customer} billing sheet": "Hoja de facturación de {customer}",
   "The filled-in form and the day's redlined map, as submitted.":
     "El formulario lleno y el plano marcado del día, tal como se envió.",
   "Open billing sheet": "Abrir hoja de facturación",

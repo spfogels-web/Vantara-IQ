@@ -5,11 +5,17 @@
 -- time something ran against this database without one, it put three test
 -- projects into live data.
 --
--- Everything here is additive. No existing column changes type, nothing is
--- dropped, and no existing row is edited. The only writes are the rows at the
--- bottom, which give Fortitude the configuration it has been running on all
--- along — until now written into the shape of the product as constants and
--- schema defaults, and therefore inherited by every organisation after it.
+-- Additive, with one stated exception. No existing column changes type and
+-- nothing is dropped. The writes are the rows at the bottom, which give
+-- Fortitude the configuration it has been running on all along — until now
+-- written into the shape of the product as constants and schema defaults, and
+-- therefore inherited by every organisation after it.
+--
+-- THE EXCEPTION: one UPDATE, against one column of one existing row, moving the
+-- crew number Globe issued out of the sheet component and onto the Globe
+-- customer. It is guarded three ways and can only ever fill a blank — see the
+-- comment above it. No rate, code, market, daily, sheet, invoice or quantity is
+-- written anywhere in this file.
 --
 -- ORDER MATTERS AGAINST THE DEPLOY. The application reads these tables, and an
 -- organisation with no rows permits nothing: no texting, no assistant, no
@@ -71,6 +77,55 @@ CREATE TABLE IF NOT EXISTS "public"."OrgCodeProfile" (
 -- every ADMIN: nobody operates anything until somebody says so.
 ALTER TABLE "public"."User"
   ADD COLUMN IF NOT EXISTS "isPlatformAdmin" BOOLEAN NOT NULL DEFAULT false;
+
+-- What each customer knows us by on their own paperwork: the crew, vendor or
+-- billing number their billing department issued us, printed onto the daily
+-- sheet they pay against.
+--
+-- Per customer because it is issued per customer — a contractor working for two
+-- primes is two different numbers to them. This was a constant in the sheet
+-- component, so every prime and every organisation shared one number.
+--
+-- Blank for every existing customer except the one below, and blank for every
+-- customer created afterwards. There is no default here and no fallback in the
+-- application: a customer with no number on file gets an empty field a crew can
+-- fill, never a number some other customer issued.
+ALTER TABLE "public"."Customer"
+  ADD COLUMN IF NOT EXISTS "crewNumber" TEXT NOT NULL DEFAULT '';
+
+-- ---------------------------------------------------------------------------
+-- The one value that already exists, moved rather than re-entered.
+--
+-- '24208171927-A27-311' is the number Globe issued this contractor. It has been
+-- on every daily sheet since the form was built, as a constant in the sheet
+-- component. Moving it here is not a guess and not new configuration — it is
+-- the same value, read out of the code it was written into, so nobody has to
+-- retype a number they have been billing under for years.
+--
+-- Three guards, and all three must hold:
+--
+--   1. The database belongs to this contractor. Checked against Organization,
+--      which this migration does not create — so it cannot be satisfied by a
+--      row this file inserts a few lines further down. Another organisation's
+--      database does not match and takes no update.
+--   2. The customer is Globe, by exact name once trimmed and upper-cased.
+--      Verified against production first: one customer matches, and Trawick —
+--      the only other — does not.
+--   3. The number is not already set. This can only ever fill a blank, so a
+--      re-run changes nothing and a value somebody has since corrected in the
+--      application is never overwritten.
+--
+-- Touches one column of one row. No rate, code, market, daily, sheet, invoice
+-- or quantity is read or written here.
+-- ---------------------------------------------------------------------------
+UPDATE "public"."Customer" c
+   SET "crewNumber" = '24208171927-A27-311'
+ WHERE c."crewNumber" = ''
+   AND upper(btrim(c."name")) = 'GLOBE COMMUNICATIONS'
+   AND EXISTS (
+     SELECT 1 FROM "public"."Organization" o
+      WHERE upper(btrim(o."name")) LIKE 'FORTITUDE%'
+   );
 
 -- ---------------------------------------------------------------------------
 -- Fortitude's own configuration.
