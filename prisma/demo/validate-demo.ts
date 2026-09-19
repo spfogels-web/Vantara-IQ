@@ -21,9 +21,29 @@ import { ORG } from "./apex/org";
 import { PROJECTS, REQUIRED_STORYLINES, projectsWith } from "./apex/projects";
 
 /** Fortitude's counts, which this operation must not have moved. */
-const FORTITUDE_EXPECTED: Record<string, number> = {
-  organizations: 1, customers: 2, rates: 2531, projects: 12, dailies: 33, invoices: 2,
+/**
+ * Fortitude figures that are expected to hold still, and those that are not.
+ *
+ * This used to pin every count, dailies included. Then a crew filed a sheet
+ * while a validation run was in flight, the count went 33 to 34, and the check
+ * reported contamination where there was a working business. A live tenant's
+ * operational tables grow — that is the system succeeding, and a test that
+ * calls it a failure will eventually be silenced rather than believed.
+ *
+ * So only the reference rows are pinned: the organisation, its two customers,
+ * their rate cards and the project list, none of which move without somebody
+ * deciding they should. Dailies and invoices are reported for visibility and
+ * never asserted.
+ *
+ * The real question — did anything of ours reach Fortitude — is answered by
+ * looking for our own fingerprints there instead of by counting rows.
+ */
+const FORTITUDE_STABLE: Record<string, number> = {
+  organizations: 1, customers: 2, rates: 2531, projects: 12,
 };
+
+/** Reported, never asserted: a live tenant is allowed to do business. */
+const FORTITUDE_LIVE = ["dailies", "invoices"] as const;
 
 let failures = 0;
 function check(ok: boolean, name: string, detail = "") {
@@ -135,6 +155,42 @@ async function main() {
       "a subcontractor payment is genuinely outstanding",
     );
 
+    /**
+     * No subcontracted job may show Apex paying out more than it billed.
+     *
+     * This is the check that would have caught the upsert bug on its own. The
+     * rows all looked reasonable; only the arithmetic across them showed a job
+     * at minus two per cent, because the invoice had been re-costed and the
+     * subcontractor lines had not. A demonstration tenant losing money on its
+     * own work is the kind of detail somebody notices in a sales meeting.
+     *
+     * Self-perform jobs are excluded deliberately: there is no labour,
+     * equipment or burden cost in this schema, so their margin is not a number
+     * the database can produce and must not be invented.
+     */
+    const margins = await db.$queryRawUnsafe<{ name: string; billed: number; paid: number }[]>(
+      `select p."name",
+              coalesce((select sum(il."amount") from "InvoiceLine" il
+                          join "Invoice" i on i."id" = il."invoiceId"
+                         where i."projectId" = p."id"), 0)::float as billed,
+              coalesce((select sum(sl."amount") from "SubInvoiceLine" sl
+                          join "SubInvoice" s on s."id" = sl."invoiceId"
+                         where s."projectId" = p."id"), 0)::float as paid
+         from "Project" p`,
+    );
+    const costed = margins.filter((m) => m.billed > 0 && m.paid > 0);
+    const negative = costed.filter((m) => m.paid >= m.billed);
+    check(costed.length > 0, "some project has both a bill and a pay side, so margin is computable", `${costed.length}`);
+    check(
+      negative.length === 0,
+      "no subcontracted project pays out more than it bills",
+      negative.map((m) => `${m.name} (${(((m.billed - m.paid) / m.billed) * 100).toFixed(1)}%)`).join(", "),
+    );
+    if (costed.length) {
+      const worst = [...costed].sort((a, b) => (a.billed - a.paid) / a.billed - (b.billed - b.paid) / b.billed)[0];
+      console.log(`  weakest margin: ${worst.name} — ${(((worst.billed - worst.paid) / worst.billed) * 100).toFixed(1)}%`);
+    }
+
     // ---- storylines are real ----------------------------------------------
     console.log("\noperational storylines");
     for (const s of REQUIRED_STORYLINES) {
@@ -227,10 +283,49 @@ async function main() {
          (select count(*) from "public"."Daily")        as dailies,
          (select count(*) from "public"."Invoice")      as invoices`,
     );
-    for (const [k, want] of Object.entries(FORTITUDE_EXPECTED)) {
+    for (const [k, want] of Object.entries(FORTITUDE_STABLE)) {
       const got = Number(f[0][k]);
       check(got === want, `Fortitude ${k} is still ${want}`, String(got));
     }
+    for (const k of FORTITUDE_LIVE) {
+      console.log(`  live    Fortitude ${k}: ${Number(f[0][k])}  (reported, not asserted — a working tenant grows)`);
+    }
+
+    /**
+     * Contamination, asked directly.
+     *
+     * Every row this seed writes is prefixed `apex-`, so its fingerprints are
+     * unmistakable. Counting rows could only ever notice contamination by
+     * accident; this notices it on purpose, and says which table.
+     */
+    const contaminated: string[] = [];
+    const prefixed: [string, () => Promise<number>][] = [
+      ["Organization", () => fort.organization.count({ where: { id: { startsWith: "apex-" } } })],
+      ["Customer", () => fort.customer.count({ where: { id: { startsWith: "apex-" } } })],
+      ["Project", () => fort.project.count({ where: { id: { startsWith: "apex-" } } })],
+      ["Daily", () => fort.daily.count({ where: { id: { startsWith: "apex-" } } })],
+      ["Invoice", () => fort.invoice.count({ where: { id: { startsWith: "apex-" } } })],
+      ["CustomerRate", () => fort.customerRate.count({ where: { id: { startsWith: "apex-" } } })],
+      ["Subcontractor", () => fort.subcontractor.count({ where: { id: { startsWith: "apex-" } } })],
+      ["Task", () => fort.task.count({ where: { id: { startsWith: "apex-" } } })],
+      ["LocateTicket", () => fort.locateTicket.count({ where: { id: { startsWith: "apex-" } } })],
+      ["AppSetting", () => fort.appSetting.count({ where: { key: { startsWith: "demo.seed." } } })],
+    ];
+    for (const [table, count] of prefixed) {
+      const n = await count();
+      if (n > 0) contaminated.push(`${table} (${n})`);
+    }
+    check(contaminated.length === 0, "no apex- seeded row exists in Fortitude", contaminated.join(", "));
+
+    // And by name, in case something of ours ever lands without our prefix.
+    const apexNames = await fort.$queryRawUnsafe<{ n: bigint }[]>(
+      `select (
+         (select count(*) from "public"."Organization" where "name" ilike '%apex%') +
+         (select count(*) from "public"."Customer"     where "name" ilike any (array['%apex%','%calderon%','%mereside%','%halstead%','%brightwater%','%ardent%'])) +
+         (select count(*) from "public"."Project"      where "number" like 'APX-%')
+       )::bigint as n`,
+    );
+    check(Number(apexNames[0].n) === 0, "no Apex organisation, customer or project identity in Fortitude", String(apexNames[0].n));
 
     console.log("\n" + "=".repeat(64));
     console.log(failures === 0 ? "  VALIDATION PASSED" : `  VALIDATION FAILED — ${failures} problem(s)`);
