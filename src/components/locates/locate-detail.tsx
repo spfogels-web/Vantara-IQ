@@ -397,7 +397,6 @@ function StatusPanel({
   tone: "success" | "warning" | "critical" | "muted";
   detail: string;
 }) {
-  const orgName = useOrgName();
   return (
     <div
       className={cn(

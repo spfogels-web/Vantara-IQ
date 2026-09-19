@@ -8,15 +8,19 @@ import { EMPTY_CODE_PROFILE, type CodeProfile } from "@/lib/unit-codes";
 /**
  * This organisation's unit-code vocabulary, from this organisation's database.
  *
- * Read once per request: the daily sheet asks which codes to offer, the rate
- * card asks which price together, and the material summary asks which to sort
- * first — all of the same row.
+ * Read once per request: the rate card asks which codes price together, and the
+ * material summary asks which to sort first — both of the same row.
+ *
+ * Presentation only. Which codes a daily sheet *offers* is not decided here —
+ * that is the project's rate card narrowed to the scope in MAIN_BILLABLE_CODES,
+ * and a profile that is missing or empty must never be able to take a code off
+ * a sheet the customer will be invoiced for. See getBillableCodes.
  *
  * An organisation that has not set one gets the empty profile: no code is a
- * priority, nothing groups, and the daily sheet offers nothing. That is not a
- * pleasant blank screen, but the alternative is offering another contractor's
- * code list, which prices work they do not do and reads as if the software
- * knows their business when it does not.
+ * priority and nothing groups. Sorting falls back to plain order, which is
+ * unhelpful but honest — the alternative is arranging their card by another
+ * contractor's priorities and reading as if the software knows a business it
+ * has never seen.
  */
 export const getCodeProfile = cache(async (): Promise<CodeProfile> => {
   const row = await prisma.orgCodeProfile.findFirst().catch(() => null);
@@ -36,7 +40,6 @@ export const getCodeProfile = cache(async (): Promise<CodeProfile> => {
 
   return {
     priorityCodes: row.priorityCodes,
-    billableCodes: row.billableCodes,
     families,
   };
 });

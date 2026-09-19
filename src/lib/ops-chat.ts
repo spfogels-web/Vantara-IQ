@@ -5,7 +5,7 @@ import { aiClient } from "@/lib/ai-client";
 
 import { prisma } from "@/lib/prisma";
 import { billingWeekFor, weekOf, addDays } from "@/lib/billing";
-import { getCodeProfile } from "@/data/code-profile";
+import { MAIN_BILLABLE_CODES } from "@/lib/unit-codes";
 import { orgName } from "@/lib/org-settings";
 
 /**
@@ -276,7 +276,7 @@ async function runTool(name: string, input: Record<string, unknown>): Promise<st
       const cust = await prisma.customer.findMany({
         select: { name: true, rates: { select: { code: true, rate: true, unit: true } } },
       });
-      const main = new Set((await getCodeProfile()).billableCodes.map(key));
+      const main = new Set(MAIN_BILLABLE_CODES.map(key));
       return JSON.stringify(
         cust.map((c) => ({
           customer: c.name,

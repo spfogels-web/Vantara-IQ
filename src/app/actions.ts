@@ -35,6 +35,7 @@ import { normalizeCode,
   isLabourOrEquipmentCode,
   isLinearFootageCode,
   isMainBillableCode,
+  MAIN_BILLABLE_CODES,
 } from "@/lib/unit-codes";
 import { checkFooting, dailyImportReady, extractDailySheet } from "@/lib/daily-import";
 import { askOps, opsChatReady } from "@/lib/ops-chat";
@@ -6123,7 +6124,6 @@ export async function importDailyFromFile(input: {
   // The codes this customer will actually pay. Passed to the reader so it
   // matches against the right card — the same paper sheet means different
   // codes on a different job.
-  const sheetCodes = await getCodeProfile();
   const allowed = project.customerId
     ? (
         await prisma.customerRate.findMany({
@@ -6131,7 +6131,7 @@ export async function importDailyFromFile(input: {
           select: { code: true },
         })
       )
-        .filter((r) => isMainBillableCode(sheetCodes, r.code))
+        .filter((r) => isMainBillableCode(r.code))
         .map((r) => r.code)
     : [];
 
@@ -6159,9 +6159,9 @@ export async function importDailyFromFile(input: {
     read = await extractDailySheet(
       Buffer.from(file).toString("base64"),
       input.mediaType,
-      // The customer's own priced codes where there are any, otherwise every
-      // code this organisation bills. Never a list belonging to anybody else.
-      allowed.length ? allowed : sheetCodes.billableCodes,
+      // The customer's own priced codes where there are any, otherwise the
+      // underground scope, so a sheet for a customer with no card still reads.
+      allowed.length ? allowed : [...MAIN_BILLABLE_CODES],
     );
   } catch (e) {
     return {
