@@ -95,6 +95,28 @@ async function main() {
   }
 }
 
+/**
+ * Remove rows this seed owns that the current dataset no longer contains.
+ *
+ * Every demo row is prefixed `apex-`, so ownership is unambiguous: anything
+ * with that prefix was written here and anything without it was not. Deleting
+ * by "mine, and not in the set I am about to write" is what makes a re-run
+ * after a dataset change land in the same state as a fresh one — which is the
+ * property the first version claimed and did not have.
+ */
+async function prune(
+  db: PrismaClient,
+  what: string,
+  existing: { id: string }[],
+  keep: Set<string>,
+  remove: (ids: string[]) => Promise<unknown>,
+) {
+  const stale = existing.filter((r) => r.id.startsWith("apex-") && !keep.has(r.id)).map((r) => r.id);
+  if (!stale.length) return;
+  await remove(stale);
+  console.log(`  pruned ${stale.length} stale ${what}`);
+}
+
 /** Progress, so a resumed run can say what it already did. */
 async function mark(db: PrismaClient, name: string) {
   await db.appSetting.upsert({
@@ -261,6 +283,13 @@ async function runModules(
         update: { status: d.status, billableAmount: Math.round(d.billableAmount), lineItems: d.lines },
       });
     }
+    await prune(
+      db,
+      "dailies",
+      await db.daily.findMany({ select: { id: true } }),
+      new Set(data.dailies.map((d) => `apex-daily-${d.key}`)),
+      (ids) => db.daily.deleteMany({ where: { id: { in: ids } } }),
+    );
     await mark(db, "dailies");
     ran.push("dailies");
   }
@@ -279,7 +308,17 @@ async function runModules(
           issuedAt: inv.issuedDays === null ? null : new Date(on(anchor, inv.issuedDays)),
           dueAt: inv.dueDays === null ? null : new Date(on(anchor, inv.dueDays)),
         },
-        update: { status: inv.status, subtotal: inv.subtotal, amountDue: inv.amountDue },
+        update: {
+          status: inv.status,
+          periodStart: inv.periodStart,
+          periodEnd: inv.periodEnd,
+          subtotal: inv.subtotal,
+          retainagePct: inv.retainagePct,
+          retainageHeld: inv.retainageHeld,
+          amountDue: inv.amountDue,
+          issuedAt: inv.issuedDays === null ? null : new Date(on(anchor, inv.issuedDays)),
+          dueAt: inv.dueDays === null ? null : new Date(on(anchor, inv.dueDays)),
+        },
       });
       // Lines, one per daily, so the invoice traces to the work.
       for (const dk of inv.dailyKeys) {
@@ -293,7 +332,15 @@ async function runModules(
               code: line.code, description: line.description, unit: line.unit,
               quantity: line.quantity, rate: line.rate, amount: line.amount,
             },
-            update: { quantity: line.quantity, rate: line.rate, amount: line.amount },
+            update: {
+              workDate: d.workDate,
+              code: line.code,
+              description: line.description,
+              unit: line.unit,
+              quantity: line.quantity,
+              rate: line.rate,
+              amount: line.amount,
+            },
           });
         }
       }
@@ -305,6 +352,35 @@ async function runModules(
         });
       }
     }
+    const keepInvoices = new Set(data.invoices.map((i) => `apex-inv-${i.key}`));
+    const keepLines = new Set<string>();
+    for (const inv of data.invoices) {
+      for (const dk of inv.dailyKeys) {
+        const d = data.dailies.find((x) => x.key === dk)!;
+        d.lines.forEach((_, i) => keepLines.add(`apex-invline-${inv.key}-${dk}-${i}`));
+      }
+    }
+    await prune(
+      db,
+      "invoice lines",
+      await db.invoiceLine.findMany({ select: { id: true } }),
+      keepLines,
+      (ids) => db.invoiceLine.deleteMany({ where: { id: { in: ids } } }),
+    );
+    await prune(
+      db,
+      "payments",
+      await db.payment.findMany({ select: { id: true } }),
+      new Set(data.invoices.filter((i) => i.paidAmount > 0).map((i) => `apex-pay-${i.key}`)),
+      (ids) => db.payment.deleteMany({ where: { id: { in: ids } } }),
+    );
+    await prune(
+      db,
+      "invoices",
+      await db.invoice.findMany({ select: { id: true } }),
+      keepInvoices,
+      (ids) => db.invoice.deleteMany({ where: { id: { in: ids } } }),
+    );
     await mark(db, "invoices");
     ran.push("invoices");
   }
@@ -321,7 +397,14 @@ async function runModules(
           subtotal: si.subtotal, retainagePct: si.retainagePct, retainageHeld: si.retainageHeld,
           termsDays: 30,
         },
-        update: { status: si.status, subtotal: si.subtotal },
+        update: {
+          status: si.status,
+          periodStart: si.periodStart,
+          periodEnd: si.periodEnd,
+          subtotal: si.subtotal,
+          retainagePct: si.retainagePct,
+          retainageHeld: si.retainageHeld,
+        },
       });
       for (const dk of si.dailyKeys) {
         const d = data.dailies.find((x) => x.key === dk)!;
@@ -337,7 +420,15 @@ async function runModules(
               quantity: line.quantity, rate: payRate,
               amount: Math.round(line.quantity * payRate * 100) / 100,
             },
-            update: { rate: payRate },
+            update: {
+              workDate: d.workDate,
+              code: line.code,
+              description: line.description,
+              unit: line.unit,
+              quantity: line.quantity,
+              rate: payRate,
+              amount: Math.round(line.quantity * payRate * 100) / 100,
+            },
           });
         }
       }
@@ -349,6 +440,34 @@ async function runModules(
         });
       }
     }
+    const keepSubLines = new Set<string>();
+    for (const si of data.subInvoices) {
+      for (const dk of si.dailyKeys) {
+        const d = data.dailies.find((x) => x.key === dk)!;
+        d.lines.forEach((_, i) => keepSubLines.add(`apex-sinvline-${si.key}-${dk}-${i}`));
+      }
+    }
+    await prune(
+      db,
+      "subcontractor invoice lines",
+      await db.subInvoiceLine.findMany({ select: { id: true } }),
+      keepSubLines,
+      (ids) => db.subInvoiceLine.deleteMany({ where: { id: { in: ids } } }),
+    );
+    await prune(
+      db,
+      "subcontractor payments",
+      await db.subPayment.findMany({ select: { id: true } }),
+      new Set(data.subInvoices.filter((s) => s.paidAmount > 0).map((s) => `apex-spay-${s.key}`)),
+      (ids) => db.subPayment.deleteMany({ where: { id: { in: ids } } }),
+    );
+    await prune(
+      db,
+      "subcontractor invoices",
+      await db.subInvoice.findMany({ select: { id: true } }),
+      new Set(data.subInvoices.map((s) => `apex-sinv-${s.key}`)),
+      (ids) => db.subInvoice.deleteMany({ where: { id: { in: ids } } }),
+    );
     await mark(db, "subinvoices");
     ran.push("subinvoices");
   }

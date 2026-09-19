@@ -103,7 +103,7 @@ export const PROJECTS: ProjectSeed[] = [
     codes: ["RSTASP", "RSTCON", "RSTSOD"],
     performedBy: { kind: "sub", key: "quarry" }, pm: "pm-south",
     status: "Active", storylines: ["punch-list", "awaiting-verification", "sub-payment-pending"],
-    totalFt: 9800, remainingFt: 2400, requiredFtPerDay: 420, historyDays: 34, deadlineDays: 11,
+    totalFt: 9800, remainingFt: 2400, requiredFtPerDay: 0, historyDays: 34, deadlineDays: 11,
   },
   {
     key: "northport-blow", number: "APX-1053", name: "North Port Fiber Blow",
@@ -187,7 +187,7 @@ export const PROJECTS: ProjectSeed[] = [
     codes: ["CIVPAD", "CIVBOL", "RSTSOD", "TRN24"],
     performedBy: { kind: "sub", key: "sable" }, pm: "pm-south",
     status: "Active", storylines: ["missing-asbuilt", "punch-list", "billed-unpaid"],
-    totalFt: 0, remainingFt: 0, requiredFtPerDay: 0, historyDays: 70, deadlineDays: 14,
+    totalFt: 5200, remainingFt: 1900, requiredFtPerDay: 260, historyDays: 70, deadlineDays: 14,
   },
   // ---- Ardent · North Florida ----------------------------------------------
   {
@@ -204,7 +204,7 @@ export const PROJECTS: ProjectSeed[] = [
     codes: ["RSTASP", "RSTSOD", "CIVBOL"],
     performedBy: { kind: "sub", key: "quarry" }, pm: "pm-north",
     status: "Completed", storylines: ["completed"],
-    totalFt: 7400, remainingFt: 0, requiredFtPerDay: 380, historyDays: 40, deadlineDays: -25,
+    totalFt: 7400, remainingFt: 0, requiredFtPerDay: 0, historyDays: 40, deadlineDays: -25,
   },
 ];
 

@@ -10,6 +10,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildRateCard,
+  CODES,
   CUSTOMERS,
   MARKET_ONLY,
   MARKETS,
@@ -266,5 +267,36 @@ describe("the dataset is the size it says it is", () => {
     expect(later.invoices.length).toBe(data.invoices.length);
     // And the dates really did move with the anchor.
     expect(later.dailies[0].workDate).not.toBe(data.dailies[0].workDate);
+  });
+});
+
+describe("a job is only measured by something it can actually record", () => {
+  it("gives no footage target to a job with no footage codes", () => {
+    /**
+     * Restoration is billed in square feet and civil work by the item, so
+     * `totalFt` on those dailies is zero however well the crew does. A job
+     * like that carrying a requiredFtPerDay reads as nought per cent of target
+     * for ever — it looks like a stalled job on every dashboard, and the seed
+     * would be lying about work that is going fine.
+     */
+    for (const p of PROJECTS) {
+      const hasLinear = p.codes.some((c) => CODES.find((x) => x.code === c)!.unit === "ft");
+      if (hasLinear) continue;
+      expect(
+        p.requiredFtPerDay,
+        `${p.name} bills no code measured in feet, but is held to ${p.requiredFtPerDay} ft/day`,
+      ).toBe(0);
+    }
+  });
+
+  it("keeps a footage target on every job that does lay footage", () => {
+    // The other half: a job that lays feet and has no target cannot be read
+    // for pace at all, which is its own kind of invisible.
+    const linearActive = PROJECTS.filter(
+      (p) => p.status === "Active" && p.codes.some((c) => CODES.find((x) => x.code === c)!.unit === "ft"),
+    );
+    for (const p of linearActive) {
+      expect(p.requiredFtPerDay, `${p.name} lays footage but has no daily target`).toBeGreaterThan(0);
+    }
   });
 });
