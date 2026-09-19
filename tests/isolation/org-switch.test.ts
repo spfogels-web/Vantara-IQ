@@ -45,14 +45,11 @@ const OTHER_NAMES = [
 /** The screens the blueprint names: projects, customers, crews, invoices, dailies. */
 const SCREENS = ["/projects", "/customers", "/subcontractors", "/invoicing", "/dailies"];
 
-/**
- * Everything identifying either contractor that a page could be carrying —
- * names *and* record ids, so the comparison is of the data on the screen and
- * not of the markup around it.
- */
-const MARKERS = [
-  ...FIRST_NAMES,
-  ...OTHER_NAMES,
+/** Names, which render as text — and whose counts hold still between renders. */
+const NAMES = [...FIRST_NAMES, ...OTHER_NAMES];
+
+/** Record ids, which also ride along in serialized props. See `fingerprint`. */
+const IDS = [
   northgate.projectId,
   northgate.customerId,
   northgate.invoiceId,
@@ -63,14 +60,37 @@ const MARKERS = [
   other.dailyId,
 ];
 
-/** Which of those a page shows, and how many times. */
-function fingerprint(text: string): Record<string, number> {
-  const out: Record<string, number> = {};
-  for (const m of MARKERS) {
-    const n = text.split(m).length - 1;
-    if (n) out[m] = n;
+/**
+ * What a page is *of* — names counted, ids only looked for.
+ *
+ * Counting everything is what this used to do, and it could not work. A marker
+ * is counted across the whole reply, which includes the RSC flight payload,
+ * and that payload does not hold still: reading /dailies six times as one
+ * person, with no switching at all, counted the project id 5, 5, 7, 7, 5, 7.
+ * The two that come and go are a single serialized prop — `{id, mapUrl,
+ * hasMap}` — carried once escaped inside `self.__next_f.push` and again in the
+ * copy pageText reassembles. So the assertion was a coin toss, and it failed
+ * on whichever screen lost.
+ *
+ * Narrowing to the rendered markup was the obvious repair and it is a trap:
+ * the `<main>` slice carries none of these markers on any of the five screens,
+ * because the lists stream in behind Suspense and land after `</main>`; and
+ * stripping the payload instead leaves /customers empty, because that list
+ * renders on the client. Either one compares nothing to nothing and passes.
+ *
+ * So: names are counted, because a row that disappears after the round trip is
+ * exactly what this test exists to catch, and every name count was steady
+ * across five reads of all five screens. Ids are only checked for presence,
+ * because the id is the one quantity measurement showed to be unstable, and
+ * how many times React repeats it in a payload is not a fact about the switch.
+ */
+function fingerprint(text: string): { names: Record<string, number>; ids: string[] } {
+  const names: Record<string, number> = {};
+  for (const n of NAMES) {
+    const c = text.split(n).length - 1;
+    if (c) names[n] = c;
   }
-  return out;
+  return { names, ids: IDS.filter((id) => text.includes(id)) };
 }
 
 /**
@@ -81,6 +101,11 @@ function fingerprint(text: string): Record<string, number> {
  * legitimately carry different amounts of the page. Reading until two
  * consecutive reads agree about what is on it measures the finished page
  * rather than the compiler.
+ *
+ * Settling is judged on the same fingerprint the round trip compares, so the
+ * loop is waiting for something that can actually hold still. Waiting on raw
+ * counts meant waiting on the flight payload, which never does — it simply
+ * declared victory on whichever pair of reads happened to match.
  */
 async function textOf(path: string, cookie: string, attempts = 6): Promise<string> {
   let previous = "";
@@ -131,15 +156,23 @@ describe("the switch round trip", () => {
       // byte for byte: two identical consecutive requests already differ, in
       // a render timestamp inside the RSC payload. Comparing raw bytes would
       // be a test of Next's streaming, not of the switcher.
+      const printBefore = fingerprint(before[screen]);
       expect(
         fingerprint(after[screen]),
         `${screen} did not come back the same after switching away and back`,
-      ).toEqual(fingerprint(before[screen]));
+      ).toEqual(printBefore);
 
       // A screen that was empty all along would satisfy everything above.
       expect(
         ownBefore.length,
         `fixture problem: ${screen} shows none of the first contractor's names, so this test proves nothing`,
+      ).toBeGreaterThan(0);
+
+      // And so would a fingerprint with nothing counted in it. This guard is
+      // what caught the two repairs that looked green and measured nothing.
+      expect(
+        Object.keys(printBefore.names).length,
+        `${screen} carried none of the watched names, so comparing it before and after proves nothing`,
       ).toBeGreaterThan(0);
     }
     // Five screens, read three times each, against a dev server compiling
