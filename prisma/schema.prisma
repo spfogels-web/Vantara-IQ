@@ -62,39 +62,39 @@ model Organization {
 }
 
 model User {
-  id              String         @id @default(cuid())
-  email           String         @unique
-  passwordHash    String?
-  name            String
+  id           String  @id @default(cuid())
+  email        String  @unique
+  passwordHash String?
+  name         String
 
   /// Mobile number for job alerts. Staff get texted the same way crews do,
   /// and the same rules apply: nothing is sent without consent, and a STOP
   /// from this handset stops it.
-  phone         String    @default("")
+  phone            String                    @default("")
   /// When they agreed, and the wording they agreed to as it read that day.
   /// Null means they have never agreed and nothing may be sent.
-  smsConsentAt  DateTime?
-  smsConsentText String   @default("")
+  smsConsentAt     DateTime?
+  smsConsentText   String                    @default("")
   /// Set when they reply STOP. Clears only when they reply START.
-  smsOptOutAt   DateTime?
-  role            Role           @default(SUBCONTRACTOR)
-  organization    Organization?  @relation(fields: [organizationId], references: [id])
-  organizationId  String?
-  subcontractor   Subcontractor? @relation(fields: [subcontractorId], references: [id])
-  subcontractorId String?
+  smsOptOutAt      DateTime?
+  role             Role                      @default(SUBCONTRACTOR)
+  organization     Organization?             @relation(fields: [organizationId], references: [id])
+  organizationId   String?
+  subcontractor    Subcontractor?            @relation(fields: [subcontractorId], references: [id])
+  subcontractorId  String?
   /// Their job inside that company. Defaults to OWNER because every account
   /// that existed before this was the owner or their nominee — the person who
   /// onboarded the company. Only invited users get anything else.
-  subUserRole     SubUserRole    @default(OWNER)
-  tasks           Task[]         @relation("TaskAssignee")
+  subUserRole      SubUserRole               @default(OWNER)
+  tasks            Task[]                    @relation("TaskAssignee")
   conversationSeat ConversationParticipant[] @relation("ConversationMember")
   prospectsOwned   Prospect[]                @relation("ProspectOwner")
   messagesSent     Message[]                 @relation("MessageAuthor")
   messagesTo       MessageDelivery[]         @relation("MessageRecipient")
-  locatesOwned       LocateTicket[]      @relation("LocateAssignee")
-  locatesAssigned    ContractorLocate[]  @relation("ContractorLocateAssignee")
-  locatesWalked      ContractorLocate[]  @relation("ContractorLocateLocator")
-  locateChecks       LocateTicketCheck[] @relation("LocateCheckRequester")
+  locatesOwned     LocateTicket[]            @relation("LocateAssignee")
+  locatesAssigned  ContractorLocate[]        @relation("ContractorLocateAssignee")
+  locatesWalked    ContractorLocate[]        @relation("ContractorLocateLocator")
+  locateChecks     LocateTicketCheck[]       @relation("LocateCheckRequester")
 
   /// How many times this person has signed in, and when they last did.
   ///
@@ -118,7 +118,7 @@ model User {
   /// nothing until somebody says otherwise.
   isPlatformAdmin Boolean @default(false)
 
-  createdAt       DateTime       @default(now())
+  createdAt DateTime @default(now())
 }
 
 /// How this organisation does business, and what it is allowed to do.
@@ -163,17 +163,16 @@ model OrgSettings {
   assistantEnabled Boolean @default(false)
 
   /// Terms this organisation bills its customers on, and pays its crews on.
-  customerTerms String
-  subTerms      String
+  customerTerms  String
+  subTerms       String
   /// Held back from a crew's statement, as a fraction: 0.1 is ten percent.
-  retainagePct  Float
+  retainagePct   Float
   /// The one-call centre that serves this organisation's ground.
   locateProvider String
   /// Where it works, for the fields that need a state before anyone picks one.
   defaultState   String
   /// The number a crew is told to ring. One company's office is not another's.
   supportPhone   String @default("")
-
 
   updatedAt DateTime @updatedAt
 }
@@ -220,7 +219,7 @@ model OrgCodeProfile {
   /// Code families, as `{ familyName: [code, …] }`. Codes in one family are
   /// priced together, so a rate card that sets one and not its siblings is
   /// incomplete rather than wrong.
-  families Json
+  families      Json
 
   updatedAt DateTime @updatedAt
 }
@@ -317,26 +316,26 @@ model CustomerRate {
 
 model Project {
   materialInstances MaterialInstance[]
-  conversations    Conversation[]
-  id               String            @id @default(cuid())
-  number           String            @default("")
-  name             String
-  client           String
-  location         String
-  status           String
-  tone             String
-  remainingFt      Int               @default(0)
-  requiredFtPerDay Int               @default(0)
-  actualFtPerDay   Int               @default(0)
-  forecast         String            @default("")
-  forecastTone     String            @default("info")
-  health           Int               @default(80)
-  pctComplete      Int               @default(0)
-  crew             String            @default("Unassigned")
+  conversations     Conversation[]
+  id                String             @id @default(cuid())
+  number            String             @default("")
+  name              String
+  client            String
+  location          String
+  status            String
+  tone              String
+  remainingFt       Int                @default(0)
+  requiredFtPerDay  Int                @default(0)
+  actualFtPerDay    Int                @default(0)
+  forecast          String             @default("")
+  forecastTone      String             @default("info")
+  health            Int                @default(80)
+  pctComplete       Int                @default(0)
+  crew              String             @default("Unassigned")
   /// Contract completion date, YYYY-MM-DD. Everything schedule-related is
   /// computed from this against a five-day production week — a required pace
   /// worked out on calendar days is quietly 30% too low.
-  deadline         String            @default("")
+  deadline          String             @default("")
 
   /// When the job was called finished, by a person.
   ///
@@ -347,41 +346,49 @@ model Project {
   ///
   /// Null means still running. Set means complete: the derivation stops and
   /// the job reads 100% with nothing left.
-  completedAt      DateTime?
-  updatedAt        String            @default("")
+  completedAt    DateTime?
+  updatedAt      String    @default("")
   /// Which market this job sits in — see src/lib/markets.ts.
   ///
   /// Stored rather than derived from the town every read, because a person
   /// must be able to correct it: two of these markets share a prime and pay
   /// differently, so a job in the wrong one is billed at the wrong rate.
   /// Empty means nobody has set it, which the filter shows as unassigned.
-  market           String            @default("")
-  mapUrl           String?
-  mapOriginalUrl   String?
-  photoUrl         String?
-  markups          Json?
-  customer         Customer?         @relation(fields: [customerId], references: [id])
-  customerId       String?
-  dailies          Daily[]
-  materials        ProjectMaterial[]
-  materialImports  RateImport[]
-  invoices         Invoice[]
-  photos           ProjectPhoto[]
-  rates            ProjectRate[]
-  subInvoices      SubInvoice[]
-  tasks            Task[]
-  sheets           DailySheet[]
+  market         String    @default("")
+  mapUrl         String?
+  mapOriginalUrl String?
+  photoUrl       String?
+  markups        Json?
+
+  /// How far along this job's baseline documentation is, and who said so.
+  ///
+  /// Not derived from a photograph count: see PreConStatus. This is what a
+  /// readiness check will eventually read, alongside locates and materials.
+  preConStatus      PreConStatus        @default(NOT_STARTED)
+  preConCompletedBy String              @default("")
+  preConCompletedAt DateTime?
+  customer          Customer?           @relation(fields: [customerId], references: [id])
+  customerId        String?
+  dailies           Daily[]
+  materials         ProjectMaterial[]
+  materialImports   RateImport[]
+  invoices          Invoice[]
+  photos            ProjectPhoto[]
+  rates             ProjectRate[]
+  subInvoices       SubInvoice[]
+  tasks             Task[]
+  sheets            DailySheet[]
   /// Crews assigned to this job. This relation is what a subcontractor's
   /// access is decided by, so it is a real foreign key rather than a list of
   /// typed names — renaming a project can no longer revoke a crew's access,
   /// and deleting one cannot leave an assignment pointing at nothing.
-  crews            ProjectCrew[]
-  documents        Document[]
-  createdAt        DateTime          @default(now())
-  locateTickets    LocateTicket[]
+  crews             ProjectCrew[]
+  documents         Document[]
+  createdAt         DateTime            @default(now())
+  locateTickets     LocateTicket[]
   /// Who locates what on this job. Empty means every utility is a member
   /// locate, which is the ordinary case.
-  locateRules      ProjectLocateRule[]
+  locateRules       ProjectLocateRule[]
 }
 
 /// A saved Globe-style subcontractor daily billing sheet. The grids are stored
@@ -408,36 +415,36 @@ model DailySheet {
   /// by their login — this exists so a sheet typed up in the office is still
   /// attributed to the company that did the work, and therefore still becomes
   /// their pay statement.
-  filedFor   Subcontractor? @relation(fields: [filedForId], references: [id], onDelete: SetNull)
-  filedForId String?
+  filedFor     Subcontractor? @relation(fields: [filedForId], references: [id], onDelete: SetNull)
+  filedForId   String?
   /// Header block: exchange/WO number, customer, job name, crew names, sign-offs.
-  header     Json           @default("{}")
+  header       Json           @default("{}")
   /// Production grid: unit-code columns plus one entry per row.
-  laborCodes Json           @default("[]")
-  laborRows  Json           @default("[]")
+  laborCodes   Json           @default("[]")
+  laborRows    Json           @default("[]")
   /// Material-only section.
-  matCodes   Json           @default("[]")
-  matRows    Json           @default("[]")
+  matCodes     Json           @default("[]")
+  matRows      Json           @default("[]")
   /// The crew's own marked-up print, photographed or scanned. Distinct from
   /// `redlines` below: that is what somebody drew on the map in this app,
   /// this is the paper that came off the truck with the footages between peds
   /// written on it. It is the as-built record Globe asks for, and the thing
   /// that proves a quantity six months after the ground closed over it.
-  redlineFiles Json     @default("[]")
+  redlineFiles Json           @default("[]")
   /// As-built redline drawn over the project map for this day's work.
-  redlines   Json           @default("[]")
+  redlines     Json           @default("[]")
   /// Free-text notes from the crew — conditions, delays, anything the grid
   /// has no column for.
-  notes      String         @default("")
+  notes        String         @default("")
   /// Field photos: peds, handholes, as-built evidence. Each entry carries its
   /// own capture/upload timestamp, so the record shows when it was taken and
   /// not merely when the sheet was submitted.
-  photos     Json           @default("[]")
-  status     String         @default("DRAFT") // DRAFT | SUBMITTED
+  photos       Json           @default("[]")
+  status       String         @default("DRAFT") // DRAFT | SUBMITTED
   /// The Daily this sheet produced on submit, if any.
-  dailyId    String?
-  createdAt  DateTime       @default(now())
-  updatedAt  DateTime       @updatedAt
+  dailyId      String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
 
   @@index([projectId])
 }
@@ -554,23 +561,23 @@ model SubcontractorRate {
 }
 
 model Subcontractor {
-  id             String            @id @default(cuid())
-  company        String
-  lead           String            @default("")
-  email          String            @default("")
-  phone          String            @default("")
-  location       String            @default("")
-  trades         String[]          @default([])
-  state          SubState          @default(PENDING_REVIEW)
-  tone           String            @default("neutral")
+  id                     String                    @id @default(cuid())
+  company                String
+  lead                   String                    @default("")
+  email                  String                    @default("")
+  phone                  String                    @default("")
+  location               String                    @default("")
+  trades                 String[]                  @default([])
+  state                  SubState                  @default(PENDING_REVIEW)
+  tone                   String                    @default("neutral")
   /// Jobs this crew is assigned to — the authority on what they can see.
-  projects       ProjectCrew[]
-  badges         CrewBadge[]
-  ach            AchAuthorization?
-  notifications  Notification[]
-  filedSheets    DailySheet[]
-  payStatements  SubInvoice[]
-  tasks          Task[]            @relation("TaskCrew")
+  projects               ProjectCrew[]
+  badges                 CrewBadge[]
+  ach                    AchAuthorization?
+  notifications          Notification[]
+  filedSheets            DailySheet[]
+  payStatements          SubInvoice[]
+  tasks                  Task[]                    @relation("TaskCrew")
   /// When this crew agreed, in writing, to receive operational texts. A date
   /// rather than a flag: carriers require proof of consent, and "true" with
   /// no date proves nothing about when or under what wording.
@@ -578,35 +585,35 @@ model Subcontractor {
   /// portal. Off by default: several owners have their own people fill in the
   /// billing and do not want a rate card in front of them. The office can turn
   /// it on per crew for the ones who ask.
-  showPayToCrew  Boolean   @default(false)
+  showPayToCrew          Boolean                   @default(false)
   /// Whether this crew's login may see the owner's own paperwork - EIN,
   /// banking, signatory, home address, references. Off by default: a foreman
   /// entering dailies signs in with the company account, and none of that is
   /// his to read. Documents and badges stay reachable so he can still upload
   /// a certificate.
-  showOwnerDetailsToCrew Boolean @default(false)
+  showOwnerDetailsToCrew Boolean                   @default(false)
   userInvites            SubUserInvite[]
   conversations          Conversation[]
   conversationSeat       ConversationParticipant[] @relation("ConversationCrew")
   materialCustody        MaterialInstance[]        @relation("MaterialCustodian")
   messageContacts        MessageContact[]
-  smsConsentAt   DateTime?
+  smsConsentAt           DateTime?
   /// Set the moment they reply STOP. Kept forever rather than cleared, so a
   /// re-onboarding can never quietly resubscribe someone who opted out.
-  smsOptOutAt    DateTime?
-  compliance     Json              @default("[]")
-  complianceTone String            @default("neutral")
-  scorecard      Json              @default("{}")
-  crewSize       Int               @default(0)
-  equipment      String[]          @default([])
+  smsOptOutAt            DateTime?
+  compliance             Json                      @default("[]")
+  complianceTone         String                    @default("neutral")
+  scorecard              Json                      @default("{}")
+  crewSize               Int                       @default(0)
+  equipment              String[]                  @default([])
   /// Which machine this crew bores with. Decides which of two same-coded rates
   /// they are paid, so it is asked once here rather than guessed per invoice.
-  boreMethod     BoreMethod?
-  logoUrl        String?
+  boreMethod             BoreMethod?
+  logoUrl                String?
   /// Internal note on this crew — why their rates differ, what kit they run,
   /// anything the office needs to see beside the name. Never shown to the sub.
-  notes          String            @default("")
-  since          String            @default("")
+  notes                  String                    @default("")
+  since                  String                    @default("")
 
   // ---- Vendor packet -------------------------------------------------------
   // What any contractor asks for before letting a crew on site. The sub fills
@@ -665,14 +672,14 @@ model Subcontractor {
   /// Two or three GCs they've worked for, as [{company, contact, phone, email}].
   references Json @default("[]")
 
-  users     User[]
-  contacts  CrewContact[]
-  documents SubDocument[]
-  rates     SubcontractorRate[]
-  contracts Document[]
+  users             User[]
+  contacts          CrewContact[]
+  documents         SubDocument[]
+  rates             SubcontractorRate[]
+  contracts         Document[]
   locateTickets     LocateTicket[]
   contractorLocates ContractorLocate[]
-  createdAt DateTime            @default(now())
+  createdAt         DateTime            @default(now())
 }
 
 /// A file a subcontractor uploads to an onboarding/compliance section. Stored as
@@ -738,9 +745,9 @@ model SubInvoice {
   /// Frozen onto the statement rather than read from the customer each time
   /// it is displayed: the rate on the job can be renegotiated, and a crew who
   /// accepted a figure in August must still see that figure in December.
-  retainagePct    Float            @default(0)
-  retainageHeld   Float            @default(0)
-  issuedAt        DateTime?
+  retainagePct  Float     @default(0)
+  retainageHeld Float     @default(0)
+  issuedAt      DateTime?
 
   /// The record of them agreeing: who, and exactly when.
   acceptedAt  DateTime?
@@ -857,14 +864,14 @@ enum TaskPriority {
 /// rate card, a truck) belongs to no job at all.
 model Task {
   conversations Conversation[]
-  id       String       @id @default(cuid())
-  title    String
-  detail   String       @default("")
-  status   TaskStatus   @default(OPEN)
-  priority TaskPriority @default(NORMAL)
-  category TaskCategory @default(GENERAL)
+  id            String         @id @default(cuid())
+  title         String
+  detail        String         @default("")
+  status        TaskStatus     @default(OPEN)
+  priority      TaskPriority   @default(NORMAL)
+  category      TaskCategory   @default(GENERAL)
   /// YYYY-MM-DD. Blank means no date, which is different from overdue.
-  dueDate  String       @default("")
+  dueDate       String         @default("")
 
   /// An employee.
   assigneeUser   User?          @relation("TaskAssignee", fields: [assigneeUserId], references: [id], onDelete: SetNull)
@@ -1109,8 +1116,8 @@ model Daily {
   /// at a point, and the crew already say it that way on the phone. It is
   /// the fastest way to tell two of the same job's dailies apart in a list
   /// where every row says the same project, crew and work order.
-  roads            String            @default("")
-  workDate      String   @default("")
+  roads    String @default("")
+  workDate String @default("")
 
   /// Administration override for which billing week this daily falls in, as
   /// the Friday that closes that week. Empty means derive it from workDate,
@@ -1118,27 +1125,28 @@ model Daily {
   /// night belongs to the week that follows. The override exists because the
   /// office sometimes has to hold a day back or pull one forward, and doing
   /// that by editing the work date would falsify when the work happened.
-  billingWeekEnd String   @default("")
+  billingWeekEnd  String   @default("")
   /// Set when that Friday came from missing the cutoff rather than from the
   /// office moving the day. Two different reasons a daily is not on the week
   /// you would expect, and a crew is owed the difference between them.
-  billingWeekLate Boolean @default(false)
-  submittedAt    String   @default("")
-  status         String   @default("Submitted")
-  tone           String   @default("info")
-  totalFt        Int      @default(0)
-  billableAmount Int      @default(0)
-  lineItems      Json     @default("[]")
-  photos         Int      @default(0)
-  hasAsBuilt     Boolean  @default(false)
-  hasBoreLog     Boolean  @default(false)
-  flags          Json     @default("[]")
+  billingWeekLate Boolean  @default(false)
+  submittedAt     String   @default("")
+  status          String   @default("Submitted")
+  tone            String   @default("info")
+  totalFt         Int      @default(0)
+  billableAmount  Int      @default(0)
+  lineItems       Json     @default("[]")
+  photos          Int      @default(0)
+  hasAsBuilt      Boolean  @default(false)
+  hasBoreLog      Boolean  @default(false)
+  flags           Json     @default("[]")
   /// Supervisor review. A denial without a reason is useless to the crew that
   /// has to fix it, so the note is required when denying.
-  reviewNote     String   @default("")
-  reviewedBy     String   @default("")
-  reviewedAt     String   @default("")
-  createdAt      DateTime @default(now())
+  reviewNote      String   @default("")
+  reviewedBy      String   @default("")
+  reviewedAt      String   @default("")
+  createdAt       DateTime @default(now())
+
   /// The highest-volume table in the system and, until now, the only one with
   /// no index at all beyond its primary key. Every list reads it by date, by
   /// job or by billing week, and each of those was a sequential scan.
@@ -1285,6 +1293,53 @@ enum CaptureSource {
   LIBRARY
 }
 
+/// Where a piece of evidence sits in a job's life.
+///
+/// The axis that matters when a homeowner rings up three weeks later: what the
+/// property looked like before anybody touched it, what the crew did, what it
+/// looked like afterwards. DIRECTION is not a stage in that sense — it is an
+/// instruction to the crew rather than a record of anything — but it shares the
+/// gallery, so it shares the enum.
+enum EvidenceStage {
+  PRE_CONSTRUCTION
+  WORK_RECORD
+  DIRECTION
+  CLOSEOUT
+}
+
+/// What the photograph is *of*, which is what makes a claim searchable.
+///
+/// Deliberately not free text. "driveway", "Driveway", "drive way" and "DW"
+/// are one thing to a person and four to a query, and the query is what
+/// somebody runs when a homeowner says the crew cracked their apron.
+enum EvidenceCategory {
+  EXISTING_DAMAGE
+  DRIVEWAY
+  CURB_SIDEWALK
+  LANDSCAPING_LAWN
+  IRRIGATION
+  MAILBOX
+  FENCE
+  ROAD_SHOULDER
+  DRAINAGE
+  UTILITY_PEDESTAL
+  STRUCTURE
+  GENERAL_ROUTE
+  OTHER
+}
+
+/// How far along a project's baseline documentation is.
+///
+/// Explicit rather than inferred from whether photographs exist: a crew that
+/// took two pictures and stopped has not documented a route, and a project
+/// with none may simply not have started yet. Somebody says when it is done,
+/// and the record says who and when.
+enum PreConStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETE
+}
+
 /// A field photo or video on a project — evidence, and direction for the crew.
 ///
 /// Two jobs in one record. As-built evidence has to be defensible: what was
@@ -1321,16 +1376,61 @@ model ProjectPhoto {
   /// guess and should not be drawn on a map like a survey point.
   accuracyM      Float?
   /// "device" | "exif" — never inferred, never filled in from the project.
+  ///
+  /// TEXT rather than an enum on purpose: converting a column with live rows
+  /// in it rewrites the table, which is a heavier migration than this
+  /// constraint needs. The accepted values live in src/lib/evidence.ts, which
+  /// is the only way anything reaches this column.
   locationSource String @default("")
 
   caption String @default("")
   /// RECORD (evidence of work) | DIRECTION (instruction for the crew)
+  ///
+  /// DEPRECATED, and kept on purpose. `stage` is the authoritative field from
+  /// this build onwards; this one stays until the last reader has moved over,
+  /// so a deploy that lands mid-migration does not blank a gallery. Written on
+  /// create alongside `stage` and never read for a new decision. Remove it in
+  /// its own change, once nothing selects it.
   purpose String @default("RECORD")
+
+  /// Where this sits in the job's life. Authoritative; see `purpose`.
+  stage EvidenceStage @default(WORK_RECORD)
+
+  /// What it is a picture of. OTHER rather than null, so a filter never has to
+  /// ask two questions.
+  category EvidenceCategory @default(OTHER)
+
+  /// Damage that was already there before the crew arrived.
+  ///
+  /// Separate from `category` rather than a value of it: a cracked driveway is
+  /// still a driveway, and somebody searching for driveway evidence should find
+  /// it. Both are true at once and both are worth keeping.
+  existingDamage Boolean @default(false)
+  /// What the damage was, in the words of whoever saw it.
+  damageNote     String  @default("")
+
+  /// Provenance, when this came in on a crew's daily rather than from the
+  /// office. The file is not copied — this is the same blob, described once.
+  dailySheetId    String?
+  dailyId         String?
+  subcontractorId String?
+
+  /// Who uploaded it, as an account rather than a name that may change.
+  uploadedByUserId String?
+  /// When the file arrived, as distinct from when the shutter fired.
+  uploadedAt       DateTime @default(now())
 
   uploadedBy String   @default("")
   createdAt  DateTime @default(now())
 
   @@index([projectId, createdAt])
+  @@index([projectId, stage, createdAt])
+  @@index([projectId, existingDamage])
+  @@index([dailySheetId])
+  /// For "everything photographed within so many metres of this complaint".
+  /// A bounding box over these two columns is enough at this scale; PostGIS
+  /// would be a dependency bought for a query nobody has run yet.
+  @@index([lat, lng])
 }
 
 /// One project-specific onboarding invite link.
@@ -1855,13 +1955,13 @@ model Prospect {
 
   availability      ProspectAvailability @default(UNKNOWN)
   /// How many of their crews could start, and when the first one could.
-  availableCrews    Int      @default(0)
-  earliestStart     String   @default("")
-  yearsInBusiness   Int      @default(0)
+  availableCrews    Int                  @default(0)
+  earliestStart     String               @default("")
+  yearsInBusiness   Int                  @default(0)
   /// How far they will travel, and what it costs to move them.
-  travelRadiusMiles Int      @default(0)
-  perDiemRequired   Boolean  @default(false)
-  lodgingRequired   Boolean  @default(false)
+  travelRadiusMiles Int                  @default(0)
+  perDiemRequired   Boolean              @default(false)
+  lodgingRequired   Boolean              @default(false)
 
   /// When the prospect entered the stage it is in. A prospect sitting in
   /// discussion for thirty-one days is the thing worth seeing, and an
@@ -1883,14 +1983,14 @@ model Prospect {
   convertedCustomerId      String?
   convertedAt              DateTime?
 
-  contacts       ProspectContact[]
-  equipmentItems ProspectEquipment[]
-  capabilities   ProspectCapability[]
-  rates          ProspectRate[]
+  contacts        ProspectContact[]
+  equipmentItems  ProspectEquipment[]
+  capabilities    ProspectCapability[]
+  rates           ProspectRate[]
   availabilityLog ProspectAvailabilityEntry[]
-  qualifications ProspectQualification[]
-  references     ProspectReference[]
-  opportunities  ProspectOpportunity[]
+  qualifications  ProspectQualification[]
+  references      ProspectReference[]
+  opportunities   ProspectOpportunity[]
 
   activities ProspectActivity[]
   createdAt  DateTime           @default(now())
@@ -2079,8 +2179,8 @@ model LocateTicket {
   contractorLocates ContractorLocate[]
   checks            LocateTicketCheck[]
   changes           LocateTicketChange[]
-  createdAt DateTime         @default(now())
-  updatedAt DateTime         @updatedAt
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
 
   @@unique([number, revision])
   @@index([projectId])
@@ -2119,7 +2219,6 @@ model LocateResponse {
   @@index([ticketId])
 }
 
-
 /// A person at a subcontractor — the foreman who files dailies, the office
 /// manager who chases an invoice, the owner who signs.
 ///
@@ -2150,35 +2249,36 @@ model CrewContact {
 
   @@index([subcontractorId])
 }
+
 /// A physical place material is stored for a project.
 ///
 /// A project can have several — a main yard and satellites — and a yard can
 /// serve more than one project, so the link between them lives on the
 /// transaction rather than being a column here.
 model Yard {
-  id            String  @id @default(cuid())
-  name          String
+  id              String   @id @default(cuid())
+  name            String
   /// Scalar ids rather than Prisma relations, deliberately. Adding relation
   /// fields means editing Project and Subcontractor, and every model touched
   /// is a chance to break a schema that thirty other things depend on. These
   /// carry the same information and are indexed the same way.
-  projectId     String  @default("")
-  customerId    String  @default("")
-  primeContractor String @default("")
-  state         String  @default("")
-  market        String  @default("")
-  county        String  @default("")
-  city          String  @default("")
-  address       String  @default("")
-  lat           Float?
-  lng           Float?
-  managerName   String  @default("")
-  managerPhone  String  @default("")
-  hours         String  @default("")
-  status        String  @default("ACTIVE")
-  notes         String  @default("")
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  projectId       String   @default("")
+  customerId      String   @default("")
+  primeContractor String   @default("")
+  state           String   @default("")
+  market          String   @default("")
+  county          String   @default("")
+  city            String   @default("")
+  address         String   @default("")
+  lat             Float?
+  lng             Float?
+  managerName     String   @default("")
+  managerPhone    String   @default("")
+  hours           String   @default("")
+  status          String   @default("ACTIVE")
+  notes           String   @default("")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@index([projectId])
   @@index([customerId])
@@ -2196,21 +2296,21 @@ model Yard {
 /// Nothing is ever edited here. A mistake is corrected by writing an ADJUST
 /// row with a reason, so the trail of what was believed and when survives.
 model MaterialTransaction {
-  id        String @id @default(cuid())
+  id String @id @default(cuid())
 
   /// RECEIVE, ISSUE, RETURN, INSTALL, TRANSFER, ADJUST, DAMAGE, COUNT.
-  kind      String
+  kind     String
   /// The material this moved, by code — the same code the rate card and the
   /// daily sheet use, so the three can be reconciled without a mapping table.
-  code      String
+  code     String
   /// Positive adds to the yard, negative takes away. An ISSUE is negative, a
   /// RETURN positive — so on-hand is the sum, and no reader has to know which
   /// kinds count which way.
-  quantity  Float
-  unit      String @default("")
+  quantity Float
+  unit     String @default("")
 
-  projectId String @default("")
-  yardId    String @default("")
+  projectId      String @default("")
+  yardId         String @default("")
   /// Who holds it after this movement. Empty means the yard does.
   custodianSubId String @default("")
   crew           String @default("")
@@ -2287,21 +2387,21 @@ model MaterialTransaction {
 /// wording will change and a consent record has to say what was actually
 /// agreed to on the day, not what the page says now.
 model SmsOptIn {
-  id        String @id @default(cuid())
+  id          String    @id @default(cuid())
   /// E.164. The identity of the consent — everything else is context.
-  phone     String
-  name      String @default("")
-  company   String @default("")
+  phone       String
+  name        String    @default("")
+  company     String    @default("")
   /// The consent language exactly as it appeared when they ticked it.
   consentText String
   /// Where they were when they agreed, for an audit trail.
-  source    String @default("web")
-  ip        String @default("")
-  userAgent String @default("")
-  consentedAt DateTime @default(now())
+  source      String    @default("web")
+  ip          String    @default("")
+  userAgent   String    @default("")
+  consentedAt DateTime  @default(now())
   /// Set when they reply STOP, or ask us to stop by any other means.
-  revokedAt DateTime?
-  revokedVia String  @default("")
+  revokedAt   DateTime?
+  revokedVia  String    @default("")
 
   @@index([phone])
 }
@@ -2343,32 +2443,32 @@ model SubPayment {
 /// and the job before the person ever sees it, so nothing they type can put
 /// them somewhere else.
 model SubUserInvite {
-  token           String      @id
+  token           String        @id
   subcontractor   Subcontractor @relation(fields: [subcontractorId], references: [id], onDelete: Cascade)
   subcontractorId String
   email           String
-  name            String      @default("")
-  subUserRole     SubUserRole @default(FOREMAN)
-  used            Boolean     @default(false)
-  invitedBy       String      @default("")
-  createdAt       DateTime    @default(now())
+  name            String        @default("")
+  subUserRole     SubUserRole   @default(FOREMAN)
+  used            Boolean       @default(false)
+  invitedBy       String        @default("")
+  createdAt       DateTime      @default(now())
 
   @@index([subcontractorId])
 }
 
-/* ------------------------------------------------------------------ *
+/**
+ * ------------------------------------------------------------------ *
  * Messaging.
- *
  * A conversation is attached to the work it is about. That is the whole
  * point of it living here rather than in anybody's phone: a foreman's text
  * about a damaged ped is the only record of why a daily was short, and it
  * currently lives in a thread nobody else can read.
- *
  * Built so SMS can be switched on later without moving anything. A message is
  * stored once; how it reached somebody is a separate row per recipient per
  * channel, because "sent" and "sent to Jose's phone and failed on Marlon's"
  * are different facts.
- * ------------------------------------------------------------------ */
+ * ------------------------------------------------------------------
+ */
 
 enum ConversationType {
   /// One person to one person.
@@ -2436,8 +2536,8 @@ enum SmsConsent {
 /// without an account, and a number is the identity — normalised to E.164 so
 /// "(864) 555-0134" and "+18645550134" cannot become two people.
 model MessageContact {
-  id   String  @id @default(cuid())
-  name String  @default("")
+  id        String @id @default(cuid())
+  name      String @default("")
   /// E.164. Unique, because that is what stops the same person arriving twice.
   phoneE164 String @unique
   email     String @default("")
@@ -2446,11 +2546,11 @@ model MessageContact {
   subcontractor   Subcontractor? @relation(fields: [subcontractorId], references: [id], onDelete: SetNull)
   subcontractorId String?
 
-  consent     SmsConsent @default(UNKNOWN)
-  optInAt     DateTime?
-  optOutAt    DateTime?
+  consent       SmsConsent @default(UNKNOWN)
+  optInAt       DateTime?
+  optOutAt      DateTime?
   /// Where the consent came from — the packet, the public page, a staff note.
-  consentSource String   @default("")
+  consentSource String     @default("")
 
   participants ConversationParticipant[]
   sentMessages Message[]
@@ -2463,11 +2563,11 @@ model MessageContact {
 }
 
 model Conversation {
-  id    String           @id @default(cuid())
-  type  ConversationType
-  title String           @default("")
+  id      String           @id @default(cuid())
+  type    ConversationType
+  title   String           @default("")
   /// What it is about, in a few words — "COI request", "Reynolds Rd rework".
-  subject String         @default("")
+  subject String           @default("")
 
   /// The work this is attached to. All optional and all indexed: a
   /// conversation usually has one, occasionally two, and the pairing is what
@@ -2480,8 +2580,8 @@ model Conversation {
   taskId          String?
   /// Plain ids rather than relations: a daily or a locate being deleted must
   /// not take the conversation about it with them.
-  dailyId  String @default("")
-  locateId String @default("")
+  dailyId         String         @default("")
+  locateId        String         @default("")
 
   createdByUserId String?
   createdAt       DateTime  @default(now())
@@ -2554,13 +2654,13 @@ model Message {
 }
 
 model MessageAttachment {
-  id        String  @id @default(cuid())
-  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  messageId String
-  url       String
-  name      String  @default("")
-  contentType String @default("")
-  bytes     Int     @default(0)
+  id          String  @id @default(cuid())
+  message     Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  messageId   String
+  url         String
+  name        String  @default("")
+  contentType String  @default("")
+  bytes       Int     @default(0)
 
   @@index([messageId])
 }
@@ -2584,7 +2684,7 @@ model MessageDelivery {
   /// The number it actually went to, frozen — a contact's number can change.
   toPhoneE164 String          @default("")
 
-  provider String @default("")
+  provider          String  @default("")
   /// The provider's own id. Unique, and it is what makes webhook processing
   /// idempotent: the same SID arriving twice updates one row rather than
   /// creating a second.
@@ -2631,11 +2731,11 @@ model ConversationEvent {
 /// The foundation only. Nothing sends on a schedule yet — this is what a
 /// reminder will be written from once consent and configuration allow it.
 model MessageTemplate {
-  id   String @id @default(cuid())
+  id     String @id @default(cuid())
   /// task_assigned | task_reminder | coi_expiring | daily_missing | locate_clear
-  key  String @unique
-  name String
-  body String
+  key    String @unique
+  name   String
+  body   String
   /// Which placeholders the body understands, for whoever edits it later.
   tokens String @default("")
 
@@ -2643,19 +2743,19 @@ model MessageTemplate {
   updatedAt DateTime @updatedAt
 }
 
-/* ------------------------------------------------------------------ *
+/**
+ * ------------------------------------------------------------------ *
  * Material chain of custody.
- *
  * The distinction everything below depends on: "288ct SM Fiber" is a material,
  * "Reel R-88142" is a thing you can put on a truck. The ledger tracked
  * material by code, which answers how much a job used and cannot answer who
  * has it — and who has it is the question being asked when 480 ft is missing.
- *
  * Custody is derived from events and cached on the instance. Every movement is
  * an event; the instance carries the latest one so a list of two hundred reels
  * does not replay two thousand movements to draw itself. Nothing overwrites
  * history.
- * ------------------------------------------------------------------ */
+ * ------------------------------------------------------------------
+ */
 
 enum MaterialInstanceStatus {
   /// Booked in, not yet available to issue.
@@ -2707,18 +2807,18 @@ model MaterialInstance {
 
   status MaterialInstanceStatus @default(RECEIVED)
 
-  yardId          String  @default("")
-  locationLabel   String  @default("")
+  yardId          String         @default("")
+  locationLabel   String         @default("")
   project         Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
   projectId       String?
   custodian       Subcontractor? @relation("MaterialCustodian", fields: [custodianSubId], references: [id], onDelete: SetNull)
   custodianSubId  String?
-  crew            String  @default("")
+  crew            String         @default("")
   /// The person answerable for it, by name. A crew's staff change, and a
   /// custody record naming only a company answers nobody.
-  responsibleName String  @default("")
-  vehicle         String  @default("")
-  trailer         String  @default("")
+  responsibleName String         @default("")
+  vehicle         String         @default("")
+  trailer         String         @default("")
 
   checkedOutAt DateTime?
   issuedByName String    @default("")
@@ -2772,10 +2872,10 @@ model MaterialSession {
   actorUserId String @default("")
   actorName   String @default("")
 
-  acknowledgedBy      String @default("")
+  acknowledgedBy      String    @default("")
   acknowledgedAt      DateTime?
-  acknowledgementText String @default("")
-  signatureUrl        String @default("")
+  acknowledgementText String    @default("")
+  signatureUrl        String    @default("")
 
   supplier       String @default("")
   poNumber       String @default("")
@@ -2836,13 +2936,13 @@ model ProspectContact {
   prospectId String
 
   name    String
-  title   String @default("")
-  phone   String @default("")
-  email   String @default("")
+  title   String  @default("")
+  phone   String  @default("")
+  email   String  @default("")
   /// phone | text | email
-  prefers String @default("")
+  prefers String  @default("")
   primary Boolean @default(false)
-  notes   String @default("")
+  notes   String  @default("")
 
   createdAt DateTime @default(now())
 
@@ -2880,15 +2980,15 @@ model ProspectCapability {
   prospect   Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
   prospectId String
 
-  trade String
+  trade          String
   /// primary | secondary | occasional
-  level String @default("primary")
+  level          String @default("primary")
   /// Production they claim, in whatever unit the trade is measured in —
   /// footage for plough, shots for missile. Assuming feet breaks half of them.
   productionQty  Float  @default(0)
   productionUnit String @default("ft")
   productionPer  String @default("week")
-  notes String @default("")
+  notes          String @default("")
 
   @@unique([prospectId, trade])
   @@index([trade])
@@ -2926,12 +3026,12 @@ model ProspectAvailabilityEntry {
   prospect   Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
   prospectId String
 
-  status    ProspectAvailability
-  crews     Int      @default(0)
-  fromDate  String   @default("")
-  note      String   @default("")
-  recordedBy String  @default("")
-  createdAt DateTime @default(now())
+  status     ProspectAvailability
+  crews      Int                  @default(0)
+  fromDate   String               @default("")
+  note       String               @default("")
+  recordedBy String               @default("")
+  createdAt  DateTime             @default(now())
 
   @@index([prospectId, createdAt])
 }
@@ -2944,13 +3044,13 @@ model ProspectQualification {
 
   /// company | insurance | w9 | safety | references | equipment | rates |
   /// geography | availability | agreement | nda
-  item   String
+  item      String
   /// missing | received | review | complete | na
-  status String @default("missing")
-  note   String @default("")
+  status    String   @default("missing")
+  note      String   @default("")
   /// For anything that lapses.
-  expiresOn String @default("")
-  updatedBy String @default("")
+  expiresOn String   @default("")
+  updatedBy String   @default("")
   updatedAt DateTime @updatedAt
 
   @@unique([prospectId, item])
@@ -2985,17 +3085,17 @@ model ProspectOpportunity {
   prospect   Prospect @relation(fields: [prospectId], references: [id], onDelete: Cascade)
   prospectId String
 
-  name   String
-  market String @default("")
+  name           String
+  market         String @default("")
   /// identified | qualified | bid_requested | bid_prep | bid_submitted |
   /// negotiating | awarded | lost
-  stage  String @default("identified")
-  estimatedValue Float @default(0)
-  probability    Int   @default(0)
+  stage          String @default("identified")
+  estimatedValue Float  @default(0)
+  probability    Int    @default(0)
   bidDue         String @default("")
   expectedAward  String @default("")
-  owner  String @default("")
-  notes  String @default("")
+  owner          String @default("")
+  notes          String @default("")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -3204,15 +3304,15 @@ model LocateTicketChange {
   check   LocateTicketCheck? @relation(fields: [checkId], references: [id], onDelete: SetNull)
   checkId String?
 
-  kind LocateChangeKind
+  kind      LocateChangeKind
   /// What moved — a utility name, "Expires on", "Field readiness".
-  subject   String @default("")
-  fromValue String @default("")
-  toValue   String @default("")
+  subject   String           @default("")
+  fromValue String           @default("")
+  toValue   String           @default("")
   /// One sentence a person can read without decoding the enums.
-  summary   String @default("")
+  summary   String           @default("")
   /// Set when a person caused it rather than a lookup.
-  actor     String @default("")
+  actor     String           @default("")
 
   at DateTime @default(now())
 
@@ -3266,9 +3366,9 @@ model DemoRequest {
   userAgent String @default("")
 
   /// NEW | CONTACTED | DEMOED | WON | LOST
-  status String    @default("NEW")
-  note   String    @default("")
-  handledBy String @default("")
+  status    String    @default("NEW")
+  note      String    @default("")
+  handledBy String    @default("")
   handledAt DateTime?
 
   createdAt DateTime @default(now())
