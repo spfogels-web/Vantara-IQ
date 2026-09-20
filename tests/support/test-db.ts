@@ -96,9 +96,55 @@ export function clearSchemaName(): void {
  * So: pooled here, and `assertIsolated` below proves it on every run rather
  * than trusting this comment.
  */
+/**
+ * Neon endpoints that hold a live business, by their endpoint id.
+ *
+ * Kept here as well as in prisma/provision/targets.ts on purpose: a test run
+ * must refuse on its own evidence rather than by importing a module that a
+ * future refactor could quietly drop.
+ */
+const PRODUCTION_MARKS: { mark: string; who: string }[] = [
+  { mark: "damp-mouse", who: "Fortitude Infrastructure (production)" },
+  { mark: "aged-dew", who: "Apex Construction Group (demonstration tenant)" },
+];
+
+/**
+ * Where the suite is allowed to build its disposable schemas.
+ *
+ * This used to be DATABASE_URL, which meant every run created and dropped
+ * schemas inside Fortitude's production database. The schema guards held —
+ * public was never touched — but "the guard held" is the wrong thing to be
+ * relying on, and twelve schemas left by failed drops are still sitting in
+ * that database because of it.
+ *
+ * So the address is its own variable now, and a production endpoint is
+ * refused by identity whichever variable supplies it. A suite that cannot
+ * find a safe database must stop, not fall back to the live one.
+ */
 function baseUrl(): string {
-  const url = process.env.DATABASE_URL;
-  if (!url) throw new Error("DATABASE_URL is not set. Tests need it to reach Neon.");
+  const url = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL;
+  if (!url) {
+    throw new Error(
+      "No test database configured. Set TEST_DATABASE_URL to a database that is not production.",
+    );
+  }
+
+  let host = "";
+  try {
+    host = new URL(url).host;
+  } catch {
+    throw new Error("The test database URL is not a URL this can identify. Refusing.");
+  }
+
+  for (const { mark, who } of PRODUCTION_MARKS) {
+    if (host.includes(mark)) {
+      throw new Error(
+        `Refusing to run: that endpoint is ${who}. The suite creates and drops schemas, ` +
+          "which must never happen in a live tenant's database. Set TEST_DATABASE_URL to a " +
+          "separate Neon project or branch.",
+      );
+    }
+  }
   return url;
 }
 

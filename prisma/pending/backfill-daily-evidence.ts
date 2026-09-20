@@ -62,6 +62,7 @@ const str = (v: unknown, fallback = "") => (typeof v === "string" ? v : fallback
 async function main() {
   const apply = process.argv.includes("--apply");
   const tenant = process.argv.find((a) => a.startsWith("--tenant="))?.split("=")[1];
+  const useTest = process.argv.includes("--test");
 
   /**
    * Which database. Without --tenant this is the application's own
@@ -70,7 +71,22 @@ async function main() {
    * through the guarded path, which refuses a protected endpoint outright.
    */
   let url: string | undefined;
-  if (tenant) {
+  if (useTest) {
+    // The disposable Neon branch, for rehearsing this against a real copy of
+    // the data before it is ever pointed at the business. Refused if it turns
+    // out to name a live tenant, because a branch URL pasted from the wrong
+    // console tab is exactly the mistake this whole path is shaped around.
+    url = process.env.TEST_DATABASE_URL;
+    if (!url) throw new Error("TEST_DATABASE_URL is not set.");
+    const host = new URL(url).host;
+    for (const mark of ["damp-mouse", "aged-dew"]) {
+      if (host.includes(mark)) {
+        throw new Error(
+          `Refusing --test: ${host.split(".")[0]} is a live tenant, not a disposable branch.`,
+        );
+      }
+    }
+  } else if (tenant) {
     const t = targetFor(tenant);
     url = urlFor(t, "pooled");
   } else {

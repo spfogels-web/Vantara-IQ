@@ -27,14 +27,24 @@ BEGIN;
 
 -- ---------------------------------------------------------------------------
 -- Vocabulary
+--
+-- Every type is schema-qualified. An unqualified CREATE TYPE lands wherever
+-- search_path points, and production reaches this database through a
+-- connection pooler that hands back server connections still carrying an
+-- earlier session's search_path. Measured on the live database: the pooled
+-- endpoint reported search_path = a dropped test schema and current_schema()
+-- = NULL, so an unqualified CREATE TYPE there has no target at all and the
+-- migration fails halfway. The tables below were already qualified; these
+-- three were not, and the first rehearsal did not catch it because it ran
+-- inside a scratch schema where the path and the tables happened to agree.
 -- ---------------------------------------------------------------------------
 
 DO $$ BEGIN
-  CREATE TYPE "EvidenceStage" AS ENUM ('PRE_CONSTRUCTION', 'WORK_RECORD', 'DIRECTION', 'CLOSEOUT');
+  CREATE TYPE "public"."EvidenceStage" AS ENUM ('PRE_CONSTRUCTION', 'WORK_RECORD', 'DIRECTION', 'CLOSEOUT');
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 DO $$ BEGIN
-  CREATE TYPE "EvidenceCategory" AS ENUM (
+  CREATE TYPE "public"."EvidenceCategory" AS ENUM (
     'EXISTING_DAMAGE', 'DRIVEWAY', 'CURB_SIDEWALK', 'LANDSCAPING_LAWN', 'IRRIGATION',
     'MAILBOX', 'FENCE', 'ROAD_SHOULDER', 'DRAINAGE', 'UTILITY_PEDESTAL', 'STRUCTURE',
     'GENERAL_ROUTE', 'OTHER'
@@ -42,7 +52,7 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 DO $$ BEGIN
-  CREATE TYPE "PreConStatus" AS ENUM ('NOT_STARTED', 'IN_PROGRESS', 'COMPLETE');
+  CREATE TYPE "public"."PreConStatus" AS ENUM ('NOT_STARTED', 'IN_PROGRESS', 'COMPLETE');
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- ---------------------------------------------------------------------------
@@ -50,8 +60,8 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 -- ---------------------------------------------------------------------------
 
 ALTER TABLE "public"."ProjectPhoto"
-  ADD COLUMN IF NOT EXISTS "stage"            "EvidenceStage"    NOT NULL DEFAULT 'WORK_RECORD',
-  ADD COLUMN IF NOT EXISTS "category"         "EvidenceCategory" NOT NULL DEFAULT 'OTHER',
+  ADD COLUMN IF NOT EXISTS "stage"            "public"."EvidenceStage"    NOT NULL DEFAULT 'WORK_RECORD',
+  ADD COLUMN IF NOT EXISTS "category"         "public"."EvidenceCategory" NOT NULL DEFAULT 'OTHER',
   ADD COLUMN IF NOT EXISTS "existingDamage"   BOOLEAN            NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS "damageNote"       TEXT               NOT NULL DEFAULT '',
   ADD COLUMN IF NOT EXISTS "dailySheetId"     TEXT,
@@ -95,7 +105,7 @@ CREATE INDEX IF NOT EXISTS "ProjectPhoto_lat_lng_idx"
 -- ---------------------------------------------------------------------------
 
 ALTER TABLE "public"."Project"
-  ADD COLUMN IF NOT EXISTS "preConStatus"      "PreConStatus" NOT NULL DEFAULT 'NOT_STARTED',
+  ADD COLUMN IF NOT EXISTS "preConStatus"      "public"."PreConStatus" NOT NULL DEFAULT 'NOT_STARTED',
   ADD COLUMN IF NOT EXISTS "preConCompletedBy" TEXT           NOT NULL DEFAULT '',
   ADD COLUMN IF NOT EXISTS "preConCompletedAt" TIMESTAMP(3);
 
