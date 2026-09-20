@@ -69,7 +69,10 @@ export function PanelHeader({
         </span>
       ) : null}
 
-      <div className="min-w-0 flex-1">
+      {/* basis-full on a phone: with two or three controls beside it, a title
+          was being squeezed into a four-line column and the controls still had
+          barely room to sit. Its own line costs nothing and reads properly. */}
+      <div className="min-w-0 basis-full sm:basis-0 sm:flex-1">
         <div className="flex items-center gap-2">
           {/* Wraps on phones, truncates once there's room for a single line —
               a clipped section title is worse than a two-line one. */}

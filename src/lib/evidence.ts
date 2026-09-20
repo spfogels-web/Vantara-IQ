@@ -228,3 +228,32 @@ export async function evidenceNear(input: {
     orderBy: { capturedAt: "desc" },
   });
 }
+
+/**
+ * Which evidence a daily is allowed to claim.
+ *
+ * Kept here, apart from the action, so the rule can be tested against a real
+ * database rather than restated in a test that would pass whatever the action
+ * actually does. The two conditions are the whole guard:
+ *
+ * - `projectId` — evidence is claimable only by dailies on its own project.
+ *   A caller passing ids from somewhere else selects nothing. (Another
+ *   *tenant* cannot reach this far: tenants are separate databases, so an id
+ *   from one does not exist in the other.)
+ * - the daily — evidence already spoken for by a different daily is not
+ *   re-linked, so a second sheet cannot quietly take credit for the first
+ *   one's photographs. Evidence already on *this* daily is included, which is
+ *   what makes linking idempotent: a sheet is saved over and over as a crew
+ *   works, and every save after the first must be a no-op.
+ */
+export function linkableEvidenceWhere(input: {
+  ids: string[];
+  projectId: string;
+  dailySheetId: string;
+}) {
+  return {
+    id: { in: input.ids },
+    projectId: input.projectId,
+    OR: [{ dailySheetId: null }, { dailySheetId: input.dailySheetId }],
+  };
+}

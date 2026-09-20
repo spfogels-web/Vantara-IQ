@@ -67,6 +67,15 @@ export interface Project {
   hasMap?: boolean;
   /** Jobsite cover photo shown on the project card. */
   photoUrl?: string | null;
+  /**
+   * How far along the route's baseline documentation is.
+   *
+   * COMPLETE is a statement somebody made, not a count crossing a threshold —
+   * hence the name and the time beside it.
+   */
+  preConStatus?: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETE";
+  preConCompletedBy?: string;
+  preConCompletedAt?: string | null;
   /** As-built redline markups (lines + dots) drawn over the map. */
   markups?: unknown;
 }

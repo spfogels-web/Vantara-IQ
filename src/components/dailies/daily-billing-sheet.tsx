@@ -31,6 +31,7 @@ import {
   updateDailyPhotos,
   type SheetPayload,
 } from "@/app/actions";
+import { linkDailyEvidence } from "@/app/evidence-actions";
 import { SheetPhotos, parsePhotos, type SheetPhoto } from "@/components/dailies/sheet-photos";
 import { SheetScroller } from "@/components/dailies/sheet-scroller";
 import { CUTOFF_LABEL } from "@/lib/billing";
@@ -570,13 +571,42 @@ export function DailyBillingSheet({
     [sheetId, project, header, laborCodes, labor, matCodes, mat, redlines, notes, photos, redlineFiles, filedForId, roads],
   );
 
+  /**
+   * Take the id the server just gave this sheet, and claim the evidence that
+   * was captured before it had one.
+   *
+   * Photographs are written the moment they are taken, so a crew working on a
+   * brand new sheet produces evidence with no daily on it. That evidence is
+   * real and stays on the project whatever happens to the sheet; this is where
+   * it gains the daily, once there is a daily to gain.
+   *
+   * Only the ids this sheet's own entries carry are sent. Not the filenames,
+   * not the times, not the URLs — two crews photographing the same pedestal
+   * within a minute of each other would defeat every one of those, and would
+   * do it silently. The server checks the ids belong to this project before it
+   * links anything.
+   */
+  async function adoptSheetId(id: string | undefined) {
+    setSheetId(id);
+    const ids = photos.map((ph) => ph.evidenceId).filter((x): x is string => !!x);
+    // No id means the save did not produce a sheet to link to. The evidence
+    // stays where it is and the next save links it.
+    if (!id || !ids.length || !project?.id) return;
+    await linkDailyEvidence({ dailySheetId: id, projectId: project.id, evidenceIds: ids }).catch(
+      // A failure here leaves the evidence on the project, unlinked — visible,
+      // and linked again by the next save. Nothing is lost, so nothing is
+      // worth interrupting the crew for.
+      () => undefined,
+    );
+  }
+
   async function save() {
     if (saving || submitting) return;
     setSaving(true);
     setSaveError(null);
     try {
       const res = await saveDailySheet(payload());
-      setSheetId(res.id);
+      await adoptSheetId(res.id);
       setSavedAt(new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
     } catch {
       setSaveError("Couldn't save. Check your connection and try again.");
@@ -666,7 +696,7 @@ export function DailyBillingSheet({
     const res = await submitDailySheet(payload());
     setSubmitting(false);
     if (res.ok) {
-      setSheetId(res.id);
+      await adoptSheetId(res.id);
       router.push("/dailies");
     } else {
       setSaveError(res.error);
@@ -1582,6 +1612,9 @@ export function DailyBillingSheet({
               projectId={project.id}
               photos={photos}
               onChange={setPhotos}
+              sheetId={sheetId ?? null}
+              subcontractorId={filedForId || null}
+              workDate={header.dateWorked || null}
             />
           ) : null}
 

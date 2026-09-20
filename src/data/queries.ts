@@ -165,6 +165,11 @@ type ProjectListRow = Prisma.ProjectGetPayload<{ select: typeof PROJECT_LIST_SEL
   mapOriginalUrl?: string | null;
   markups?: unknown;
   hasMap?: boolean;
+  // Only on the single-project read. A list of projects has no use for how far
+  // along one route's baseline documentation is.
+  preConStatus?: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETE";
+  preConCompletedBy?: string;
+  preConCompletedAt?: Date | null;
 };
 
 /**
@@ -216,6 +221,9 @@ function toProject(r: ProjectListRow): Project {
     mapOriginalUrl: r.mapOriginalUrl ?? null,
     hasMap: r.hasMap ?? r.mapUrl != null,
     photoUrl: r.photoUrl,
+    preConStatus: r.preConStatus ?? "NOT_STARTED",
+    preConCompletedBy: r.preConCompletedBy ?? "",
+    preConCompletedAt: r.preConCompletedAt ? r.preConCompletedAt.toISOString() : null,
     markups: r.markups,
   };
 }
@@ -3299,7 +3307,23 @@ export interface ProjectPhotoRow {
   accuracyM: number | null;
   locationSource: string;
   caption: string;
+  /** Kept for the records filed before stages existed. `stage` supersedes it. */
   purpose: "RECORD" | "DIRECTION";
+  stage: "PRE_CONSTRUCTION" | "WORK_RECORD" | "DIRECTION" | "CLOSEOUT";
+  category: string;
+  existingDamage: boolean;
+  damageNote: string;
+  /**
+   * The daily this was filed on, where it was.
+   *
+   * Null is meaningful and is not a gap: baseline and closeout evidence never
+   * belongs to a daily, and a work record with none was captured in the field
+   * on a sheet nobody ever filed. The gallery says which.
+   */
+  dailySheetId: string | null;
+  subcontractorId: string | null;
+  subcontractorName: string | null;
+  workDate: string | null;
   uploadedBy: string;
   createdAt: string;
 }
@@ -3320,6 +3344,22 @@ export async function getProjectPhotos(projectId: string): Promise<ProjectPhotoR
     orderBy: [{ capturedAt: "desc" }, { createdAt: "desc" }],
   });
 
+  /**
+   * Who filed it and for which day, read from the dailies rather than copied
+   * onto each photograph — a crew corrected on the sheet is corrected here
+   * too. Resolved in one lookup rather than a join, because the column is a
+   * plain id: making it a relation would mean a foreign key, and 003 is
+   * additive by design.
+   */
+  const sheetIds = [...new Set(rows.map((r) => r.dailySheetId).filter((x): x is string => !!x))];
+  const sheets = sheetIds.length
+    ? await prisma.dailySheet.findMany({
+        where: { id: { in: sheetIds } },
+        select: { id: true, workDate: true, filedFor: { select: { company: true } } },
+      })
+    : [];
+  const bySheet = new Map(sheets.map((x) => [x.id, x]));
+
   return rows.map((r) => ({
     id: r.id,
     url: r.url,
@@ -3335,6 +3375,14 @@ export async function getProjectPhotos(projectId: string): Promise<ProjectPhotoR
     locationSource: r.locationSource,
     caption: r.caption,
     purpose: r.purpose === "DIRECTION" ? "DIRECTION" : "RECORD",
+    stage: r.stage,
+    category: r.category,
+    existingDamage: r.existingDamage,
+    damageNote: r.damageNote,
+    dailySheetId: r.dailySheetId,
+    subcontractorId: r.subcontractorId,
+    subcontractorName: bySheet.get(r.dailySheetId ?? "")?.filedFor?.company ?? null,
+    workDate: bySheet.get(r.dailySheetId ?? "")?.workDate ?? null,
     uploadedBy: r.uploadedBy,
     createdAt: r.createdAt.toISOString(),
   }));

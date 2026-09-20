@@ -6,15 +6,13 @@ import { useBlobUpload } from "@/components/layout/org-provider";
 import {
   Camera,
   Compass,
-  Download,
   ImageIcon,
   Loader2,
   MapPin,
   Signpost,
-  Trash2,
+  SlidersHorizontal,
   Upload,
   Video,
-  X,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -27,6 +25,7 @@ import {
 } from "@/app/actions";
 import type { ProjectPhotoRow } from "@/data/queries";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
+import { EvidenceViewer, type EvidenceItem } from "@/components/evidence/evidence-viewer";
 
 /**
  * The field record: what was built, where, and when — plus the shots that tell
@@ -42,6 +41,30 @@ import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
  */
 
 const ACCEPT = "image/*,video/*";
+
+/**
+ * The questions the office actually asks of a project's pictures.
+ *
+ * These are views, not a taxonomy. "Existing damage" cuts across the stages
+ * rather than sitting beside them, because what was already broken when the
+ * crew arrived is the question a homeowner claim turns on, and the answer has
+ * to be one click away from anywhere. Stage stays the record's own
+ * classification; this is how it gets read.
+ */
+const VIEWS = {
+  ALL: { label: "All", holds: () => true },
+  PRE_CONSTRUCTION: {
+    label: "Pre-construction",
+    holds: (p: ProjectPhotoRow) => p.stage === "PRE_CONSTRUCTION",
+  },
+  WORK_RECORD: { label: "Work record", holds: (p: ProjectPhotoRow) => p.stage === "WORK_RECORD" },
+  DIRECTION: { label: "Direction", holds: (p: ProjectPhotoRow) => p.stage === "DIRECTION" },
+  EXISTING_DAMAGE: { label: "Existing damage", holds: (p: ProjectPhotoRow) => p.existingDamage },
+  CLOSEOUT: { label: "Closeout", holds: (p: ProjectPhotoRow) => p.stage === "CLOSEOUT" },
+} satisfies Record<string, { label: string; holds: (p: ProjectPhotoRow) => boolean }>;
+
+type ViewKey = keyof typeof VIEWS;
+const VIEW_KEYS = Object.keys(VIEWS) as ViewKey[];
 
 /** Wait for a position fix, or give up cleanly. */
 function getFix(timeoutMs = 12_000): Promise<GeolocationPosition | null> {
@@ -82,10 +105,30 @@ export function ProjectPhotos({
   const [busy, setBusy] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [purpose, setPurpose] = React.useState<"RECORD" | "DIRECTION">("RECORD");
-  const [filter, setFilter] = React.useState<"ALL" | "RECORD" | "DIRECTION">("ALL");
+  const [filter, setFilter] = React.useState<ViewKey>("ALL");
   const [open, setOpen] = React.useState<ProjectPhotoRow | null>(null);
+  /** The narrower questions, kept folded away until somebody asks one. */
+  const [refining, setRefining] = React.useState(false);
+  const [crew, setCrew] = React.useState("");
+  const [day, setDay] = React.useState("");
+  const [gpsOnly, setGpsOnly] = React.useState(false);
 
-  const shown = photos.filter((p) => filter === "ALL" || p.purpose === filter);
+  const shown = photos.filter(
+    (p) =>
+      VIEWS[filter].holds(p) &&
+      (!crew || p.subcontractorName === crew) &&
+      (!day || p.workDate === day) &&
+      (!gpsOnly || (p.lat != null && p.lng != null)),
+  );
+
+  /** Only the crews and days this project actually has. */
+  const crews = [
+    ...new Set(photos.map((p) => p.subcontractorName).filter((x): x is string => !!x)),
+  ].sort();
+  const days = [...new Set(photos.map((p) => p.workDate).filter((x): x is string => !!x))]
+    .sort()
+    .reverse();
+  const refined = Boolean(crew || day || gpsOnly);
 
   async function handle(file: File | undefined | null, source: "CAMERA" | "LIBRARY") {
     if (!file) return;
@@ -186,9 +229,6 @@ export function ProjectPhotos({
     router.refresh();
   }
 
-  const records = photos.filter((p) => p.purpose === "RECORD").length;
-  const directions = photos.length - records;
-
   return (
     <Panel>
       <input
@@ -258,19 +298,93 @@ export function ProjectPhotos({
         </div>
 
         {photos.length > 0 ? (
-          <div className="ml-auto flex rounded-lg border border-border p-0.5">
-            <Toggle active={filter === "ALL"} onClick={() => setFilter("ALL")}>
-              All {photos.length}
-            </Toggle>
-            <Toggle active={filter === "RECORD"} onClick={() => setFilter("RECORD")}>
-              Record {records}
-            </Toggle>
-            <Toggle active={filter === "DIRECTION"} onClick={() => setFilter("DIRECTION")}>
-              Direction {directions}
-            </Toggle>
+          <div className="ml-auto flex flex-wrap items-center gap-1.5">
+            {/* Counts on the views, so an empty one reads as "none of these"
+                rather than as something that failed to load. An empty view is
+                still shown: that a route has no closeout pictures is itself
+                the answer somebody came for. */}
+            <div className="flex flex-wrap rounded-lg border border-border p-0.5">
+              {VIEW_KEYS.map((k) => {
+                const n = k === "ALL" ? photos.length : photos.filter(VIEWS[k].holds).length;
+                return (
+                  <Toggle key={k} active={filter === k} onClick={() => setFilter(k)}>
+                    {VIEWS[k].label} {n}
+                  </Toggle>
+                );
+              })}
+            </div>
+            <button
+              type="button"
+              onClick={() => setRefining((v) => !v)}
+              className={cn(
+                "focus-ring inline-flex h-7 items-center gap-1 rounded-lg border px-2 text-[11.5px]",
+                refined
+                  ? "border-brand/50 text-brand-bright"
+                  : "border-border text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <SlidersHorizontal className="size-3" />
+              Filters{refined ? " ·" : ""}
+            </button>
           </div>
         ) : null}
       </div>
+
+      {refining && photos.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-2 border-b border-border/70 bg-foreground/[0.02] px-3 py-2">
+          {/* Only the crews and days this project has. A dropdown of every
+              crew in the company is a dead end; a dropdown of the three who
+              worked this route is an answer. */}
+          <select
+            value={crew}
+            onChange={(e) => setCrew(e.target.value)}
+            aria-label="Crew"
+            className="focus-ring h-7 rounded-lg border border-border bg-background px-2 text-[11.5px] text-foreground"
+          >
+            <option value="">Any crew</option>
+            {crews.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+          <select
+            value={day}
+            onChange={(e) => setDay(e.target.value)}
+            aria-label="Work date"
+            className="focus-ring h-7 rounded-lg border border-border bg-background px-2 text-[11.5px] text-foreground"
+          >
+            <option value="">Any work date</option>
+            {days.map((d) => (
+              <option key={d} value={d}>
+                {d}
+              </option>
+            ))}
+          </select>
+          <label className="inline-flex items-center gap-1.5 text-[11.5px] text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={gpsOnly}
+              onChange={(e) => setGpsOnly(e.target.checked)}
+              className="size-3.5"
+            />
+            Has a location
+          </label>
+          {refined ? (
+            <button
+              type="button"
+              onClick={() => {
+                setCrew("");
+                setDay("");
+                setGpsOnly(false);
+              }}
+              className="focus-ring ml-auto rounded px-1 text-[11.5px] text-muted-foreground hover:text-foreground"
+            >
+              Clear
+            </button>
+          ) : null}
+        </div>
+      ) : null}
 
       {busy ? (
         <p className="border-b border-border/70 px-3 py-2 text-[12px] text-muted-foreground">
@@ -423,6 +537,46 @@ function Stamp({ photo: p, compact }: { photo: ProjectPhotoRow; compact?: boolea
   );
 }
 
+/**
+ * A project photograph, described the way the shared viewer expects.
+ *
+ * The project gallery and a daily are two windows onto one record, so neither
+ * gets its own idea of what a timestamp or a coordinate means. Both hand this
+ * shape to the same component, and what the office reads in one place is what
+ * it reads in the other.
+ */
+function asEvidence(p: ProjectPhotoRow): EvidenceItem {
+  return {
+    id: p.id,
+    url: p.url,
+    kind: p.kind,
+    mediaType: p.mediaType,
+    caption: p.caption,
+    capturedAt: p.capturedAt,
+    capturedAtSource: p.capturedAtSource,
+    lat: p.lat,
+    lng: p.lng,
+    accuracyM: p.accuracyM,
+    locationSource: p.locationSource,
+    source: p.source,
+    uploadedBy: p.uploadedBy,
+    stage: p.stage,
+    category: p.category,
+    existingDamage: p.existingDamage,
+    damageNote: p.damageNote,
+    dailySheetId: p.dailySheetId,
+    subcontractorName: p.subcontractorName,
+    workDate: p.workDate,
+  };
+}
+
+/**
+ * The gallery's editor: what a picture is *of*.
+ *
+ * Only classification. The capture time, the coordinate, who uploaded it and
+ * which daily it came from are rendered by the viewer below this, apart and
+ * unreachable from here — see IMMUTABLE_EVIDENCE_FIELDS.
+ */
 function Lightbox({
   photo: p,
   canDelete,
@@ -440,14 +594,6 @@ function Lightbox({
   const [purpose, setPurpose] = React.useState(p.purpose);
   const [saving, setSaving] = React.useState(false);
 
-  React.useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
   async function save() {
     setSaving(true);
     await updateProjectPhoto(p.id, { caption, purpose });
@@ -455,65 +601,14 @@ function Lightbox({
     onSaved();
   }
 
-  const mapHref =
-    p.lat != null && p.lng != null
-      ? `https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lng}`
-      : null;
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
-      onClick={onClose}
-    >
-      <div
-        className="flex max-h-full w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-border bg-background"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between border-b border-border/70 px-3 py-2">
-          <p className="text-[12.5px] font-medium text-foreground">
-            {p.kind === "VIDEO" ? "Video" : "Photo"}
-            <span className="ml-2 text-[11.5px] font-normal text-muted-foreground">
-              {p.source === "CAMERA" ? "taken in app" : "uploaded"}
-              {p.uploadedBy ? ` · ${p.uploadedBy}` : ""}
-            </span>
-          </p>
-          <div className="flex items-center gap-1">
-            <a
-              href={p.url}
-              download
-              className="focus-ring inline-flex h-7 items-center gap-1 rounded border border-border px-2 text-[11.5px] text-muted-foreground hover:text-foreground"
-            >
-              <Download className="size-3" /> Download
-            </a>
-            {canDelete ? (
-              <button
-                type="button"
-                onClick={onDelete}
-                className="focus-ring inline-flex h-7 items-center gap-1 rounded border border-border px-2 text-[11.5px] text-muted-foreground hover:border-critical/40 hover:text-critical"
-              >
-                <Trash2 className="size-3" /> Delete
-              </button>
-            ) : null}
-            <button
-              type="button"
-              onClick={onClose}
-              className="focus-ring grid size-7 place-items-center rounded text-muted-foreground hover:text-foreground"
-            >
-              <X className="size-4" />
-            </button>
-          </div>
-        </div>
-
-        <div className="min-h-0 flex-1 overflow-auto bg-black/40">
-          {p.kind === "VIDEO" ? (
-            <video src={p.url} controls playsInline className="mx-auto max-h-[60vh]" />
-          ) : (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={p.url} alt={p.caption || "Field photo"} className="mx-auto max-h-[60vh]" />
-          )}
-        </div>
-
-        <div className="flex flex-wrap items-end gap-3 border-t border-border/70 p-3">
+    <EvidenceViewer
+      item={asEvidence(p)}
+      onClose={onClose}
+      onDelete={canDelete ? onDelete : undefined}
+      dailyHref={p.dailySheetId ? `/dailies/sheet?id=${p.dailySheetId}` : null}
+      editor={
+        <>
           <div className="min-w-[180px] flex-1">
             <label className="text-[10.5px] uppercase tracking-wider text-muted-foreground">
               Caption
@@ -546,24 +641,8 @@ function Lightbox({
           >
             {saving ? <Loader2 className="size-3.5 animate-spin" /> : null} Save
           </button>
-
-          {/* The observed facts sit apart from the editable ones. Where and when
-              are not opinions and are never retyped. */}
-          <div className="w-full border-t border-border/40 pt-2">
-            <Stamp photo={p} />
-            {mapHref ? (
-              <a
-                href={mapHref}
-                target="_blank"
-                rel="noreferrer"
-                className="focus-ring mt-1 inline-flex items-center gap-1 rounded text-[11.5px] text-brand-bright hover:underline"
-              >
-                <MapPin className="size-3" /> Open in Maps
-              </a>
-            ) : null}
-          </div>
-        </div>
-      </div>
-    </div>
+        </>
+      }
+    />
   );
 }

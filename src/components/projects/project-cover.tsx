@@ -42,7 +42,8 @@ export function ProjectCover({
   const [error, setError] = React.useState<string | null>(null);
 
   // Same precedence as everywhere else a project is shown.
-  const shown = src || projectImageSrc({ mapUrl });
+  const [broken, setBroken] = React.useState(false);
+  const shown = broken ? "" : src || projectImageSrc({ mapUrl });
 
   async function accept(file: File | undefined) {
     if (!file || busy) return;
@@ -111,6 +112,7 @@ export function ProjectCover({
         <img
           src={shown}
           alt=""
+          onError={() => setBroken(true)}
           className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
         />
       ) : (

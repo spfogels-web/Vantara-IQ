@@ -2,7 +2,14 @@
 
 import * as React from "react";
 import { useBlobUpload } from "@/components/layout/org-provider";
-import { Camera, ImagePlus, Loader2, Trash2, FileText } from "lucide-react";
+import { captureFacts, looksLikeVideo } from "@/components/evidence/capture";
+import {
+  EvidenceViewer,
+  isVideo,
+  type EvidenceItem,
+} from "@/components/evidence/evidence-viewer";
+import { noteEvidenceGap, saveDailyEvidence } from "@/app/evidence-actions";
+import { Camera, ImagePlus, Loader2, Trash2, FileText, Video } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -25,9 +32,108 @@ export type SheetPhoto = {
    * When it was attached to the sheet. Deliberately not the camera's capture
    * time: the photo was usually taken hours earlier, and the record that
    * matters is when it was filed.
+   *
+   * Kept distinct from `capturedAt` below, which is the shutter. Collapsing
+   * the two would date a morning's work to the evening it was filed.
    */
   addedAt: string;
+
+  /**
+   * The canonical evidence record this file became.
+   *
+   * The same blob, described once, visible on the daily and on the project.
+   * Older entries have none — they pre-date the evidence record — and the
+   * viewer copes with that rather than pretending otherwise.
+   */
+  evidenceId?: string;
+
+  /** What the device or the file said, or nothing. Never filled in from elsewhere. */
+  capturedAt?: string | null;
+  capturedAtSource?: string;
+  lat?: number | null;
+  lng?: number | null;
+  accuracyM?: number | null;
+  locationSource?: string;
+  kind?: string;
+  mediaType?: string;
+  source?: string;
+  uploadedBy?: string;
 };
+
+/**
+ * A sheet entry as the shared evidence viewer sees it.
+ *
+ * The daily and the project are two windows onto the same record, so the daily
+ * does not get its own idea of what a timestamp or a coordinate means — it
+ * hands the same shape to the same component. Entries filed before the
+ * evidence record existed simply have blanks here, and the viewer says so
+ * rather than inventing anything.
+ */
+function asEvidence(
+  photo: SheetPhoto,
+  context: {
+    subcontractorName?: string | null;
+    workDate?: string | null;
+    /**
+     * The sheet this entry sits on, when it has been saved.
+     *
+     * Absent on a sheet that has never been saved, and the viewer says so —
+     * a photograph taken against a draft is a field capture that is not yet
+     * part of any filed day, and it should not read as one.
+     */
+    sheetId?: string | null;
+  },
+): EvidenceItem {
+  return {
+    id: photo.evidenceId ?? photo.id,
+    url: photo.url,
+    kind: photo.kind ?? "PHOTO",
+    mediaType: photo.mediaType,
+    caption: photo.caption,
+    capturedAt: photo.capturedAt ?? null,
+    capturedAtSource: photo.capturedAtSource ?? "",
+    lat: photo.lat ?? null,
+    lng: photo.lng ?? null,
+    accuracyM: photo.accuracyM ?? null,
+    locationSource: photo.locationSource ?? "",
+    source: photo.source ?? "LIBRARY",
+    uploadedBy: photo.uploadedBy ?? "",
+    stage: "WORK_RECORD",
+    structure: photo.structure,
+    dailySheetId: context.sheetId ?? null,
+    subcontractorName: context.subcontractorName ?? null,
+    workDate: context.workDate ?? null,
+  };
+}
+
+/** The tile. A video gets a poster frame rather than a broken image. */
+function EvidenceThumb({ photo }: { photo: SheetPhoto }) {
+  const item = asEvidence(photo, {});
+  if (isVideo(item)) {
+    return (
+      <span className="relative block">
+        <video
+          src={photo.url}
+          preload="metadata"
+          muted
+          playsInline
+          className="h-32 w-full bg-black object-cover"
+        />
+        <span className="pointer-events-none absolute inset-0 grid place-items-center">
+          <span className="grid size-8 place-items-center rounded-full bg-black/60 text-white">
+            <Video className="size-4" />
+          </span>
+        </span>
+      </span>
+    );
+  }
+  return (
+    // Blob-hosted and already sized by the phone that took it; next/image would
+    // put a loader in front of a URL that is fine as it is.
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={photo.url} alt={photo.caption || photo.structure} className="h-32 w-full object-cover" />
+  );
+}
 
 const STRUCTURES = ["Ped", "Handhole", "Vault", "Bore pit", "Splice", "Other"];
 
@@ -45,6 +151,17 @@ export function parsePhotos(v: unknown): SheetPhoto[] {
         structure: typeof p.structure === "string" ? p.structure : "Other",
         caption: typeof p.caption === "string" ? p.caption : "",
         addedAt: typeof p.addedAt === "string" ? p.addedAt : "",
+        evidenceId: typeof p.evidenceId === "string" ? p.evidenceId : undefined,
+        capturedAt: typeof p.capturedAt === "string" ? p.capturedAt : null,
+        capturedAtSource: typeof p.capturedAtSource === "string" ? p.capturedAtSource : "",
+        lat: typeof p.lat === "number" ? p.lat : null,
+        lng: typeof p.lng === "number" ? p.lng : null,
+        accuracyM: typeof p.accuracyM === "number" ? p.accuracyM : null,
+        locationSource: typeof p.locationSource === "string" ? p.locationSource : "",
+        kind: typeof p.kind === "string" ? p.kind : undefined,
+        mediaType: typeof p.mediaType === "string" ? p.mediaType : undefined,
+        source: typeof p.source === "string" ? p.source : undefined,
+        uploadedBy: typeof p.uploadedBy === "string" ? p.uploadedBy : undefined,
       },
     ];
   });
@@ -77,8 +194,24 @@ export function SheetPhotos({
   emptyTitle = "No photos on this daily yet",
   emptyHint = "Photograph what you built — peds, handholes, bores, restoration. This is the evidence behind the footage you are billing, and a daily without it is the one that gets queried.",
   accept = "image/*",
+  sheetId,
+  subcontractorId,
+  workDate,
 }: {
   projectId: string;
+  /**
+   * The sheet this evidence belongs to, when it already exists.
+   *
+   * A crew photographing on a brand new sheet has no id yet — the sheet is
+   * saved after the photographs are attached — so this is absent on the
+   * first pass and the evidence is linked when the sheet is saved. The
+   * record is never left guessing which daily it came from: it is either
+   * told or linked.
+   */
+  sheetId?: string | null;
+  subcontractorId?: string | null;
+  /** The day the work was done, shown beside the evidence in the viewer. */
+  workDate?: string | null;
   photos: SheetPhoto[];
   onChange: (next: SheetPhoto[]) => void;
   /** Reused for the redline print, which is a different document with the
@@ -106,22 +239,79 @@ export function SheetPhotos({
   const pickRef = React.useRef<HTMLInputElement>(null);
   const shootRef = React.useRef<HTMLInputElement>(null);
   const [busy, setBusy] = React.useState(0);
+  /** Which entry is open in the evidence viewer, if any. */
+  const [openId, setOpenId] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
-  async function add(files: FileList | null) {
+  /**
+   * Take what the device and the file can honestly say, upload once, and make
+   * it evidence.
+   *
+   * `source` is the difference between a photograph taken here and now — whose
+   * position is the device's position — and one chosen from the library, which
+   * was taken somewhere else and can only be described by its own EXIF. The two
+   * must not be conflated: stamping a library photo with where the phone is
+   * standing would put a coordinate on a record that never had one, and it
+   * would look exactly like a real one.
+   *
+   * A refused location permission is not an error. The upload continues, the
+   * record says it has no location, and the crew still files their day.
+   */
+  async function add(files: FileList | null, source: "CAMERA" | "LIBRARY" = "LIBRARY") {
     if (!files?.length) return;
     setError(null);
     const list = Array.from(files);
     setBusy(list.length);
-
     const added: SheetPhoto[] = [];
     for (const file of list) {
       try {
+        const facts = await captureFacts(file, source);
+        const isVid = looksLikeVideo(file);
+
         const blob = await blobUpload(
           `daily-photos/${projectId}/${Date.now()}-${file.name}`,
           file,
           { access: "public", handleUploadUrl: "/api/blob/upload" },
         );
+
+        /**
+         * The canonical record, written against the same blob the sheet is
+         * about to reference. Not a second copy: the URL below is the one the
+         * single upload above returned.
+         */
+        const saved = await saveDailyEvidence({
+          projectId,
+          dailySheetId: sheetId ?? null,
+          subcontractorId: subcontractorId ?? null,
+          url: blob.url,
+          mediaType: file.type || "",
+          sizeBytes: file.size,
+          kind: isVid ? "VIDEO" : "PHOTO",
+          source,
+          capturedAt: facts.capturedAt,
+          capturedAtSource: facts.capturedAtSource,
+          lat: facts.lat,
+          lng: facts.lng,
+          accuracyM: facts.accuracyM,
+          locationSource: facts.locationSource,
+          structure: "Ped",
+        }).catch(() => null);
+
+        if (!saved?.ok) {
+          /**
+           * The file is in Blob and the record is not. The photograph stays on
+           * the sheet — losing it would be the worse failure — but the two
+           * stores now disagree, and that has to be findable. The URL goes with
+           * the note so the record can be rebuilt from the file that is already
+           * there, without anybody re-uploading anything.
+           */
+          void noteEvidenceGap({
+            projectId,
+            url: blob.url,
+            reason: saved === null ? "action failed" : "action refused",
+          }).catch(() => undefined);
+        }
+
         added.push({
           id: blob.url,
           url: blob.url,
@@ -129,6 +319,16 @@ export function SheetPhotos({
           structure: "Ped",
           caption: "",
           addedAt: new Date().toISOString(),
+          evidenceId: saved?.ok ? saved.id : undefined,
+          capturedAt: facts.capturedAt,
+          capturedAtSource: facts.capturedAtSource,
+          lat: facts.lat,
+          lng: facts.lng,
+          accuracyM: facts.accuracyM,
+          locationSource: facts.locationSource,
+          kind: isVid ? "VIDEO" : "PHOTO",
+          mediaType: file.type || "",
+          source,
         });
       } catch {
         setError(
@@ -200,7 +400,7 @@ export function SheetPhotos({
             capture="environment"
             className="hidden"
             onChange={(e) => {
-              void add(e.target.files);
+              void add(e.target.files, "CAMERA");
               e.target.value = "";
             }}
           />
@@ -264,7 +464,15 @@ export function SheetPhotos({
         <ul className="grid grid-cols-2 gap-3 p-3 sm:grid-cols-3 lg:grid-cols-4 print:grid-cols-3">
           {photos.map((p) => (
             <li key={p.id} className="group/photo overflow-hidden rounded-lg border border-border">
-              <a href={p.url} target="_blank" rel="noopener noreferrer" className="block">
+              {/* A PDF as-built opens in a tab; a photograph or video opens in
+                  the evidence viewer, which is the same one the project
+                  gallery uses — so what the office sees on a daily and what it
+                  sees on the project cannot drift apart. */}
+              <button
+                type="button"
+                onClick={() => (isPdf(p.url) ? window.open(p.url, "_blank") : setOpenId(p.id))}
+                className="focus-ring block w-full text-left"
+              >
                 {isPdf(p.url) ? (
                   <span className="flex h-32 w-full flex-col items-center justify-center gap-1.5 bg-foreground/[0.04] text-muted-foreground">
                     <FileText className="size-7" />
@@ -272,10 +480,10 @@ export function SheetPhotos({
                     <span className="text-[10.5px]">Open</span>
                   </span>
                 ) : (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={p.url} alt={p.caption || p.structure} className="h-32 w-full object-cover" />
+                   
+                  <EvidenceThumb photo={p} />
                 )}
-              </a>
+              </button>
               <div className="flex flex-col gap-1 p-2">
                 <div className="flex items-center gap-1.5">
                   <select
@@ -315,6 +523,21 @@ export function SheetPhotos({
           ))}
         </ul>
       )}
+
+      {/* The same viewer the project gallery opens. One implementation, so
+          what the office sees on a daily and on the project cannot drift. */}
+      {openId
+        ? (() => {
+            const photo = photos.find((x) => x.id === openId);
+            if (!photo) return null;
+            return (
+              <EvidenceViewer
+                item={asEvidence(photo, { subcontractorName: null, workDate, sheetId })}
+                onClose={() => setOpenId(null)}
+              />
+            );
+          })()
+        : null}
     </div>
   );
 }

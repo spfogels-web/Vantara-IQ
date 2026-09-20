@@ -12,7 +12,13 @@
  */
 export function isRasterMap(mapUrl?: string | null): boolean {
   if (!mapUrl) return false;
-  return !mapUrl.startsWith("data:application/pdf") && !/\.pdf(\?|$)/i.test(mapUrl);
+  // A data URI states its own type, so believe it rather than inferring from
+  // what it is not. Excluding only PDFs meant every other kind — a plain-text
+  // placeholder, a DWG, a TIFF — was treated as a raster and handed to an
+  // <img> that renders nothing, which is the case this function exists to
+  // prevent.
+  if (mapUrl.startsWith("data:")) return mapUrl.startsWith("data:image/");
+  return !/\.pdf(\?|$)/i.test(mapUrl);
 }
 
 export function projectImageSrc(project: {
