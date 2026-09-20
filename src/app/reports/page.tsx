@@ -5,6 +5,7 @@ import { getIcon } from "@/lib/icons";
 import type { ReportDefinition } from "@/lib/types";
 import { PageShell } from "@/components/common/page-shell";
 import { Panel, PanelBody } from "@/components/common/panel";
+import { requireStaffPage } from "@/lib/authz";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Reports · Vantara IQ" };
@@ -17,6 +18,9 @@ const CATEGORY_ORDER: ReportDefinition["category"][] = [
 ];
 
 export default async function ReportsPage() {
+  // Authoritative: the current database role, not the token's claim.
+  await requireStaffPage();
+
   const reports = await getReportDefinitions();
 
   return (

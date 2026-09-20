@@ -1,11 +1,15 @@
 import { getProjects, getSubPeople, getSubcontractors } from "@/data/queries";
 import { PageShell } from "@/components/common/page-shell";
 import { SubcontractorsView } from "@/components/subcontractors/subcontractors-view";
+import { requireStaffPage } from "@/lib/authz";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Subcontractors · Vantara IQ" };
 
 export default async function SubcontractorsPage() {
+  // Authoritative: the current database role, not the token's claim.
+  await requireStaffPage();
+
   const [subs, projects, people] = await Promise.all([
     getSubcontractors(),
     getProjects(),

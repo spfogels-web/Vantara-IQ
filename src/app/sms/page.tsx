@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 
 import { SMS_CONSENT_TEXT, SAMPLE_MESSAGES, HELP_REPLY } from "@/lib/sms-consent";
 import { OptInForm } from "./opt-in-form";
+import { requireStaffPage } from "@/lib/authz";
 
 export const metadata = {
   title: "Text message alerts",
@@ -42,6 +43,9 @@ const LINE = "var(--sms-line)";
  * faint to anybody actually reading it.
  */
 export default async function SmsPage() {
+  // Authoritative: the current database role, not the token's claim.
+  await requireStaffPage();
+
   // The company mark, from the same place the rate sheets take it, so the two
   // cannot drift. Public branding, so no session is needed to read it — which
   // matters, because the reviewer looking at this page has no account.

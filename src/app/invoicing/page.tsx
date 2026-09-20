@@ -1,11 +1,15 @@
 import { getArTotals, getCustomers, getInvoiceRows } from "@/data/queries";
 import { PageShell } from "@/components/common/page-shell";
 import { InvoicingView } from "@/components/invoicing/invoicing-view";
+import { requireStaffPage } from "@/lib/authz";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Invoicing · Vantara IQ" };
 
 export default async function InvoicingPage() {
+  // Authoritative: the current database role, not the token's claim.
+  await requireStaffPage();
+
   const [invoices, ar, customers] = await Promise.all([
     getInvoiceRows(),
     getArTotals(),

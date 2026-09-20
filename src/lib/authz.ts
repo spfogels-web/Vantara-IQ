@@ -1,5 +1,7 @@
 import "server-only";
 
+import { redirect } from "next/navigation";
+
 import { getCurrentUser, isStaff, type CurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -80,6 +82,31 @@ export async function requireStaff(): Promise<CurrentUser> {
  * access, two projects sharing a job number stay distinct, and deleting a
  * project drops its assignments rather than leaving them dangling.
  */
+/**
+ * The authoritative staff gate for a page.
+ *
+ * Middleware already turns a subcontractor away from these routes, and that
+ * is worth keeping — it is fast and it stops the wrong nav appearing. But it
+ * decides on the `role` claim inside the token, and a claim is a statement
+ * about who somebody was when the token was minted. Demote an administrator
+ * and their existing session keeps office access until it expires, because
+ * nothing on that path reads the row that changed.
+ *
+ * So the boundary that matters is here, on the server, where the role comes
+ * from `getCurrentUser` — which loads the user from their home database on
+ * every request. The token may say who is asking; it may not say what they
+ * are allowed to do.
+ *
+ * Redirects rather than throwing, to match what middleware does for the same
+ * refusal, so a demoted user lands on their own work instead of an error.
+ */
+export async function requireStaffPage(): Promise<CurrentUser> {
+  const user = await viewer();
+  if (!user) redirect("/login");
+  if (!isStaff(user.role)) redirect("/dailies");
+  return user;
+}
+
 export async function visibleProjectIds(user: CurrentUser): Promise<string[] | null> {
   if (isStaff(user.role)) return null;
   if (!user.subcontractorId) return [];

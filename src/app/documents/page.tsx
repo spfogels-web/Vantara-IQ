@@ -15,11 +15,15 @@ import { PageShell } from "@/components/common/page-shell";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { DocumentUpload } from "@/components/documents/document-upload";
 import { DocumentList } from "@/components/documents/document-list";
+import { requireStaffPage } from "@/lib/authz";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Documents · Vantara IQ" };
 
 export default async function DocumentsPage() {
+  // Authoritative: the current database role, not the token's claim.
+  await requireStaffPage();
+
   const [d, docs, projects, subs] = await Promise.all([
     getDocumentDashboard(),
     getDocuments(),

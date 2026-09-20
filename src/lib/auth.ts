@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { cookies } from "next/headers";
 import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
@@ -135,7 +136,7 @@ export interface CurrentUser {
 }
 
 /** The signed-in user, read fresh so edits and revocations apply immediately. */
-export async function getCurrentUser(): Promise<CurrentUser | null> {
+export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   const session = await getSession();
   if (!session) return null;
 
@@ -159,7 +160,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
     subcontractorId: user.subcontractorId,
     subcontractorName: user.subcontractor?.company ?? null,
   };
-}
+});
 
 /** Staff see the whole operation; subcontractors see only their own work. */
 export function isStaff(role: SessionRole) {

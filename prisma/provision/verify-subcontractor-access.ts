@@ -237,13 +237,45 @@ async function main() {
      * authorization and would change behaviour for the live tenant too, so it
      * is reported rather than applied here.
      */
+    /**
+     * A marker that only the customers screen can produce.
+     *
+     * DO NOT use "Calderon Fiber Partners" here, or any other market prime.
+     * Markets are serialised into the layout on every page, so that name is
+     * present on the daily sheet too — asserting on it reported a working
+     * guard as an authorization defect, and the false positive stood for a
+     * full round of investigation before the marker was questioned.
+     *
+     * The first version of this check looked for "Calderon Fiber Partners" and
+     * was wrong: that is a market's prime contractor, and the layout serialises
+     * every market into the payload of every page, so it appears on the daily
+     * sheet too. The check failed against a working guard.
+     *
+     * A customer that is not the prime of any market only reaches the browser
+     * when the customers screen actually rendered. The staff control below
+     * proves the marker still discriminates — without it, this assertion could
+     * pass because the page broke rather than because it refused.
+     */
+    const customerOnly = (await tenant.customer.findFirst({ where: { crewNumber: "" } }))!.name;
+
     const escalated = await get("/customers", await mint(A.id, "ADMIN", key, key));
     const escText = pageText(escalated);
     check(
-      escalated.status !== 200 || !escText.includes("Calderon Fiber Partners"),
-      "a token claiming ADMIN for a SUBCONTRACTOR account is refused office data",
-      `status ${escalated.status} — role is trusted from the token; the page does not re-check it`,
+      !escText.includes(customerOnly),
+      `a token claiming ADMIN for a SUBCONTRACTOR account gets no customer data ("${customerOnly}")`,
+      `status ${escalated.status}`,
     );
+
+    // The positive control: a real administrator does see it.
+    const realAdmin = await tenant.user.findFirst({ where: { role: "ADMIN" } });
+    if (realAdmin) {
+      const staffView = await settled("/customers", await mint(realAdmin.id, "ADMIN", key, key));
+      check(
+        staffView.status === 200 && staffView.text.includes(customerOnly),
+        `an actual administrator does see "${customerOnly}", so the refusal above means something`,
+        `status ${staffView.status}`,
+      );
+    }
 
     // ---- no Fortitude anywhere -------------------------------------------
     console.log("\nNO FORTITUDE ANYWHERE");

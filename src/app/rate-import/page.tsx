@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { isConfigured } from "@/lib/extract";
 import { PageShell } from "@/components/common/page-shell";
 import { RateImportView, type ImportRow } from "@/components/rate-import/rate-import-view";
+import { requireStaffPage } from "@/lib/authz";
 
 export const dynamic = "force-dynamic";
 /**
@@ -14,6 +15,9 @@ export const maxDuration = 300;
 export const metadata = { title: "Rate import · Vantara IQ" };
 
 export default async function RateImportPage() {
+  // Authoritative: the current database role, not the token's claim.
+  await requireStaffPage();
+
   const rows = await prisma.rateImport.findMany({
     orderBy: { createdAt: "desc" },
     take: 25,

@@ -8,11 +8,15 @@ import { PageShell, StatStrip } from "@/components/common/page-shell";
 import { Panel, PanelHeader } from "@/components/common/panel";
 import { StatusPill } from "@/components/common/status-pill";
 import { PayAppActions } from "@/components/financials/pay-app-actions";
+import { requireStaffPage } from "@/lib/authz";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Pay applications · Vantara IQ" };
 
 export default async function PayApplicationsPage() {
+  // Authoritative: the current database role, not the token's claim.
+  await requireStaffPage();
+
   const payApps = await getPayApplications();
 
   const pending = payApps.filter((p) => p.status === "Pending review");
