@@ -63,6 +63,7 @@ async function main() {
   const apply = process.argv.includes("--apply");
   const tenant = process.argv.find((a) => a.startsWith("--tenant="))?.split("=")[1];
   const useTest = process.argv.includes("--test");
+  const useDirect = process.argv.includes("--direct");
 
   /**
    * Which database. Without --tenant this is the application's own
@@ -90,8 +91,22 @@ async function main() {
     const t = targetFor(tenant);
     url = urlFor(t, "pooled");
   } else {
-    url = process.env.DATABASE_URL;
-    if (!url) throw new Error("DATABASE_URL is not set and no --tenant was given");
+    // --direct picks the unpooled endpoint. It matters here: the migration
+    // check below keys on current_schema(), and a pooled connection can be
+    // handed back carrying an earlier session's search_path, which on this
+    // database was measured resolving current_schema() to NULL. That fails
+    // closed — the run would refuse rather than write into the wrong place —
+    // but a backfill should not be relying on which way it fails.
+    url = useDirect
+      ? process.env.DATABASE_URL_UNPOOLED
+      : process.env.DATABASE_URL;
+    if (!url) {
+      throw new Error(
+        useDirect
+          ? "DATABASE_URL_UNPOOLED is not set."
+          : "DATABASE_URL is not set and no --tenant was given",
+      );
+    }
     // Named explicitly so nobody reaches production by omitting an argument.
     if (!process.argv.includes("--i-mean-the-default-database")) {
       throw new Error(
