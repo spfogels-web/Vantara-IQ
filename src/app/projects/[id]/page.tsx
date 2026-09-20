@@ -266,6 +266,7 @@ export default async function ProjectDetailPage({
         <ProjectSection
           icon={<SquareGanttChart className="size-4" />}
           title="Project overview"
+          accent="green"
           description="Schedule, production pace and the contract date"
           summary={
             <Summary
@@ -298,6 +299,7 @@ export default async function ProjectDetailPage({
         <ProjectSection
           icon={<MapIcon className="size-4" />}
           title="Project map & plans"
+          accent="blue"
           description="Construction drawings, as-builts and redlines"
           summary={
             <Summary
@@ -323,6 +325,7 @@ export default async function ProjectDetailPage({
           <ProjectSection
             icon={<DollarSign className="size-4" />}
             title="Rates on this job"
+            accent="gold"
             description="Unit pricing, pay items and customer/subcontractor rate cards"
             summary={
               <Summary
@@ -355,6 +358,7 @@ export default async function ProjectDetailPage({
           <ProjectSection
             icon={<MapPin className="size-4" />}
             title="Locates"
+            accent="orange"
             description="811 tickets, utility responses and locate status"
             summary={
               <Summary
@@ -393,6 +397,7 @@ export default async function ProjectDetailPage({
           <ProjectSection
             icon={<Boxes className="size-4" />}
             title="Material on project"
+            accent="cyan"
             description="Engineered quantities, issued materials and remaining balances"
             summary={
               <Summary
@@ -419,6 +424,7 @@ export default async function ProjectDetailPage({
           <ProjectSection
             icon={<HardHat className="size-4" />}
             title="Crews on this job"
+            accent="indigo"
             description="Subcontractors, crew assignments and contacts"
             summary={
               <Summary
@@ -443,6 +449,7 @@ export default async function ProjectDetailPage({
         <ProjectSection
           icon={<ClipboardList className="size-4" />}
           title="Dailies"
+          accent="gold"
           description="Daily reports, production and field updates"
           summary={
             <Summary
@@ -488,6 +495,7 @@ export default async function ProjectDetailPage({
         <ProjectSection
           icon={<Images className="size-4" />}
           title="Project evidence"
+          accent="violet"
           description="Pre-construction, field photos and video, direction, closeout"
           summary={
             <Summary
@@ -527,6 +535,7 @@ export default async function ProjectDetailPage({
         <ProjectSection
           icon={<AlertTriangle className="size-4" />}
           title="Damage reports / incidents"
+          accent="red"
           description="Utility strikes, property damage, safety incidents and claims"
           summary={<span className="text-muted-foreground/70">Not yet available</span>}
         >
@@ -549,6 +558,7 @@ export default async function ProjectDetailPage({
           <ProjectSection
             icon={<Building2 className="size-4" />}
             title="Customer"
+            accent="green"
             description="Customer details, terms and contacts"
             summary={
               <Summary

@@ -30,12 +30,36 @@ import { ChevronDown } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
+/**
+ * The colour a section is known by.
+ *
+ * Ten identical grey tiles make the page one undifferentiated column, and the
+ * eye has to read every label to find the one it wants. A colour per section
+ * means somebody who opens this page daily stops reading and starts aiming —
+ * the orange one is material, the violet one is the photographs.
+ *
+ * Named against the palette rather than given hex values, so both themes keep
+ * working: every one of these is redefined for light mode, where the dark
+ * theme's pastels would be illegible on white.
+ */
+export type SectionAccent =
+  | "green"
+  | "blue"
+  | "blue-bright"
+  | "gold"
+  | "orange"
+  | "cyan"
+  | "indigo"
+  | "violet"
+  | "red";
+
 export function ProjectSection({
   icon,
   title,
   description,
   summary,
   badge,
+  accent = "blue",
   defaultOpen = false,
   children,
 }: {
@@ -52,6 +76,7 @@ export function ProjectSection({
    */
   summary?: React.ReactNode;
   badge?: React.ReactNode;
+  accent?: SectionAccent;
   defaultOpen?: boolean;
   children: React.ReactNode;
 }) {
@@ -60,6 +85,11 @@ export function ProjectSection({
 
   return (
     <section
+      // The accent travels as a custom property rather than as a class name.
+      // Tailwind only keeps classes it can find as literal strings, so a
+      // `text-${accent}` built at runtime would be stripped from the bundle and
+      // every tile would silently come back grey.
+      style={{ ["--accent" as string]: `var(--vq-${accent})` }}
       className={cn(
         "overflow-hidden rounded-xl border transition-colors",
         open
@@ -75,12 +105,18 @@ export function ProjectSection({
           aria-controls={panelId}
           className="focus-ring flex w-full items-center gap-3 px-3 py-3 text-left sm:gap-3.5 sm:px-4"
         >
+          {/* The tile carries the section's colour whether it is open or not.
+              Colouring only the open one would mean the closed page — the one
+              people actually scan — is the grey column this was meant to fix.
+              Opening it deepens the same hue rather than changing it. */}
           <span
             className={cn(
               "grid size-8 shrink-0 place-items-center rounded-lg border transition-colors sm:size-9",
+              "text-[var(--accent)]",
+              "border-[color-mix(in_oklab,var(--accent)_32%,transparent)]",
               open
-                ? "border-brand/40 bg-brand/[0.12] text-brand-bright"
-                : "border-border/70 bg-foreground/[0.03] text-muted-foreground",
+                ? "bg-[color-mix(in_oklab,var(--accent)_20%,transparent)]"
+                : "bg-[color-mix(in_oklab,var(--accent)_11%,transparent)]",
             )}
           >
             {icon}

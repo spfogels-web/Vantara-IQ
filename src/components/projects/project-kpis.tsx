@@ -44,6 +44,7 @@ export function ProjectKpis({ v }: { v: ProjectValuation }) {
           label="Gross revenue"
           value={revenue}
           note="At customer rates"
+          accent="green"
           tone="neutral"
         />
         <Kpi
@@ -59,6 +60,7 @@ export function ProjectKpis({ v }: { v: ProjectValuation }) {
                 ? "At the job's budgeted rates"
                 : "No crew rates on file"
           }
+          accent="indigo"
           tone="neutral"
         />
         <Kpi
@@ -66,12 +68,14 @@ export function ProjectKpis({ v }: { v: ProjectValuation }) {
           label="Gross margin"
           value={margin}
           note="Before deductions"
+          accent="cyan"
           tone={margin != null && (v.grossMargin ?? 0) > 0 ? "positive" : "neutral"}
         />
         <Kpi
           icon={<PieChart className="size-4" />}
           label="Margin %"
           value={marginPct}
+          accent="violet"
           note={v.unratedCrews.length ? `Excludes ${v.unratedCrews.length} unrated` : "Of revenue"}
           tone={
             marginPct == null
@@ -100,6 +104,7 @@ function Kpi({
   label,
   value,
   note,
+  accent,
   tone,
 }: {
   icon: React.ReactNode;
@@ -107,21 +112,30 @@ function Kpi({
   /** Null where a rate is missing — shown as unknown, never as zero. */
   value: string | null;
   note: string;
+  /**
+   * The card's own colour, fixed per figure rather than derived from whether
+   * the number is good news.
+   *
+   * Tone still colours the number itself, so an unpriced job reads as unknown.
+   * But the icons stay recognisable: colouring them by tone meant all four
+   * turned the same grey the moment a rate was missing, which is exactly when
+   * somebody most needs to tell revenue from margin at a glance.
+   */
+  accent: "green" | "indigo" | "cyan" | "violet";
   tone: "neutral" | "positive" | "caution" | "critical";
 }) {
   return (
-    <div className="rounded-xl border border-border/60 bg-foreground/[0.02] p-3">
+    <div
+      style={{ ["--accent" as string]: `var(--vq-${accent})` }}
+      className="rounded-xl border border-border/60 bg-foreground/[0.02] p-3"
+    >
       <div className="flex items-center gap-2">
         <span
           className={cn(
             "grid size-7 shrink-0 place-items-center rounded-lg border",
-            tone === "positive"
-              ? "border-success/30 bg-success/[0.1] text-success"
-              : tone === "caution"
-                ? "border-caution/30 bg-caution/[0.1] text-caution"
-                : tone === "critical"
-                  ? "border-critical/30 bg-critical/[0.1] text-critical"
-                  : "border-border/70 bg-foreground/[0.03] text-muted-foreground",
+            "text-[var(--accent)]",
+            "border-[color-mix(in_oklab,var(--accent)_32%,transparent)]",
+            "bg-[color-mix(in_oklab,var(--accent)_13%,transparent)]",
           )}
         >
           {icon}
