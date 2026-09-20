@@ -93,7 +93,34 @@ export function orgRecord(id: OrgId): OrgRecord {
  * When a second organisation has its own logins, this becomes a lookup rather
  * than a constant. Nothing else has to change for that.
  */
-export const PLATFORM_HOME_ORG: OrgId = FORTITUDE;
+export const PLATFORM_HOME_ORG: OrgId = resolveHomeOrg();
+
+/**
+ * Which database holds the accounts, for the one request that cannot be told:
+ * signing in.
+ *
+ * Fortitude unless a deployment says otherwise, which keeps the live
+ * environment exactly as it was — an unset variable changes nothing. A
+ * demonstration deployment sets VQ_HOME_ORG to its own organisation so its
+ * people can sign in to it, and provides no Fortitude connection string at all,
+ * which is what makes that deployment unable to reach Fortitude rather than
+ * merely disinclined to.
+ *
+ * Refuses a value it does not recognise rather than falling back. Falling back
+ * would mean a typo in a demo's configuration silently pointed its login at the
+ * live business, and every account in it would be a real one.
+ */
+function resolveHomeOrg(): OrgId {
+  const asked = process.env.VQ_HOME_ORG?.trim();
+  if (!asked) return FORTITUDE;
+  if (!REGISTRY.has(asked)) {
+    throw new Error(
+      `VQ_HOME_ORG is "${asked}", which is not a configured organisation. ` +
+        `Known: ${[...REGISTRY.keys()].join(", ") || "none"}. Refusing to fall back to another tenant's accounts.`,
+    );
+  }
+  return asked;
+}
 
 /**
  * Who may move between organisations, by email.
