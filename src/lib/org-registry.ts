@@ -25,29 +25,71 @@ export type OrgRecord = {
   directUrl: string | null;
 };
 
+/**
+ * Just the variables these functions read.
+ *
+ * Narrower than NodeJS.ProcessEnv so a test can hand over the three that
+ * matter instead of a copy of the real environment — which would inherit
+ * whatever the machine running the test happens to have set, and is how a
+ * test of an environment rule quietly stops testing anything.
+ */
+type EnvLike = Partial<Record<string, string | undefined>>;
+
 /** Fortitude is the incumbent and keeps the unprefixed variables it already has. */
 const FORTITUDE: OrgId = "fortitude";
 
-function readRegistry(): Map<OrgId, OrgRecord> {
+/**
+ * Whether the demonstration tenant is switched on here.
+ *
+ * Deliberately separate from whether its connection string happens to be
+ * present. Those two were the same question until Fortitude's production
+ * project turned out to carry `APEX_DATABASE_URL` scoped to Production —
+ * added, as far as anyone can tell, by a database integration doing something
+ * reasonable. Nobody asked for Apex to be live inside Fortitude, and nothing
+ * would have said it was: it would simply have appeared in the workspace
+ * switcher, and the locates cron would have started sweeping a demo tenant on
+ * every run, because `knownOrgs()` has no admin gate.
+ *
+ * A credential being reachable is not a statement of intent. This is the
+ * statement of intent, and it has to be made on purpose.
+ *
+ * Exactly the string "true", once trimmed and lowercased. Not "1", not "yes",
+ * not "TRUE " with something after it — anything else, including a typo in the
+ * variable, leaves the tenant unregistered. Failing closed on a malformed flag
+ * costs a deliberate operator one corrected character; failing open costs a
+ * live business a tenant it never asked for.
+ */
+export function apexEnabled(env: EnvLike = process.env): boolean {
+  return (env.VANTARA_ENABLE_APEX ?? "").trim().toLowerCase() === "true";
+}
+
+/**
+ * Build the registry from an environment.
+ *
+ * Takes the environment rather than reading the global one so the rule above
+ * can be tested for what it refuses, not only for what it allows.
+ */
+export function readRegistry(env: EnvLike = process.env): Map<OrgId, OrgRecord> {
   const out = new Map<OrgId, OrgRecord>();
 
-  const fortUrl = process.env.DATABASE_URL;
+  const fortUrl = env.DATABASE_URL;
   if (fortUrl) {
     out.set(FORTITUDE, {
       id: FORTITUDE,
       label: "Fortitude Infrastructure",
       url: fortUrl,
-      directUrl: process.env.DATABASE_URL_UNPOOLED ?? null,
+      directUrl: env.DATABASE_URL_UNPOOLED ?? null,
     });
   }
 
-  const apexUrl = process.env.APEX_DATABASE_URL;
-  if (apexUrl) {
+  // Both, and in this order: the tenant must be switched on *and* reachable.
+  const apexUrl = env.APEX_DATABASE_URL;
+  if (apexEnabled(env) && apexUrl) {
     out.set("apex", {
       id: "apex",
       label: "Apex Construction Group",
       url: apexUrl,
-      directUrl: process.env.APEX_DATABASE_URL_UNPOOLED ?? null,
+      directUrl: env.APEX_DATABASE_URL_UNPOOLED ?? null,
     });
   }
 

@@ -112,6 +112,12 @@ async function main() {
   delete env.DATABASE_URL;
   delete env.DATABASE_URL_UNPOOLED;
   env.VQ_HOME_ORG = key;
+  // A reachable connection string no longer registers a tenant on its own, and
+  // VQ_HOME_ORG refuses to name an organisation the registry does not hold —
+  // so without this the preview throws on boot rather than signing anybody in.
+  // This process is a demonstration deployment, which is precisely the case
+  // the flag exists to be set by.
+  env.VANTARA_ENABLE_APEX = "true";
 
   const child = spawn(process.execPath, [require.resolve("next/dist/bin/next"), "dev", "-p", String(PORT)], {
     env,

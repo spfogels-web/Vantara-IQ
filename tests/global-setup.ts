@@ -116,7 +116,14 @@ export async function setup() {
         DATABASE_URL_UNPOOLED: url,
         // The second organisation, under the id the registry knows it by. The
         // server must be able to reach both or the switcher has nowhere to go.
+        //
+        // Both variables, because reaching it is no longer enough to register
+        // it. A connection string being present is not a statement that the
+        // tenant should be live — Fortitude's production project carries one
+        // without anybody having asked for it — so a deployment that wants the
+        // second organisation has to say so. This harness genuinely does.
         APEX_DATABASE_URL: testDatabaseUrl(TEST_SCHEMA_B),
+        VANTARA_ENABLE_APEX: "true",
         // Who may switch. Named explicitly so the test exercises the allowlist
         // rather than a deployment that happens to let everyone through — and
         // so the "not on the list" case has something real to be refused by.

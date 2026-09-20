@@ -22,6 +22,19 @@ for (const file of [".env.local", ".env"]) {
   }
 }
 
+/**
+ * The suite is a two-tenant world, so it opts in to the second tenant.
+ *
+ * A connection string being present no longer registers an organisation — see
+ * `apexEnabled` — because Fortitude's production project turned out to carry
+ * one that nobody had asked for. The tests here genuinely do want the second
+ * organisation: it is the thing most of the isolation suite is about. Several
+ * of those tests build the registry in-process rather than against the spawned
+ * server, so the flag has to be set on this process too, not only on the
+ * server's environment in tests/global-setup.ts.
+ */
+process.env.VANTARA_ENABLE_APEX = "true";
+
 export default defineConfig({
   resolve: {
     alias: [
