@@ -65,6 +65,26 @@ describe("a printed daily is the billing form and nothing else", () => {
     expect(shown, "a photo gallery is still printing").toBe(0);
   });
 
+  it("leaves the job map off the page", async () => {
+    // A D-size plan squeezed onto letter is unreadable and costs a whole
+    // extra sheet. Asserted separately from the galleries so that removing it
+    // cannot be mistaken for the galleries being hidden twice.
+    const map = page.getByText(/job map/i).first();
+    // It has to be on the page before "it is not printing" means anything.
+    // Without this, a renamed heading or a wrong URL satisfies the assertion
+    // by finding nothing — which is how the galleries test first passed
+    // against a page that had no galleries on it.
+    expect(await map.count(), "no job map on the page — nothing was proved").toBeGreaterThan(0);
+    const printed =
+      (await map.evaluate((el) => {
+        for (let n: HTMLElement | null = el as HTMLElement; n; n = n.parentElement) {
+          if (getComputedStyle(n).display === "none") return false;
+        }
+        return true;
+      }));
+    expect(printed, "the job map is still printing").toBe(false);
+  });
+
   it("still prints the form itself", async () => {
     // The point is to remove the photographs, not the sheet. If this ever goes
     // to zero the fix has eaten the thing it was protecting.

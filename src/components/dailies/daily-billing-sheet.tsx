@@ -1655,8 +1655,13 @@ export function DailyBillingSheet({
           <fieldset disabled={locked} className="contents">
 
           {/* ── Job map + as-built redline ───────────────────────── */}
+          {/* Screen only, like the photographs above it. The plan is a D-size
+              drawing: scaled onto a letter page beside the form it is a grey
+              tangle nobody can read a footage off, and it cost a second sheet
+              of paper to say so. It is still on the project, at a size where
+              the redline marks mean something. */}
           {project ? (
-            <div className="border-t border-border print:break-before-page">
+            <div className="sheet-photos border-t border-border print:break-before-page">
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2">
                 <div className="min-w-0">
                   <p className="text-[9px] font-bold uppercase tracking-[0.1em] text-muted-foreground print:text-[7px]">

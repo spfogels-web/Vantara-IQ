@@ -841,15 +841,13 @@
     display: none !important;
   }
 
-  /* The redlined map is the other half of what gets emailed, so keep a page
-     break from landing in the middle of it.
-
-     Deliberately no width or height override here: the redline marks are an
-     SVG absolutely positioned over the map image, and the two only line up
-     while they share a box. Resizing either one on its own slides every mark
-     off the map it is describing. */
-  .sheet-page figure,
-  .sheet-page .map-preview {
+  /* The map no longer prints either — it carries .sheet-photos above.
+     Scaled from a D-size drawing onto a letter page it was a grey tangle
+     nobody could read a footage off, and it cost a second sheet to say so.
+     This rule stays for anything else that ends up in a figure: no width or
+     height override, because the redline marks are an SVG positioned over the
+     image and the two only line up while they share a box. */
+  .sheet-page figure {
     break-inside: avoid;
   }
 
