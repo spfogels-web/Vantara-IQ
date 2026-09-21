@@ -52,7 +52,7 @@ export default async function InvitePage({
   }
 
   const project: InviteProject = invite.projectName
-    ? { name: invite.projectName, client: invite.client, location: invite.location }
+    ? { name: invite.projectName, location: invite.location }
     : null;
 
   return <InviteOnboarding token={token} project={project} />;

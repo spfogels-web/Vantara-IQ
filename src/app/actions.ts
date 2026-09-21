@@ -532,6 +532,15 @@ export async function createSubcontractorDraft(input: {
   company: string;
   name: string;
   email: string;
+  /**
+   * A number to ring when onboarding stalls.
+   *
+   * Most crews do not finish this in one sitting, and an email address alone
+   * leaves chasing them to another email — which is the thing that already did
+   * not work. Stored as typed: a crew writes their own number the way they say
+   * it, and reformatting it is how a digit goes missing.
+   */
+  phone?: string;
   projectName?: string;
   inviteToken?: string;
   /** What they typed on the account step. Without it there is no login. */
@@ -607,6 +616,7 @@ export async function createSubcontractorDraft(input: {
         company: input.company,
         lead: input.name,
         email: input.email,
+        phone: (input.phone ?? "").trim(),
         state: "PENDING_REVIEW",
         tone: "warning",
         complianceTone: "neutral",

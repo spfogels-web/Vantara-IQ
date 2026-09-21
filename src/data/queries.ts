@@ -3410,7 +3410,6 @@ export async function getProjectPhotos(projectId: string): Promise<ProjectPhotoR
  */
 export async function getInviteForOnboarding(token: string): Promise<{
   projectName: string;
-  client: string;
   location: string;
 } | null> {
   const out = await withInvite(token, async () => getInvite(token));
@@ -3419,7 +3418,6 @@ export async function getInviteForOnboarding(token: string): Promise<{
 
 export async function getInvite(token: string): Promise<{
   projectName: string;
-  client: string;
   location: string;
 } | null> {
   if (!token?.trim()) return null;
@@ -3440,9 +3438,18 @@ export async function getInvite(token: string): Promise<{
       })
     : null;
 
+  /**
+   * Deliberately no customer.
+   *
+   * Whoever holds this link has signed nothing yet — no NDA, no subcontract —
+   * and an invitation is sent before any of that exists. Who the work is for
+   * is the prime's business and the office's, and it is not withheld from the
+   * page so much as never sent to it: a value that is not in the payload
+   * cannot be read out of the page source by somebody who was forwarded the
+   * link. They learn it when they are approved and assigned.
+   */
   return {
     projectName: project?.name ?? invite.projectName,
-    client: project?.client ?? invite.customer,
     location: project?.location ?? "",
   };
 }

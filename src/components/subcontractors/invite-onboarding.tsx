@@ -16,7 +16,7 @@ import { useOrgName } from "@/components/layout/org-provider";
 
 export type InviteProject = {
   name: string;
-  client: string;
+  /** No customer here on purpose — see getInvite. */
   location: string;
 } | null;
 
@@ -48,7 +48,13 @@ export function InviteOnboarding({ token, project }: { token: string; project: I
   const [step, setStep] = React.useState<Step>("account");
   const [subId, setSubId] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
-  const [account, setAccount] = React.useState({ company: "", name: "", email: "", password: "" });
+  const [account, setAccount] = React.useState({
+    company: "",
+    name: "",
+    email: "",
+    phone: "",
+    password: "",
+  });
   const [caps, setCaps] = React.useState({ crews: "", fieldStaff: "", equipment: "", trades: [] as string[] });
   const [agreementDownloaded, setAgreementDownloaded] = React.useState(false);
   /** Set once the signed ACH authorisation has been accepted by the server. */
@@ -70,7 +76,23 @@ export function InviteOnboarding({ token, project }: { token: string; project: I
   const toggleTrade = (t: string) =>
     setCaps((f) => ({ ...f, trades: f.trades.includes(t) ? f.trades.filter((x) => x !== t) : [...f.trades, t] }));
 
-  const accountValid = account.company.trim() && account.name.trim() && account.email.trim() && account.password.length >= 8;
+  /**
+   * A number to ring, required here rather than later.
+   *
+   * Most of the crews who start this never finish it in one sitting — a phone
+   * dies, a signal drops, someone is standing in a trench. An email address
+   * alone means the only way to chase them is another email, which is the
+   * thing that already did not work. Ten digits is the bar: enough to refuse
+   * an obvious typo, not so much that a perfectly good number is rejected for
+   * being written the wrong way round.
+   */
+  const phoneDigits = account.phone.replace(/\D/g, "");
+  const accountValid =
+    account.company.trim() &&
+    account.name.trim() &&
+    account.email.trim() &&
+    phoneDigits.length >= 10 &&
+    account.password.length >= 8;
   const capsValid = caps.trades.length > 0 && caps.crews.trim();
 
   async function createAccount() {
@@ -81,6 +103,7 @@ export function InviteOnboarding({ token, project }: { token: string; project: I
         company: account.company,
         name: account.name,
         email: account.email,
+        phone: account.phone,
         projectName: project?.name,
         inviteToken: token,
         // The password they just set. Without this they finish onboarding
@@ -142,7 +165,7 @@ export function InviteOnboarding({ token, project }: { token: string; project: I
             </span>
             <div className="min-w-0">
               <p className="text-[13.5px] font-semibold text-foreground">{project.name}</p>
-              <p className="text-[12px] text-muted-foreground">{project.client} · {project.location}</p>
+              <p className="text-[12px] text-muted-foreground">{project.location}</p>
             </div>
             <span className="ml-auto rounded-full bg-brand/15 px-2.5 py-1 text-[11px] font-semibold text-brand-bright">
               Your assigned project
@@ -173,6 +196,15 @@ export function InviteOnboarding({ token, project }: { token: string; project: I
               </Field>
               <Field label="Work email">
                 <input type="email" value={account.email} onChange={setA("email")} placeholder="you@company.com" className={inputClass} />
+              </Field>
+              <Field label="Mobile number" hint="So we can reach you">
+                <input
+                  type="tel"
+                  value={account.phone}
+                  onChange={setA("phone")}
+                  placeholder="(864) 555-0100"
+                  className={inputClass}
+                />
               </Field>
               <Field label="Password" hint="At least 8 characters">
                 <input type="password" value={account.password} onChange={setA("password")} placeholder="••••••••" className={inputClass} />

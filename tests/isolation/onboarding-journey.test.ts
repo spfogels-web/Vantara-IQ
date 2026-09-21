@@ -76,11 +76,37 @@ describe("a brand-new contractor, from a browser that knows nothing", () => {
     await page.getByText(tenant.projectName).first().waitFor({ state: "visible", timeout: 10_000 });
   });
 
+  it("does not name the customer to somebody who has signed nothing", async () => {
+    // The invitation goes out before any NDA or subcontract exists. Who the
+    // work is for is checked against the page source, not the rendering: a
+    // value merely hidden is still readable by anyone forwarded the link.
+    const html = await page.content();
+    expect(html, "the customer is in the invitation page").not.toContain(tenant.customerName);
+    // The project it is for is the point of the invitation, so it stays.
+    expect(html).toContain(tenant.projectName);
+  });
+
+  it("will not create an account without a number to ring", async () => {
+    // Most crews do not finish in one sitting, and chasing an unfinished
+    // onboarding by email is the thing that already did not work.
+    await page.getByPlaceholder("ABC Utilities").fill(COMPANY);
+    await page.getByPlaceholder("Reggie Vance").first().fill("Journey Tester");
+    await page.getByPlaceholder("you@company.com").fill(EMAIL);
+    await page.getByPlaceholder("••••••••").fill("a-long-enough-passphrase-1");
+    const go = page.getByRole("button", { name: /continue/i }).first();
+    expect(await go.isEnabled(), "a crew got through with no phone number").toBe(false);
+
+    await page.getByPlaceholder("(864) 555-0100").fill("555");
+    await page.waitForTimeout(200);
+    expect(await go.isEnabled(), "three digits counted as a phone number").toBe(false);
+  });
+
   it("creates the account — the step that was failing in production", async () => {
     // createSubcontractorDraft: no session, authorized by the token alone.
     await page.getByPlaceholder("ABC Utilities").fill(COMPANY);
     await page.getByPlaceholder("Reggie Vance").fill("Journey Tester");
     await page.getByPlaceholder("you@company.com").fill(EMAIL);
+    await page.getByPlaceholder("(864) 555-0100").fill("864-555-0142");
     await page.getByPlaceholder("••••••••").fill("a-long-enough-passphrase-1");
     await page.getByRole("button", { name: /continue/i }).click();
 
@@ -272,9 +298,15 @@ describe("and on through the rest of onboarding", () => {
     await remove.waitFor({ state: "visible", timeout: 15_000 }).catch(() => undefined);
     if (await remove.count()) {
       await remove.click();
-      await page.waitForTimeout(3_000);
-      const after = await db.subDocument.findMany({ where: { subcontractorId: sub!.id } });
-      expect(after.length, "the document could not be removed").toBeLessThan(docs.length);
+      // Wait for the row to actually go, rather than for three seconds and a
+      // hope. Under a full suite run the page is slower than it is alone, and
+      // a fixed sleep turned a working deletion into a failing assertion.
+      let after = docs.length;
+      for (let i = 0; i < 20 && after >= docs.length; i++) {
+        await page.waitForTimeout(500);
+        after = await db.subDocument.count({ where: { subcontractorId: sub!.id } });
+      }
+      expect(after, "the document could not be removed").toBeLessThan(docs.length);
     }
   });
 

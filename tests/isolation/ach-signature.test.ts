@@ -33,6 +33,7 @@ async function reachAchStep() {
   await page.getByPlaceholder("ABC Utilities").fill(COMPANY);
   await page.getByPlaceholder("Reggie Vance").first().fill("Signature Tester");
   await page.getByPlaceholder("you@company.com").fill(EMAIL);
+  await page.getByPlaceholder("(864) 555-0100").fill("864-555-0142");
   await page.getByPlaceholder("••••••••").fill("a-long-enough-passphrase-1");
   await page.getByRole("button", { name: /continue/i }).click();
   await page
