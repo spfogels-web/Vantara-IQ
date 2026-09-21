@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import * as XLSX from "xlsx";
 
 import { prisma } from "@/lib/prisma";
+import { runForOnboarding } from "@/lib/invite-org";
 import { isMarketId, marketLabel, getMarkets } from "@/data/markets";
 import { resolveMarketText } from "@/lib/markets";
 import { getCodeProfile } from "@/data/code-profile";
@@ -122,7 +123,16 @@ async function connectProjectByName(projectName: string | undefined) {
   const match = projects.find(
     (p) => p.name.trim().toLowerCase().replace(/\s+/g, " ") === wanted,
   );
-  return match ? { connect: { id: match.id } } : undefined;
+  // Create the assignment row, do not "connect" one.
+  //
+  // `projects` is ProjectCrew[], an explicit join, so `connect: { id }` looks
+  // this up as an *assignment* id rather than a project id, matches nothing,
+  // and Prisma throws "expected 1 records to be connected... found 0". The
+  // same mistake was found and fixed at assignProjectsToSubcontractor, where
+  // the comment warns that the compiler cannot tell the two ids apart — this
+  // call site was missed, and it has been failing every invitation whose
+  // project name matched a real project since before the tenancy work.
+  return match ? { create: { projectId: match.id } } : undefined;
 }
 
 /** Pilot feedback -> Feedback table. */
@@ -527,141 +537,146 @@ export async function createSubcontractorDraft(input: {
   /** What they typed on the account step. Without it there is no login. */
   password?: string;
 }) {
-  /**
-   * The link is the invitation, and it stays open.
-   *
-   * It used to be spent by the first crew that registered, which meant putting
-   * three crews on a job took three links and sending the wrong one got two of
-   * them an error. One link per project now, reusable, because that is how
-   * somebody actually invites a job's crews.
-   *
-   * What replaces single-use as the authorization is the session below: the
-   * crew is signed in the moment their account exists, so every later step
-   * proves who it is the same way the rest of the app does. Registering is not
-   * access — a new crew lands in PENDING_REVIEW and can be assigned nothing
-   * until Fortitude approves them.
-   */
-  const invite = input.inviteToken
-    ? await prisma.invite.findUnique({
-        where: { token: input.inviteToken },
-        select: { token: true },
-      })
-    : null;
-  if (!invite) return { ok: false as const, error: "This invitation link is not valid." };
+  // Enter the organisation this invitation belongs to before anything
+  // reads or writes. Without a token this is an ordinary signed-in call
+  // and the session supplies the organisation, exactly as before.
+  return runForOnboarding(input.inviteToken, async () => {
+    /**
+     * The link is the invitation, and it stays open.
+     *
+     * It used to be spent by the first crew that registered, which meant putting
+     * three crews on a job took three links and sending the wrong one got two of
+     * them an error. One link per project now, reusable, because that is how
+     * somebody actually invites a job's crews.
+     *
+     * What replaces single-use as the authorization is the session below: the
+     * crew is signed in the moment their account exists, so every later step
+     * proves who it is the same way the rest of the app does. Registering is not
+     * access — a new crew lands in PENDING_REVIEW and can be assigned nothing
+     * until Fortitude approves them.
+     */
+    const invite = input.inviteToken
+      ? await prisma.invite.findUnique({
+          where: { token: input.inviteToken },
+          select: { token: true },
+        })
+      : null;
+    if (!invite) return { ok: false as const, error: "This invitation link is not valid." };
 
-  /**
-   * An email can front exactly one login.
-   *
-   * Checked before anything is written. Creating the crew and then quietly
-   * skipping the login leaves a record nobody can sign in to and no hint as to
-   * why: the crew believes they registered, and the office sees a company that
-   * never comes back.
-   */
-  const wantedEmail = input.email.trim().toLowerCase();
-  if (wantedEmail) {
-    const taken = await prisma.user.findUnique({
-      where: { email: wantedEmail },
-      select: { id: true },
-    });
-    if (taken) {
-      return {
-        ok: false as const,
-        error: `${input.email.trim()} already has an account. Sign in with it, or register this crew under a different email.`,
-      };
-    }
-  }
-
-  // The work-eligibility gate. A crew cannot be given a job until every one of
-  // these is satisfied — the NDA sits here beside the subcontract because both
-  // have to be signed before any of it starts, not chased afterwards.
-  // Workers' comp is not listed separately. The certificate asked for covers
-  // general liability and workers' comp together, so a second line for it only
-  // ever restated the first — and could be missing while the document proving
-  // it sat on file.
-  const compliance = [
-    { label: "General liability COI", status: "missing", expires: "—", daysOut: null },
-    { label: "W-9", status: "missing", expires: "—", daysOut: null },
-    { label: "Master subcontract", status: "missing", expires: "—", daysOut: null },
-    { label: "Mutual NDA", status: "missing", expires: "—", daysOut: null },
-  ];
-  const scorecard = {
-    rating: 0, projectsCompleted: 0, avgApprovalDays: 0, avgDailyFt: 0,
-    docAccuracy: 0, safetyIncidents: 0, disputes: 0, avgProductionPct: 0,
-  };
-  const sub = await prisma.subcontractor.create({
-    data: {
-      company: input.company,
-      lead: input.name,
-      email: input.email,
-      state: "PENDING_REVIEW",
-      tone: "warning",
-      complianceTone: "neutral",
-      // The invite may name a job. Resolve it to a real project; if nothing
-      // matches, the crew is created unassigned and staff assign it — better
-      // than recording an assignment that points at nothing.
-      projects: await connectProjectByName(input.projectName),
-      compliance: compliance as unknown as Prisma.InputJsonValue,
-      scorecard: scorecard as unknown as Prisma.InputJsonValue,
-      since: "2026",
-    },
-  });
-  if (input.inviteToken) await bindInviteToSubcontractor(input.inviteToken, sub.id);
-
-  /**
-   * Create the login they just set a password for.
-   *
-   * The form asked for a password, checked it was eight characters, and threw
-   * it away — the crew finished onboarding believing they had an account and
-   * then could not sign in. Everything in the portal, including their own
-   * documents, was unreachable until somebody noticed and made a login by hand.
-   *
-   * Failing to create it must not lose the onboarding: the record and its
-   * documents are the valuable part, and staff can always issue a login.
-   */
-  let loginCreated = false;
-  const email = input.email.trim().toLowerCase();
-  if (input.password && input.password.length >= 8 && email) {
-    try {
-      const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
-      if (!existing) {
-        const user = await prisma.user.create({
-          data: {
-            email,
-            name: input.name.trim() || input.company.trim(),
-            passwordHash: await hashPassword(input.password),
-            role: "SUBCONTRACTOR",
-            subcontractorId: sub.id,
-          },
-          select: { id: true },
-        });
-        loginCreated = true;
-
-        /**
-         * Sign them in here, not at the end.
-         *
-         * This is what makes a reusable invite link safe. From this point the
-         * rest of onboarding — capabilities, the agreement, documents, badges —
-         * is authorised by their own session, which names exactly one company
-         * and cannot be forwarded to anyone else. The link only ever gets
-         * somebody as far as creating an account.
-         *
-         * It also means they land in their portal already signed in rather
-         * than being asked to log in with the password they set ninety seconds
-         * ago.
-         */
-        // The account was just created in this request's own database, so the
-        // session that reads it belongs to the same organisation.
-        const here = await resolveOrg();
-        await setSessionCookie(
-          await signSession({ userId: user.id, role: "SUBCONTRACTOR", org: here, home: here }),
-        );
+    /**
+     * An email can front exactly one login.
+     *
+     * Checked before anything is written. Creating the crew and then quietly
+     * skipping the login leaves a record nobody can sign in to and no hint as to
+     * why: the crew believes they registered, and the office sees a company that
+     * never comes back.
+     */
+    const wantedEmail = input.email.trim().toLowerCase();
+    if (wantedEmail) {
+      const taken = await prisma.user.findUnique({
+        where: { email: wantedEmail },
+        select: { id: true },
+      });
+      if (taken) {
+        return {
+          ok: false as const,
+          error: `${input.email.trim()} already has an account. Sign in with it, or register this crew under a different email.`,
+        };
       }
-    } catch {
-      // A duplicate email is the common case and is not fatal here.
     }
-  }
 
-  return { ok: true as const, id: sub.id, loginCreated };
+    // The work-eligibility gate. A crew cannot be given a job until every one of
+    // these is satisfied — the NDA sits here beside the subcontract because both
+    // have to be signed before any of it starts, not chased afterwards.
+    // Workers' comp is not listed separately. The certificate asked for covers
+    // general liability and workers' comp together, so a second line for it only
+    // ever restated the first — and could be missing while the document proving
+    // it sat on file.
+    const compliance = [
+      { label: "General liability COI", status: "missing", expires: "—", daysOut: null },
+      { label: "W-9", status: "missing", expires: "—", daysOut: null },
+      { label: "Master subcontract", status: "missing", expires: "—", daysOut: null },
+      { label: "Mutual NDA", status: "missing", expires: "—", daysOut: null },
+    ];
+    const scorecard = {
+      rating: 0, projectsCompleted: 0, avgApprovalDays: 0, avgDailyFt: 0,
+      docAccuracy: 0, safetyIncidents: 0, disputes: 0, avgProductionPct: 0,
+    };
+    const sub = await prisma.subcontractor.create({
+      data: {
+        company: input.company,
+        lead: input.name,
+        email: input.email,
+        state: "PENDING_REVIEW",
+        tone: "warning",
+        complianceTone: "neutral",
+        // The invite may name a job. Resolve it to a real project; if nothing
+        // matches, the crew is created unassigned and staff assign it — better
+        // than recording an assignment that points at nothing.
+        projects: await connectProjectByName(input.projectName),
+        compliance: compliance as unknown as Prisma.InputJsonValue,
+        scorecard: scorecard as unknown as Prisma.InputJsonValue,
+        since: "2026",
+      },
+    });
+    if (input.inviteToken) await bindInviteToSubcontractor(input.inviteToken, sub.id);
+
+    /**
+     * Create the login they just set a password for.
+     *
+     * The form asked for a password, checked it was eight characters, and threw
+     * it away — the crew finished onboarding believing they had an account and
+     * then could not sign in. Everything in the portal, including their own
+     * documents, was unreachable until somebody noticed and made a login by hand.
+     *
+     * Failing to create it must not lose the onboarding: the record and its
+     * documents are the valuable part, and staff can always issue a login.
+     */
+    let loginCreated = false;
+    const email = input.email.trim().toLowerCase();
+    if (input.password && input.password.length >= 8 && email) {
+      try {
+        const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+        if (!existing) {
+          const user = await prisma.user.create({
+            data: {
+              email,
+              name: input.name.trim() || input.company.trim(),
+              passwordHash: await hashPassword(input.password),
+              role: "SUBCONTRACTOR",
+              subcontractorId: sub.id,
+            },
+            select: { id: true },
+          });
+          loginCreated = true;
+
+          /**
+           * Sign them in here, not at the end.
+           *
+           * This is what makes a reusable invite link safe. From this point the
+           * rest of onboarding — capabilities, the agreement, documents, badges —
+           * is authorised by their own session, which names exactly one company
+           * and cannot be forwarded to anyone else. The link only ever gets
+           * somebody as far as creating an account.
+           *
+           * It also means they land in their portal already signed in rather
+           * than being asked to log in with the password they set ninety seconds
+           * ago.
+           */
+          // The account was just created in this request's own database, so the
+          // session that reads it belongs to the same organisation.
+          const here = await resolveOrg();
+          await setSessionCookie(
+            await signSession({ userId: user.id, role: "SUBCONTRACTOR", org: here, home: here }),
+          );
+        }
+      } catch {
+        // A duplicate email is the common case and is not fatal here.
+      }
+    }
+
+    return { ok: true as const, id: sub.id, loginCreated };
+  });
 }
 
 /**
@@ -675,17 +690,22 @@ export async function updateSubcontractorCapabilities(
   input: { trades: string[]; crews?: string; fieldStaff?: string; equipment: string[] },
   inviteToken?: string,
 ) {
-  await assertSubcontractorWrite(id, inviteToken);
-  await prisma.subcontractor.update({
-    where: { id },
-    data: {
-      trades: input.trades,
-      equipment: input.equipment,
-      crewSize: Number(input.fieldStaff) || Number(input.crews) || 0,
-    },
+  // Enter the organisation this invitation belongs to before anything
+  // reads or writes. Without a token this is an ordinary signed-in call
+  // and the session supplies the organisation, exactly as before.
+  return runForOnboarding(inviteToken, async () => {
+    await assertSubcontractorWrite(id, inviteToken);
+    await prisma.subcontractor.update({
+      where: { id },
+      data: {
+        trades: input.trades,
+        equipment: input.equipment,
+        crewSize: Number(input.fieldStaff) || Number(input.crews) || 0,
+      },
+    });
+    revalidatePath("/subcontractors");
+    return { ok: true as const };
   });
-  revalidatePath("/subcontractors");
-  return { ok: true as const };
 }
 
 const MAX_DOC_BYTES = 10 * 1024 * 1024; // 10 MB
@@ -704,67 +724,92 @@ export async function uploadSubDocument(formData: FormData) {
   const subcontractorId = String(formData.get("subcontractorId") || "");
   const section = String(formData.get("section") || "");
   const inviteToken = String(formData.get("inviteToken") || "") || null;
-  if (!file || !subcontractorId || !section) {
-    return { ok: false as const, error: "Missing file or section." };
-  }
 
-  await assertSubcontractorWrite(subcontractorId, inviteToken);
+  // The invitation names the organisation this document belongs in.
+  return runForOnboarding(inviteToken, async () => {    if (!file || !subcontractorId || !section) {
+      return { ok: false as const, error: "Missing file or section." };
+    }
 
-  // Who filed it is established here, not claimed by the caller.
-  const actor = await viewer();
-  const uploadedBy = actor ? actor.name || actor.email : "subcontractor";
-  if (file.size > MAX_DOC_BYTES) {
-    return { ok: false as const, error: "File is over 10 MB." };
-  }
-  const buf = Buffer.from(await file.arrayBuffer());
-  const mediaType = file.type || "application/octet-stream";
-  const dataUrl = `data:${mediaType};base64,${buf.toString("base64")}`;
+    await assertSubcontractorWrite(subcontractorId, inviteToken);
 
-  const doc = await prisma.subDocument.create({
-    data: {
-      subcontractorId,
-      section,
-      fileName: file.name,
-      mediaType,
-      sizeBytes: file.size,
-      dataUrl,
-      uploadedBy,
-    },
+    // Who filed it is established here, not claimed by the caller.
+    const actor = await viewer();
+    const uploadedBy = actor ? actor.name || actor.email : "subcontractor";
+    if (file.size > MAX_DOC_BYTES) {
+      return { ok: false as const, error: "File is over 10 MB." };
+    }
+    const buf = Buffer.from(await file.arrayBuffer());
+    const mediaType = file.type || "application/octet-stream";
+    const dataUrl = `data:${mediaType};base64,${buf.toString("base64")}`;
+
+    const doc = await prisma.subDocument.create({
+      data: {
+        subcontractorId,
+        section,
+        fileName: file.name,
+        mediaType,
+        sizeBytes: file.size,
+        dataUrl,
+        uploadedBy,
+      },
+    });
+    const crewName = await prisma.subcontractor.findUnique({
+      where: { id: subcontractorId },
+      select: { company: true },
+    });
+    await notifyStaff({
+      title: `${crewName?.company ?? "A crew"} uploaded a document`,
+      detail: `${section} — ${file.name}`,
+      href: "/subcontractors",
+      category: "compliance",
+      tone: "info",
+      actor: uploadedBy,
+    });
+
+    revalidatePath("/subcontractors");
+    return {
+      ok: true as const,
+      doc: {
+        id: doc.id,
+        section: doc.section,
+        fileName: doc.fileName,
+        mediaType: doc.mediaType,
+        sizeBytes: doc.sizeBytes,
+        url: `/api/sub-document/${doc.id}`,
+        uploadedBy: doc.uploadedBy,
+        createdAt: doc.createdAt.toISOString(),
+      },
+    };
   });
-  const crewName = await prisma.subcontractor.findUnique({
-    where: { id: subcontractorId },
-    select: { company: true },
-  });
-  await notifyStaff({
-    title: `${crewName?.company ?? "A crew"} uploaded a document`,
-    detail: `${section} — ${file.name}`,
-    href: "/subcontractors",
-    category: "compliance",
-    tone: "info",
-    actor: uploadedBy,
-  });
-
-  revalidatePath("/subcontractors");
-  return {
-    ok: true as const,
-    doc: {
-      id: doc.id,
-      section: doc.section,
-      fileName: doc.fileName,
-      mediaType: doc.mediaType,
-      sizeBytes: doc.sizeBytes,
-      url: `/api/sub-document/${doc.id}`,
-      uploadedBy: doc.uploadedBy,
-      createdAt: doc.createdAt.toISOString(),
-    },
-  };
 }
 
-export async function deleteSubDocument(id: string) {
-  await requireStaff();
-  await prisma.subDocument.delete({ where: { id } });
-  revalidatePath("/subcontractors");
-  return { ok: true as const };
+/**
+ * Remove one onboarding document.
+ *
+ * An invited subcontractor has to be able to replace a W-9 they uploaded
+ * upside down, and they have no session to prove who they are with — so the
+ * invitation stands in, exactly as it does for the upload that put the file
+ * there. The token is not a general key: the document is looked up first,
+ * and `assertSubcontractorWrite` then requires that this invitation already
+ * owns the subcontractor the document belongs to. A valid invitation for
+ * one company deletes nothing belonging to another, and reaches nothing
+ * outside a subcontractor's own packet.
+ */
+export async function deleteSubDocument(id: string, inviteToken?: string) {
+  // Enter the organisation this invitation belongs to before anything
+  // reads or writes. Without a token this is an ordinary signed-in call
+  // and the session supplies the organisation, exactly as before.
+  return runForOnboarding(inviteToken, async () => {
+    const doc = await prisma.subDocument.findUnique({
+      where: { id },
+      select: { subcontractorId: true },
+    });
+    if (!doc) return { ok: true as const };
+    await assertSubcontractorWrite(doc.subcontractorId, inviteToken);
+    await prisma.subDocument.delete({ where: { id } });
+    revalidatePath("/subcontractors");
+    return { ok: true as const };
+  });
 }
 
 /** Load all documents for a subcontractor (contractor-side review). */
@@ -4338,123 +4383,128 @@ export async function saveAchAuthorization(input: {
   signatureDataUrl: string;
   signedDate: string;
 }) {
-  await assertSubcontractorWrite(input.subcontractorId, input.inviteToken);
+  // Enter the organisation this invitation belongs to before anything
+  // reads or writes. Without a token this is an ordinary signed-in call
+  // and the session supplies the organisation, exactly as before.
+  return runForOnboarding(input.inviteToken, async () => {
+    await assertSubcontractorWrite(input.subcontractorId, input.inviteToken);
 
-  const existing = await prisma.achAuthorization.findUnique({
-    where: { subcontractorId: input.subcontractorId },
-    select: { id: true, accountNumberEnc: true, routingNumberEnc: true, accountLast4: true, routingLast4: true },
-  });
-
-  const required: [string, string | undefined][] = [
-    ["Legal business name", input.legalName],
-    ["EIN", input.ein],
-    ["Street address", input.addressLine1],
-    ["City", input.city],
-    ["State", input.stateRegion],
-    ["ZIP", input.postalCode],
-    ["Bank name", input.bankName],
-    ["Name of the person signing", input.signerName],
-    ["Signature", input.signatureDataUrl],
-    ["Date", input.signedDate],
-  ];
-  const missing = required.filter(([, v]) => !v?.trim()).map(([label]) => label);
-  if (missing.length) {
-    return { ok: false as const, error: `Still needed: ${missing.join(", ")}.` };
-  }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.signedDate.trim())) {
-    return { ok: false as const, error: "Enter the date as YYYY-MM-DD." };
-  }
-
-  const account = (input.accountNumber ?? "").replace(/\s|-/g, "");
-  const routing = (input.routingNumber ?? "").replace(/\s|-/g, "");
-
-  // Both are required on a first submission; on an edit, blank keeps the
-  // stored value so a typo elsewhere doesn't mean re-keying the account.
-  if (!existing && (!account || !routing)) {
-    return { ok: false as const, error: "Account number and routing number are both needed." };
-  }
-
-  // A routing number carries a check digit, so a typo in it is caught here. An
-  // account number carries nothing of the sort, and the only thing that catches
-  // a transposed digit is the picture it was copied from — so a first
-  // submission has to have one. An edit does not: it is already on file.
-  if (!existing) {
-    const proof = await prisma.subDocument.count({
-      where: { subcontractorId: input.subcontractorId, section: "payment" },
+    const existing = await prisma.achAuthorization.findUnique({
+      where: { subcontractorId: input.subcontractorId },
+      select: { id: true, accountNumberEnc: true, routingNumberEnc: true, accountLast4: true, routingLast4: true },
     });
-    if (proof === 0) {
+
+    const required: [string, string | undefined][] = [
+      ["Legal business name", input.legalName],
+      ["EIN", input.ein],
+      ["Street address", input.addressLine1],
+      ["City", input.city],
+      ["State", input.stateRegion],
+      ["ZIP", input.postalCode],
+      ["Bank name", input.bankName],
+      ["Name of the person signing", input.signerName],
+      ["Signature", input.signatureDataUrl],
+      ["Date", input.signedDate],
+    ];
+    const missing = required.filter(([, v]) => !v?.trim()).map(([label]) => label);
+    if (missing.length) {
+      return { ok: false as const, error: `Still needed: ${missing.join(", ")}.` };
+    }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.signedDate.trim())) {
+      return { ok: false as const, error: "Enter the date as YYYY-MM-DD." };
+    }
+
+    const account = (input.accountNumber ?? "").replace(/\s|-/g, "");
+    const routing = (input.routingNumber ?? "").replace(/\s|-/g, "");
+
+    // Both are required on a first submission; on an edit, blank keeps the
+    // stored value so a typo elsewhere doesn't mean re-keying the account.
+    if (!existing && (!account || !routing)) {
+      return { ok: false as const, error: "Account number and routing number are both needed." };
+    }
+
+    // A routing number carries a check digit, so a typo in it is caught here. An
+    // account number carries nothing of the sort, and the only thing that catches
+    // a transposed digit is the picture it was copied from — so a first
+    // submission has to have one. An edit does not: it is already on file.
+    if (!existing) {
+      const proof = await prisma.subDocument.count({
+        where: { subcontractorId: input.subcontractorId, section: "payment" },
+      });
+      if (proof === 0) {
+        return {
+          ok: false as const,
+          error:
+            "Add a photo of a voided check or a screenshot of your account and wire details first — we check the typed numbers against it before paying.",
+        };
+      }
+    }
+    if (account && !/^\d{4,17}$/.test(account)) {
+      return { ok: false as const, error: "An account number is 4 to 17 digits." };
+    }
+    if (routing && !isValidRouting(routing)) {
       return {
         ok: false as const,
-        error:
-          "Add a photo of a voided check or a screenshot of your account and wire details first — we check the typed numbers against it before paying.",
+        error: "That routing number isn't valid — it's nine digits and the check digit doesn't match. Worth reading it off a cheque again.",
       };
     }
-  }
-  if (account && !/^\d{4,17}$/.test(account)) {
-    return { ok: false as const, error: "An account number is 4 to 17 digits." };
-  }
-  if (routing && !isValidRouting(routing)) {
-    return {
-      ok: false as const,
-      error: "That routing number isn't valid — it's nine digits and the check digit doesn't match. Worth reading it off a cheque again.",
+
+    if ((account || routing) && !canStoreBankDetails()) {
+      return {
+        ok: false as const,
+        error: "Bank details can't be stored on this environment yet — the encryption key isn't set. Everything else on the form saves.",
+      };
+    }
+
+    const data = {
+      subcontractorId: input.subcontractorId,
+      legalName: input.legalName.trim(),
+      dba: input.dba?.trim() ?? "",
+      ein: input.ein.trim(),
+      addressLine1: input.addressLine1.trim(),
+      addressLine2: input.addressLine2?.trim() ?? "",
+      city: input.city.trim(),
+      stateRegion: input.stateRegion.trim(),
+      postalCode: input.postalCode.trim(),
+      phone: input.phone?.trim() ?? "",
+      email: input.email?.trim() ?? "",
+      bankName: input.bankName.trim(),
+      bankAddressLine1: input.bankAddressLine1?.trim() ?? "",
+      bankCity: input.bankCity?.trim() ?? "",
+      bankStateRegion: input.bankStateRegion?.trim() ?? "",
+      bankPostalCode: input.bankPostalCode?.trim() ?? "",
+      accountType: input.accountType === "savings" ? "savings" : "checking",
+      accountNumberEnc: account ? encryptField(account) : (existing?.accountNumberEnc ?? ""),
+      routingNumberEnc: routing ? encryptField(routing) : (existing?.routingNumberEnc ?? ""),
+      accountLast4: account ? last4(account) : (existing?.accountLast4 ?? ""),
+      routingLast4: routing ? last4(routing) : (existing?.routingLast4 ?? ""),
+      signerName: input.signerName.trim(),
+      signerTitle: input.signerTitle?.trim() ?? "",
+      signatureDataUrl: input.signatureDataUrl,
+      signedDate: input.signedDate.trim(),
+      submittedAt: new Date(),
     };
-  }
 
-  if ((account || routing) && !canStoreBankDetails()) {
-    return {
-      ok: false as const,
-      error: "Bank details can't be stored on this environment yet — the encryption key isn't set. Everything else on the form saves.",
-    };
-  }
+    await prisma.achAuthorization.upsert({
+      where: { subcontractorId: input.subcontractorId },
+      create: data,
+      update: data,
+    });
 
-  const data = {
-    subcontractorId: input.subcontractorId,
-    legalName: input.legalName.trim(),
-    dba: input.dba?.trim() ?? "",
-    ein: input.ein.trim(),
-    addressLine1: input.addressLine1.trim(),
-    addressLine2: input.addressLine2?.trim() ?? "",
-    city: input.city.trim(),
-    stateRegion: input.stateRegion.trim(),
-    postalCode: input.postalCode.trim(),
-    phone: input.phone?.trim() ?? "",
-    email: input.email?.trim() ?? "",
-    bankName: input.bankName.trim(),
-    bankAddressLine1: input.bankAddressLine1?.trim() ?? "",
-    bankCity: input.bankCity?.trim() ?? "",
-    bankStateRegion: input.bankStateRegion?.trim() ?? "",
-    bankPostalCode: input.bankPostalCode?.trim() ?? "",
-    accountType: input.accountType === "savings" ? "savings" : "checking",
-    accountNumberEnc: account ? encryptField(account) : (existing?.accountNumberEnc ?? ""),
-    routingNumberEnc: routing ? encryptField(routing) : (existing?.routingNumberEnc ?? ""),
-    accountLast4: account ? last4(account) : (existing?.accountLast4 ?? ""),
-    routingLast4: routing ? last4(routing) : (existing?.routingLast4 ?? ""),
-    signerName: input.signerName.trim(),
-    signerTitle: input.signerTitle?.trim() ?? "",
-    signatureDataUrl: input.signatureDataUrl,
-    signedDate: input.signedDate.trim(),
-    submittedAt: new Date(),
-  };
+    // Keep the vendor packet's payment section in step, so a crew isn't asked
+    // for the same thing twice in two places.
+    await prisma.subcontractor.update({
+      where: { id: input.subcontractorId },
+      data: {
+        paymentMethod: "ACH",
+        remittanceEmail: input.email?.trim() || undefined,
+      },
+    });
 
-  await prisma.achAuthorization.upsert({
-    where: { subcontractorId: input.subcontractorId },
-    create: data,
-    update: data,
+    revalidatePath("/subcontractors");
+    revalidatePath("/company");
+    return { ok: true as const };
   });
-
-  // Keep the vendor packet's payment section in step, so a crew isn't asked
-  // for the same thing twice in two places.
-  await prisma.subcontractor.update({
-    where: { id: input.subcontractorId },
-    data: {
-      paymentMethod: "ACH",
-      remittanceEmail: input.email?.trim() || undefined,
-    },
-  });
-
-  revalidatePath("/subcontractors");
-  revalidatePath("/company");
-  return { ok: true as const };
 }
 
 /**

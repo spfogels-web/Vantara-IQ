@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { BrandLogo } from "@/components/common/brand-logo";
 
-import { getInvite } from "@/data/queries";
+import { getInviteForOnboarding } from "@/data/queries";
 import { InviteOnboarding, type InviteProject } from "@/components/subcontractors/invite-onboarding";
 
 export const dynamic = "force-dynamic";
@@ -25,7 +25,10 @@ export default async function InvitePage({
   params: Promise<{ token: string }>;
 }) {
   const { token } = await params;
-  const invite = await getInvite(token);
+  // Resolved through the invitation rather than the session. A new
+  // contractor has no session, and the office opening the same link must
+  // still act on the organisation that issued it rather than their own.
+  const invite = await getInviteForOnboarding(token);
 
   if (!invite) {
     return (

@@ -4,6 +4,7 @@ import { cache } from "react";
 
 import { Prisma } from "@prisma/client";
 import { prisma, table } from "@/lib/prisma";
+import { isInviteFailure, withInvite } from "@/lib/invite-org";
 import { ratesForMarket } from "@/lib/markets";
 import { getCodeProfile } from "@/data/code-profile";
 import { orgSettings } from "@/lib/org-settings";
@@ -3399,6 +3400,23 @@ export async function getProjectPhotos(projectId: string): Promise<ProjectPhotoR
  * through the same link. Only an unknown token is refused, so the page never
  * renders a signup form for a string somebody typed.
  */
+/**
+ * The invitation as the onboarding page needs it, read in the organisation
+ * that issued it.
+ *
+ * `getInvite` below assumes a request that already has an organisation —
+ * true for anything behind a session, false for the one flow that runs
+ * before an account exists. This is that flow's entry point.
+ */
+export async function getInviteForOnboarding(token: string): Promise<{
+  projectName: string;
+  client: string;
+  location: string;
+} | null> {
+  const out = await withInvite(token, async () => getInvite(token));
+  return isInviteFailure(out) ? null : out;
+}
+
 export async function getInvite(token: string): Promise<{
   projectName: string;
   client: string;

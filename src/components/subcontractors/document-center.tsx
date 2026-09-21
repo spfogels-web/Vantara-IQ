@@ -136,7 +136,10 @@ export function DocumentCenter({
 
   async function remove(id: string) {
     setDocs((d) => d.filter((x) => x.id !== id));
-    await deleteSubDocument(id);
+    // The same invitation that uploaded it authorizes removing it. An
+    // invited crew has no session, and replacing a W-9 they scanned upside
+    // down is part of onboarding rather than something to need an account for.
+    await deleteSubDocument(id, inviteToken);
   }
 
   // Two different questions. "Can they submit" only looks at the items that

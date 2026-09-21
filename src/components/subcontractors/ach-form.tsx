@@ -134,6 +134,21 @@ export function AchForm({
   const [hasSignature, setHasSignature] = React.useState(Boolean(existing?.signatureDataUrl));
   const [typedSignature, setTypedSignature] = React.useState("");
 
+  /**
+   * Signed, by either of the two means this form offers.
+   *
+   * The gate used to read `hasSignature` alone, which is set only by the
+   * drawing pad — so the typed fallback below rendered, accepted a name, and
+   * left the button disabled. A crew who cannot draw on a phone in a truck,
+   * which is the case the fallback exists for, could not finish onboarding at
+   * all.
+   *
+   * Trimmed, because a space is not a signature. Nothing else about the
+   * requirement moves: an unsigned authorisation still cannot be submitted,
+   * and every other field and the voided cheque are still demanded.
+   */
+  const signatureReady = hasSignature || typedSignature.trim().length > 0;
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (busy) return;
@@ -455,8 +470,8 @@ export function AchForm({
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="submit"
-              disabled={busy || !hasSignature}
-              title={hasSignature ? undefined : "Sign it first"}
+              disabled={busy || !signatureReady}
+              title={signatureReady ? undefined : "Sign it first — draw it, or type your full name"}
               className="focus-ring inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand px-4 text-[12.5px] font-semibold text-white hover:bg-brand-bright disabled:opacity-40"
             >
               {busy ? <Loader2 className="size-3.5 animate-spin" /> : <ShieldCheck className="size-3.5" />}

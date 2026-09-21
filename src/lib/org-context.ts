@@ -31,6 +31,9 @@ import { ORG_HEADER } from "@/lib/org-header";
 
 const storage = new AsyncLocalStorage<OrgId>();
 
+/** Must match SESSION_COOKIE in lib/auth — duplicated to avoid an import cycle. */
+const SESSION_COOKIE = "vq_session";
+
 /** Run `fn` with an explicitly chosen organisation. Used off the request path. */
 export function runWithOrg<T>(org: OrgId, fn: () => T): T {
   if (!isKnownOrg(org)) {
@@ -70,6 +73,38 @@ export class NoOrganisationError extends Error {
  * accepting an invitation, a carrier's webhook — say which organisation they
  * mean, in their own code, where the decision is visible.
  */
+/**
+ * The organisation named by a cryptographically valid session cookie.
+ *
+ * Deliberately duplicates the few lines of verification rather than importing
+ * them: `lib/auth` already imports this module, and a cycle between the thing
+ * that decides which database to read and the thing that decides who is asking
+ * is not worth the saved lines. The contract is narrow enough to keep honest —
+ * verify the signature, require an org claim, return nothing otherwise.
+ */
+async function orgFromVerifiedSession(): Promise<string | null> {
+  const secret = process.env.AUTH_SECRET;
+  if (!secret || secret.length < 32) return null;
+
+  try {
+    const { cookies } = await import("next/headers");
+    const token = (await cookies()).get(SESSION_COOKIE)?.value;
+    if (!token) return null;
+
+    const { jwtVerify } = await import("jose");
+    const { payload } = await jwtVerify(token, new TextEncoder().encode(secret));
+    // Both claims, as the middleware requires. A token carrying one without
+    // the other was not issued by this application in a state we recognise.
+    const org = typeof payload.org === "string" ? payload.org : "";
+    const home = typeof payload.home === "string" ? payload.home : "";
+    return org && home ? org : null;
+  } catch {
+    // Expired, tampered with, signed by a different secret, or read outside a
+    // request. All of them mean the same thing here: no organisation.
+    return null;
+  }
+}
+
 export async function resolveOrg(): Promise<OrgId> {
   const explicit = storage.getStore();
   if (explicit) return explicit;
@@ -84,6 +119,23 @@ export async function resolveOrg(): Promise<OrgId> {
   } catch {
     // `headers()` throws outside a request scope — a script, a test, a
     // background job. Those must use `runWithOrg`, and the throw below says so.
+  }
+
+  if (!named) {
+    // Third and last: the organisation inside the signed session cookie.
+    //
+    // Onboarding creates a session partway through a request that arrived
+    // without one. Middleware runs before the route and cannot go back and add
+    // a header for a session that did not exist when it looked, so the render
+    // that follows the account-creating action has a valid session and no
+    // header — and threw, after the account had already been written.
+    //
+    // This is the same value the middleware would have used, verified the same
+    // way: jwtVerify against AUTH_SECRET, rejecting anything expired, tampered
+    // with, or signed by another secret. Nothing here reads an unsigned cookie,
+    // a query parameter, or a form field, and there is still no default: an
+    // unreadable session falls through to the throw below exactly as before.
+    named = await orgFromVerifiedSession();
   }
 
   if (!named) {
