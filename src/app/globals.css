@@ -777,7 +777,10 @@
 @media print {
   @page {
     size: letter landscape;
-    margin: 0.35in;
+    /* Tighter than before. The form is 1420px of columns and every tenth of
+       an inch of margin comes straight off the width they are scaled into,
+       which is the difference between a readable unit code and a smudge. */
+    margin: 0.25in;
   }
 
   body * {
@@ -809,9 +812,9 @@
     left: 0;
     /* The material grid is the wider of the two. Keep them both intact. */
     width: 1420px;
-    /* Letter landscape less 0.35in margins is 10.3in ≈ 989px of printable
-       width. 1420 × 0.69 ≈ 980px — the full sheet, with room to spare. */
-    zoom: 0.69;
+    /* Letter landscape less 0.25in margins is 10.5in ≈ 1008px of printable
+       width. 1420 × 0.71 ≈ 1008px — the full sheet, edge to edge. */
+    zoom: 0.71;
     background: #fff !important;
   }
 
@@ -820,6 +823,22 @@
   .sheet-grid {
     min-width: 1420px;
     width: 1420px;
+  }
+
+  /* Photographs are not the billing form.
+     *
+     * The field-photo grid and the redline uploader both live inside the
+     * sheet, because a crew fills them in while they are filling in the day.
+     * Printed, they turned one page into thirteen: a wall of thumbnails, each
+     * too small to show what it was taken to prove, and the form itself lost
+     * somewhere at the front. The evidence lives on the project, at full size,
+     * where somebody can actually look at it.
+     *
+     * Hidden by a class of its own rather than a print: utility, because a
+     * utility that is never generated emits no CSS and fails silently — which
+     * is exactly how the grid once printed at half its width. */
+  .sheet-page .sheet-photos {
+    display: none !important;
   }
 
   /* The redlined map is the other half of what gets emailed, so keep a page

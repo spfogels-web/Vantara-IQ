@@ -1608,14 +1608,20 @@ export function DailyBillingSheet({
               Editable afterwards, not optional beforehand: a sheet cannot be
               filed with none. */}
           {project ? (
-            <SheetPhotos
-              projectId={project.id}
-              photos={photos}
-              onChange={setPhotos}
-              sheetId={sheetId ?? null}
-              subcontractorId={filedForId || null}
-              workDate={header.dateWorked || null}
-            />
+            // Screen only. A printed daily is the billing form — the photos
+            // are evidence and live on the project, where they are looked at
+            // full size rather than as a thumbnail grid stretched across
+            // twelve extra sheets of paper.
+            <div className="sheet-photos">
+              <SheetPhotos
+                projectId={project.id}
+                photos={photos}
+                onChange={setPhotos}
+                sheetId={sheetId ?? null}
+                subcontractorId={filedForId || null}
+                workDate={header.dateWorked || null}
+              />
+            </div>
           ) : null}
 
           {/* ── Redlines ────────────────────────────────────────── */}
@@ -1626,6 +1632,11 @@ export function DailyBillingSheet({
               Outside the lock, like the photos: the numbers freeze when a
               sheet is filed, but the marked-up print often gets photographed
               back at the truck afterwards. */}
+          {/* Also screen only, for the same reason. The redline itself still
+              prints below — that is the marked-up plan the office actually
+              reads — but the uploader and its thumbnail strip are not part of
+              the billing form. */}
+          <div className="sheet-photos">
           <SheetPhotos
             projectId={project?.id ?? ""}
             photos={redlineFiles}
@@ -1639,6 +1650,7 @@ export function DailyBillingSheet({
             // screen to get it onto the sheet.
             accept="image/*,application/pdf"
           />
+          </div>
 
           <fieldset disabled={locked} className="contents">
 
