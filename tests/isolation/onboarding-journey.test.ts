@@ -130,15 +130,26 @@ describe("a brand-new contractor, from a browser that knows nothing", () => {
 
   it("saves capabilities through the same session-less path", async () => {
     // updateSubcontractorCapabilities, authorized by the same token.
-    const trade = page.locator("button", { hasText: /^(Boring|Plowing|Splicing)$/ }).first();
-    if (await trade.count()) await trade.click();
+    //
+    // A trade has to be picked: the step will not submit without one. The
+    // first version guessed at trade names ("Boring", "Plowing") that this
+    // form does not offer, and skipped the click when it found none — so the
+    // step never submitted, and the failure read as though the save path was
+    // broken. Named exactly, and clicked unconditionally, so a form that
+    // stops offering it fails here as a missing element rather than as a
+    // mysterious empty column.
+    await page.getByRole("button", { name: "Splicing", exact: true }).click();
     await page.getByPlaceholder("3").fill("2");
     await page.getByPlaceholder("18").fill("9");
-    await page.getByRole("button", { name: /^continue$/i }).click();
+
+    const submit = page.getByRole("button", { name: /^continue$/i });
+    await expect.poll(() => submit.isEnabled(), { timeout: 5_000 }).toBe(true);
+    await submit.click();
     await page.waitForTimeout(2_000);
 
     const sub = await db.subcontractor.findFirst({ where: { company: COMPANY } });
-    expect(sub?.crewSize, "capabilities did not save").toBeGreaterThan(0);
+    expect(sub?.crewSize, "capabilities did not save").toBe(9);
+    expect(sub?.trades, "the trade that was picked did not save").toContain("Splicing");
   });
 });
 

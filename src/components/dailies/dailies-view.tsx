@@ -7,8 +7,11 @@ import {
   AlertTriangle,
   ArrowRight,
   Camera,
+  CheckCircle2,
+  Coins,
+  ExternalLink,
+  Image as ImageIcon,
   Check,
-  ChevronDown,
   ClipboardList,
   FileText,
   MapPin,
@@ -21,7 +24,7 @@ import {
 
 import { cn } from "@/lib/utils";
 import { toneStyles } from "@/lib/tone";
-import type { DailyReport, DailyStatus } from "@/lib/types";
+import type { DailyReport, DailyStatus, Tone } from "@/lib/types";
 import { formatCurrency, formatFeet, formatNumber, formatWhen, todayET } from "@/lib/format";
 import { addDays } from "@/lib/billing";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
@@ -31,13 +34,15 @@ import { StatusPill } from "@/components/common/status-pill";
 import { Button } from "@/components/ui/button";
 import { deleteDaily, reopenDailyReview, reviewDaily, setDailyBillingWeek } from "@/app/actions";
 
-const FILTERS: (DailyStatus | "All")[] = [
-  "All",
-  "Submitted",
-  "In review",
-  "Approved",
-  "Denied",
-];
+/**
+ * What the queue can be narrowed to.
+ *
+ * This was an array the chips were rendered from. The tabs render from
+ * TABS now — which carries its own counts and the "Need review" bucket that
+ * is not a status at all — so the array was left describing a row of buttons
+ * that no longer existed, and only its element type was still read.
+ */
+type Filter = DailyStatus | "All";
 
 const SORTS = {
   newest: "Newest first",
@@ -99,6 +104,7 @@ export function DailiesView({
   dailies,
   initialId,
   sheetByDaily,
+  thumbs,
   reviewerName,
   canReview = false,
 }: {
@@ -106,6 +112,15 @@ export function DailiesView({
   initialId?: string;
   /** dailyId -> { sheetId, projectId }, for dailies that came from a Globe sheet. */
   sheetByDaily?: Record<string, { sheetId: string; projectId: string }>;
+  /**
+   * sheetId -> a few photo urls and how many there are in total.
+   *
+   * Fetched once for the whole page rather than per row — see
+   * getDailyThumbnails. Absent for a daily that has none, or whose photos
+   * pre-date the evidence records, and the row then shows the count it always
+   * had rather than nothing at all.
+   */
+  thumbs?: Record<string, { urls: string[]; total: number }>;
   /** Who is signed in — recorded on the approval or denial. */
   reviewerName?: string;
   /**
@@ -117,7 +132,7 @@ export function DailiesView({
 }) {
   const t = useT();
   const [items, setItems] = React.useState(dailies);
-  const [filter, setFilter] = React.useState<(typeof FILTERS)[number]>("All");
+  const [filter, setFilter] = React.useState<Filter>("All");
   // Which day is open, or null for none. A row toggles rather than only
   // selecting, so a day you have finished with can be shut again.
   const [selectedId, setSelectedId] = React.useState<string | null>(
@@ -211,104 +226,165 @@ export function DailiesView({
     setItems((prev) => prev.map((d) => (d.id === id ? { ...d, status, tone } : d)));
   }
 
-  const pending = items.filter((d) => d.status === "In review" || d.status === "Submitted").length;
-
   /**
-   * Today, across every crew.
+   * The four figures the office opens this page for.
    *
-   * This screen could tell you a sheet had arrived and nothing about the day
-   * the company had just had. Footage and value were only reachable by opening
-   * rows and adding them up in your head.
+   * Computed over what is actually on screen rather than over everything ever
+   * filed, so narrowing to one crew narrows the numbers with it — a total that
+   * ignores the filter above it is a total nobody can act on. Value is the
+   * customer figure the rate card already produced; nothing here prices
+   * anything.
    */
-  const todays = items.filter((d) => d.workDate === today);
-  const stats = {
-    pending,
-    ft: todays.reduce((n, d) => n + d.totalFt, 0),
-    value: todays.reduce((n, d) => n + d.billableAmount, 0),
-    crews: new Set(todays.map((d) => (d.subcontractor || d.crew || "").trim()).filter(Boolean)).size,
-  };
+  const kpi = React.useMemo(() => {
+    const approved = filtered.filter((d) => d.status === "Approved");
+    return {
+      needReview: filtered.filter(needsAttention).length,
+      approved: approved.length,
+      feet: filtered.reduce((n, d) => n + (d.totalFt || 0), 0),
+      value: filtered.reduce((n, d) => n + (d.billableAmount || 0), 0),
+      unpriced: filtered.reduce((n, d) => n + (d.unpricedCodes || 0), 0),
+    };
+  }, [filtered]);
+
+  const open = openId ? filtered.find((d) => d.id === openId) ?? null : null;
 
   return (
-    <div className="flex flex-col gap-3">
-      <Overview stats={stats} total={items.length} t={t} />
+    <div className="flex flex-col gap-3 2xl:flex-row 2xl:items-start">
+      <div className="flex min-w-0 flex-1 flex-col gap-3">
+        {/* ── What the day looks like, in four numbers ─────────────── */}
+        <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
+          <Kpi
+            accent="blue"
+            icon={<ClipboardList className="size-4" />}
+            label={t("Need review")}
+            value={String(kpi.needReview)}
+            note={
+              kpi.needReview
+                ? t("of {n} shown").replace("{n}", String(filtered.length))
+                : t("nothing waiting")
+            }
+            tone={kpi.needReview ? "caution" : "positive"}
+          />
+          <Kpi
+            accent="green"
+            icon={<CheckCircle2 className="size-4" />}
+            label={t("Approved")}
+            value={String(kpi.approved)}
+            note={t("in this view")}
+            tone="positive"
+          />
+          <Kpi
+            accent="cyan"
+            icon={<Ruler className="size-4" />}
+            label={t("Production")}
+            value={kpi.feet ? formatFeet(kpi.feet) : "—"}
+            note={
+              kpi.feet
+                ? t("across {n} dailies").replace("{n}", String(filtered.length))
+                : t("no footage in this view")
+            }
+            tone="neutral"
+          />
+          <Kpi
+            accent="violet"
+            icon={<Coins className="size-4" />}
+            label={t("Est. value")}
+            value={kpi.value ? formatCurrency(kpi.value) : "—"}
+            note={
+              kpi.unpriced
+                ? t("{n} codes unpriced").replace("{n}", String(kpi.unpriced))
+                : t("at the customer's rates")
+            }
+            tone={kpi.unpriced ? "caution" : "neutral"}
+          />
+        </div>
 
-      <Panel>
-        <PanelHeader
-          title={t("Daily billing sheets")}
-          description={`${pending} ${t("NEED REVIEW")} · ${items.length} ${t("filed")}`}
-          count={filtered.length}
-          icon={<ClipboardList className="size-3.5 text-gold" />}
-        />
+        {/* ── The queue ────────────────────────────────────────────── */}
+        <div className="overflow-hidden rounded-xl border border-border/60 bg-foreground/[0.015]">
+          {/* Status tabs. Every status the application actually stores —
+              Draft and Flagged included, because a daily in one of them is
+              still a daily somebody has to deal with, and dropping it from
+              the list is how it gets forgotten. "Need review" is derived, not
+              stored: it is the set that needs a person, whatever status they
+              are sitting in. */}
+          <div className="flex flex-wrap items-center gap-1 border-b border-border/60 px-2.5 py-2">
+            {TABS.map((f) => {
+              const n =
+                f === "All"
+                  ? items.length
+                  : f === "Need review"
+                    ? attentionCount
+                    : items.filter((d) => d.status === f).length;
+              const active = f === "Need review" ? onlyAttention : !onlyAttention && filter === f;
+              if (n === 0 && f !== "All" && f !== "Need review") return null;
+              return (
+                <button
+                  key={f}
+                  onClick={() => {
+                    if (f === "Need review") {
+                      setOnlyAttention(true);
+                      setFilter("All");
+                    } else {
+                      setOnlyAttention(false);
+                      setFilter(f as Filter);
+                    }
+                  }}
+                  className={cn(
+                    "focus-ring inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12.5px] font-medium transition-colors",
+                    active
+                      ? "bg-brand/15 text-brand-bright ring-1 ring-inset ring-brand/30"
+                      : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground",
+                    f === "Need review" && !active && n > 0 && "text-warning",
+                  )}
+                >
+                  {f === "Need review" && n > 0 ? <AlertTriangle className="size-3" /> : null}
+                  {t(f)}
+                  <span
+                    className={cn(
+                      "num text-[11px]",
+                      active ? "text-brand-bright/80" : "text-muted-foreground/70",
+                    )}
+                  >
+                    {n}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
 
-        <div className="flex flex-wrap items-center gap-1.5 border-b border-border/70 p-2.5">
-          {FILTERS.map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={cn(
-                "focus-ring rounded-full px-2.5 py-1 text-[12px] font-medium transition-colors",
-                filter === f
-                  ? "bg-brand text-white"
-                  : "bg-foreground/[0.04] text-muted-foreground hover:text-foreground",
-              )}
+          {/* Search and the three narrowings that matter. All of them act on
+              the same list the numbers above are computed from. */}
+          <div className="flex flex-wrap items-center gap-2 border-b border-border/60 px-2.5 py-2">
+            <label className="relative min-w-[200px] flex-1">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={t("Search by project, crew, sheet # or road…")}
+                className="focus-ring h-8 w-full rounded-lg border border-border/60 bg-foreground/[0.03] pl-8 pr-2.5 text-[12.5px] text-foreground outline-none placeholder:text-muted-foreground/70"
+              />
+            </label>
+
+            <select
+              value={job}
+              onChange={(e) => setJob(e.target.value)}
+              aria-label={t("Filter by project")}
+              className="focus-ring h-8 max-w-[200px] rounded-lg border border-border/60 bg-foreground/[0.03] px-2 text-[12.5px] text-foreground outline-none"
             >
-              {t(f)}
-            </button>
-          ))}
-
-          {/* Everything the office would otherwise have to remember to look
-              for, behind one switch: a flagged quantity, a code the card has
-              never heard of, a day with no footage, a day with nothing
-              photographed behind the number. */}
-          {attentionCount > 0 ? (
-            <button
-              onClick={() => setOnlyAttention((v) => !v)}
-              className={cn(
-                "focus-ring inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold transition-colors",
-                onlyAttention
-                  ? "bg-warning text-black"
-                  : "bg-warning/15 text-warning hover:bg-warning/25",
-              )}
-            >
-              <AlertTriangle className="size-3" />
-              {t("Needs attention")}
-              <span className="num">{attentionCount}</span>
-            </button>
-          ) : null}
-
-          <div className="ml-auto flex flex-wrap items-center gap-1.5">
-            {jobs.length > 1 ? (
-              <select
-                value={job}
-                onChange={(e) => setJob(e.target.value)}
-                aria-label={t("Filter by project")}
-                className={cn(
-                  "focus-ring h-[28px] max-w-[190px] cursor-pointer rounded-full px-2.5 text-[12px] font-medium outline-none transition-colors",
-                  job === "All projects"
-                    ? "bg-foreground/[0.04] text-muted-foreground hover:text-foreground"
-                    : "bg-brand text-white",
-                )}
-              >
-                <option>{t("All projects")}</option>
-                {jobs.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
-            ) : null}
+              <option>{t("All projects")}</option>
+              {jobs.map((j) => (
+                <option key={j} value={j}>
+                  {j}
+                </option>
+              ))}
+            </select>
 
             {crews.length > 1 ? (
               <select
                 value={crew}
                 onChange={(e) => setCrew(e.target.value)}
                 aria-label={t("Filter by crew")}
-                className={cn(
-                  "focus-ring h-[28px] max-w-[190px] cursor-pointer rounded-full px-2.5 text-[12px] font-medium outline-none transition-colors",
-                  crew === "All crews"
-                    ? "bg-foreground/[0.04] text-muted-foreground hover:text-foreground"
-                    : "bg-brand text-white",
-                )}
+                className="focus-ring h-8 max-w-[190px] rounded-lg border border-border/60 bg-foreground/[0.03] px-2 text-[12.5px] text-foreground outline-none"
               >
                 <option>{t("All crews")}</option>
                 {crews.map((c) => (
@@ -323,7 +399,7 @@ export function DailiesView({
               value={sort}
               onChange={(e) => setSort(e.target.value as SortKey)}
               aria-label={t("Sort dailies")}
-              className="focus-ring h-[28px] cursor-pointer rounded-full bg-foreground/[0.05] px-2.5 text-[12px] font-medium text-foreground outline-none"
+              className="focus-ring h-8 rounded-lg border border-border/60 bg-foreground/[0.03] px-2 text-[12.5px] text-foreground outline-none"
             >
               {Object.entries(SORTS).map(([k, label]) => (
                 <option key={k} value={k}>
@@ -331,297 +407,170 @@ export function DailiesView({
                 </option>
               ))}
             </select>
-
-            {/* A crew name, a road, a sheet number. Twenty-one rows is already
-                past what anyone reads down, and the filters above only narrow
-                by things the office thought to make a filter for. */}
-            <label className="relative">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-              <input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder={t("Search dailies…")}
-                aria-label={t("Search dailies")}
-                className="focus-ring h-[28px] w-[180px] rounded-full bg-foreground/[0.05] pl-7 pr-2.5 text-[12px] text-foreground outline-none placeholder:text-muted-foreground/70"
-              />
-            </label>
           </div>
-        </div>
 
-        {/* The queue itself, full width.
-            It used to be a narrow column beside a permanent detail panel, so
-            every row was squeezed into a third of the screen while most of the
-            screen showed one day. Reviewing is scanning first — the list gets
-            the width, and the day being decided opens underneath its own row
-            rather than across the page from it. */}
-        <ul className="flex flex-col">
-          {groups.map((g) => (
-            <li key={g.label || "all"}>
-              {g.label ? (
-                <p className="sticky top-0 z-20 flex items-baseline gap-2 border-b border-border/60 bg-card/95 px-3 py-2 backdrop-blur">
-                  <span className="text-[12px] font-bold uppercase tracking-[0.1em] text-foreground">
-                    {t(g.label)}
-                  </span>
-                  <span className="num text-[11.5px] text-muted-foreground">
-                    {g.rows.length} {g.rows.length === 1 ? t("daily") : t("dailies")}
-                  </span>
-                  <span className="num ml-auto gold-figure text-[12px] font-semibold">
-                    {formatFeet(g.rows.reduce((n, r) => n + r.totalFt, 0))}
-                  </span>
-                  <span className="num gold-figure text-[12px] font-semibold">
-                    {formatCurrency(g.rows.reduce((n, r) => n + r.billableAmount, 0))}
-                  </span>
-                </p>
-              ) : null}
-
-              <ul>
-                {g.rows.map((d) => {
-                  const open = openId === d.id;
-                  const reasons = attentionReasons(d);
-                  return (
-                    <li
-                      key={d.id}
-                      className={cn(
-                        "border-b border-border/50 last:border-0",
-                        open && "bg-foreground/[0.02]",
-                      )}
-                    >
-                      <button
-                        // Toggling rather than only selecting: a row that
-                        // opens and cannot be shut leaves the reviewer
-                        // scrolling past a day they have finished with.
-                        onClick={() => setSelectedId(open ? null : d.id)}
-                        aria-expanded={open}
+          {/* ── The table ──────────────────────────────────────────── */}
+          {filtered.length === 0 ? (
+            <div className="px-4 py-14 text-center">
+              <ClipboardList className="mx-auto size-6 text-muted-foreground/40" />
+              <p className="mt-2 text-[13px] font-medium text-foreground">
+                {onlyAttention ? t("Nothing needs review") : t("No dailies here")}
+              </p>
+              <p className="mt-1 text-[12px] text-muted-foreground">
+                {onlyAttention
+                  ? t("Everything filed has been looked at.")
+                  : t("Nothing matches these filters yet.")}
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[920px] border-collapse">
+                <thead>
+                  <tr className="border-b border-border/60 text-left">
+                    {[
+                      t("Project / location"),
+                      t("Sheet #"),
+                      t("Date"),
+                      t("Production"),
+                      t("Est. value"),
+                      t("Status"),
+                      t("Crew"),
+                      t("Photos"),
+                      "",
+                    ].map((h, i) => (
+                      <th
+                        key={h + i}
                         className={cn(
-                          "focus-ring group/row flex w-full flex-wrap items-center gap-x-4 gap-y-2 px-3 py-3 text-left transition-colors",
-                          open ? "gold-rail" : "hover:bg-foreground/[0.03]",
+                          "eyebrow whitespace-nowrap px-3 py-2 text-[10px]",
+                          (i === 3 || i === 4) && "text-right",
                         )}
                       >
-                        <FileText
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                {groups.map((g) => (
+                  <tbody key={g.label || "all"}>
+                    {g.label ? (
+                      <tr>
+                        <td colSpan={9} className="bg-foreground/[0.02] px-3 py-1.5">
+                          <span className="eyebrow text-[10px]">{t(g.label)}</span>
+                          <span className="num ml-2 text-[11px] text-muted-foreground">
+                            {formatFeet(g.rows.reduce((n, d) => n + (d.totalFt || 0), 0))}
+                            <span className="px-1.5 text-muted-foreground/40">·</span>
+                            {formatCurrency(g.rows.reduce((n, d) => n + (d.billableAmount || 0), 0))}
+                          </span>
+                        </td>
+                      </tr>
+                    ) : null}
+                    {g.rows.map((d) => {
+                      const on = openId === d.id;
+                      const why = attentionReasons(d);
+                      const shot = thumbs?.[sheetByDaily?.[d.id]?.sheetId ?? ""];
+                      return (
+                        <tr
+                          key={d.id}
+                          onClick={() => setSelectedId(on ? null : d.id)}
                           className={cn(
-                            "hidden size-8 shrink-0 rounded-lg bg-foreground/[0.05] p-1.5 sm:block",
-                            open ? "text-gold" : "text-muted-foreground",
-                          )}
-                        />
-
-                        {/* Who and where.
-                            The crew carries the brand colour — the same
-                            periwinkle as Create, the active filter and the
-                            sidebar rail — so the screen reads as one thing.
-                            It was cyan, which was distinct but unrelated to
-                            anything else on the page.
-                            The work-order number is reference, not identity:
-                            how the name is qualified, never what anybody scans
-                            for, so it stays a chip at footnote size. */}
-                        <span className="flex min-w-[200px] flex-1 flex-col gap-0.5">
-                          <span className="truncate text-[14.5px] font-semibold text-foreground">
-                            {d.project}
-                          </span>
-                          <span className="flex min-w-0 items-baseline gap-1.5 text-[13px]">
-                            <span className="truncate font-semibold text-brand">
-                              {d.subcontractor}
-                            </span>
-                            {d.crew ? (
-                              <span className="num shrink-0 rounded bg-foreground/[0.06] px-1.5 py-px text-[10px] text-muted-foreground">
-                                {d.crew}
-                              </span>
-                            ) : null}
-                          </span>
-                          <span
-                            className={cn(
-                              "flex items-center gap-1.5 truncate text-[12.5px]",
-                              d.roads ? "font-medium text-gold" : "text-muted-foreground/70",
-                            )}
-                          >
-                            <MapPin className="size-3.5 shrink-0" />
-                            {d.roads || t("No road recorded")}
-                          </span>
-                        </span>
-
-                        {/* The two numbers the day is judged on. */}
-                        <span className="flex w-[104px] shrink-0 flex-col">
-                          <span className="num gold-figure text-[19px] font-bold leading-none tracking-[-0.02em]">
-                            {formatFeet(d.totalFt)}
-                          </span>
-                          <span className="mt-1 text-[9.5px] font-bold uppercase tracking-[0.09em] text-muted-foreground">
-                            {t("Production")}
-                          </span>
-                        </span>
-
-                        <span className="flex w-[104px] shrink-0 flex-col">
-                          <span className="num gold-figure text-[17px] font-semibold leading-none">
-                            {formatCurrency(d.billableAmount)}
-                          </span>
-                          <span className="mt-1 text-[9.5px] font-bold uppercase tracking-[0.09em] text-muted-foreground">
-                            {t("Est. value")}
-                          </span>
-                        </span>
-
-                        <span className="hidden w-[150px] shrink-0 flex-col lg:flex">
-                          <span className="text-[12.5px] text-foreground/85">
-                            {formatWhen(d.submittedAt)}
-                          </span>
-                          <span className="num mt-1 text-[11px] text-muted-foreground">
-                            {d.sheetNumber}
-                          </span>
-                        </span>
-
-                        {/* Status, and why this one is worth opening. */}
-                        <span className="flex w-[186px] shrink-0 flex-col gap-1">
-                          <StatusPill
-                            label={t(d.status)}
-                            tone={d.tone}
-                            className="w-fit text-[11px]"
-                            dot={false}
-                          />
-                          {reasons.length > 0 ? (
-                            <span className="flex items-start gap-1.5 text-[11px] font-medium text-warning">
-                              <AlertTriangle className="mt-px size-3 shrink-0" />
-                              <span className="min-w-0">{reasons.join(" · ")}</span>
-                            </span>
-                          ) : (
-                            <span className="flex items-center gap-1.5 text-[11px] text-success">
-                              <Check className="size-3 shrink-0" />
-                              {t("AI check complete")}
-                            </span>
-                          )}
-                        </span>
-
-                        <span
-                          className={cn(
-                            "ml-auto inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-semibold transition-colors",
-                            open
-                              ? "bg-brand text-white"
-                              : "border border-border text-foreground group-hover/row:border-brand/60",
+                            "cursor-pointer border-b border-border/40 transition-colors",
+                            on ? "bg-brand/[0.07]" : "hover:bg-foreground/[0.03]",
                           )}
                         >
-                          {d.status === "Approved" || d.status === "Denied"
-                            ? t("View")
-                            : t("Review")}
-                          <ChevronDown
-                            className={cn("size-3.5 transition-transform", open && "rotate-180")}
-                          />
-                        </span>
-                      </button>
+                          <td className="px-3 py-2.5">
+                            <p className="truncate text-[13px] font-semibold text-foreground">
+                              {d.project}
+                            </p>
+                            <p className="truncate text-[11.5px] text-muted-foreground">
+                              {d.subcontractor || d.crew}
+                              {d.roads ? (
+                                <>
+                                  <span className="px-1.5 text-muted-foreground/40">·</span>
+                                  {d.roads}
+                                </>
+                              ) : null}
+                            </p>
+                          </td>
+                          <td className="num whitespace-nowrap px-3 py-2.5 text-[12px] text-muted-foreground">
+                            {d.sheetNumber || "—"}
+                          </td>
+                          <td className="num whitespace-nowrap px-3 py-2.5 text-[12px] text-muted-foreground">
+                            {d.workDate}
+                          </td>
+                          <td className="num whitespace-nowrap px-3 py-2.5 text-right text-[12.5px] font-semibold text-foreground">
+                            {d.totalFt ? formatFeet(d.totalFt) : "—"}
+                          </td>
+                          <td className="num whitespace-nowrap px-3 py-2.5 text-right text-[12.5px] font-semibold text-foreground">
+                            {d.billableAmount ? formatCurrency(d.billableAmount) : "—"}
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <StatusPill label={t(d.status)} tone={d.tone} className="text-[10px]" />
+                            {why.length ? (
+                              <span
+                                title={why.join(" · ")}
+                                className="ml-1.5 inline-flex items-center gap-1 text-[10.5px] text-warning"
+                              >
+                                <AlertTriangle className="size-3" />
+                                {why.length}
+                              </span>
+                            ) : null}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-2.5 text-[12px] text-muted-foreground">
+                            {d.crew || "—"}
+                          </td>
+                          <td className="px-3 py-2.5">
+                            <Thumbs shot={shot} count={d.photos} />
+                          </td>
+                          <td className="px-3 py-2.5 text-right">
+                            <span className="text-[11.5px] font-medium text-brand-bright">
+                              {on ? t("Close") : d.status === "Approved" || d.status === "Denied" ? t("View") : t("Review")}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                ))}
+              </table>
+            </div>
+          )}
+        </div>
 
-                      {/* Everything about the day, under the day.
-                          Its own row is the context — which is what a detail
-                          panel across the page from a narrow list never had,
-                          and why people lost track of which one they had
-                          opened. */}
-                      {open ? (
-                        <div className="border-t border-border/60 bg-background/40 px-3 py-3">
-                          <DailyDetail
-                            daily={d}
-                            onSetStatus={setStatus}
-                            sheet={sheetByDaily?.[d.id]}
-                            reviewerName={reviewerName}
-                            canReview={canReview}
-                          />
-                        </div>
-                      ) : null}
-                    </li>
-                  );
-                })}
-              </ul>
-            </li>
-          ))}
+        {/* ── The day itself ───────────────────────────────────────── */}
+        {open ? (
+          <DailyWorkspace
+            d={open}
+            t={t}
+            canReview={canReview}
+            reviewerName={reviewerName}
+            sheet={sheetByDaily?.[open.id]}
+            shot={thumbs?.[sheetByDaily?.[open.id]?.sheetId ?? ""]}
+            onClose={() => setSelectedId(null)}
+            onSetStatus={setStatus}
+          />
+        ) : null}
+      </div>
 
-          {filtered.length === 0 ? (
-            <li className="px-3 py-14 text-center text-[13px] text-muted-foreground">
-              <ClipboardList className="mx-auto mb-2 size-7 opacity-40" />
-              {t("Nothing matches these filters.")}
-            </li>
-          ) : null}
-        </ul>
-      </Panel>
+      {/* ── The rail. Below the table on anything narrower. ────────── */}
+      <aside className="flex w-full flex-col gap-3 2xl:w-[300px] 2xl:shrink-0">
+        <AiPanel t={t} />
+        <QuickActions t={t} />
+        <ActivityPanel d={open} t={t} />
+      </aside>
     </div>
   );
 }
 
-/**
- * Today's numbers, above the queue.
+
+/*
+ * Overview and Stat used to live here.
  *
- * Four figures rather than a paragraph. The count of days waiting is the one
- * that decides whether anybody opens this screen at all, so it leads and it is
- * coloured by whether there is anything to do.
+ * They were four tiles fixed to today: days waiting, footage, value and
+ * crews. The redesign's tiles are computed over whatever the queue is
+ * currently showing instead, so narrowing to one crew narrows the numbers
+ * with it — see Kpi. Keeping the old pair around would have left two
+ * tile designs and two definitions of the same four figures.
  */
-function Overview({
-  stats,
-  total,
-  t,
-}: {
-  stats: { pending: number; ft: number; value: number; crews: number };
-  total: number;
-  t: (s: string) => string;
-}) {
-  return (
-    <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
-      <Stat
-        value={String(stats.pending)}
-        label={t("Need review")}
-        note={`${t("out of")} ${total} ${t("filed")}`}
-        tone={stats.pending > 0 ? "brand" : "muted"}
-      />
-      {/* A bare zero beside "across every crew" reads as a broken figure.
-          Nothing filed yet is a normal state at 7am and it should say so. */}
-      <Stat
-        value={formatFeet(stats.ft)}
-        label={t("Production today")}
-        note={stats.crews === 0 ? t("nothing filed for today yet") : t("across every crew")}
-        tone="gold"
-      />
-      <Stat
-        value={formatCurrency(stats.value)}
-        label={t("Value today")}
-        note={stats.crews === 0 ? t("nothing filed for today yet") : t("gross at our card")}
-        tone="gold"
-      />
-      <Stat
-        value={String(stats.crews)}
-        label={t("Crews today")}
-        note={stats.crews === 0 ? t("nothing filed yet") : t("filed a day")}
-        tone="muted"
-      />
-    </div>
-  );
-}
-
-function Stat({
-  value,
-  label,
-  note,
-  tone,
-}: {
-  value: string;
-  label: string;
-  note: string;
-  tone: "brand" | "gold" | "muted";
-}) {
-  return (
-    <div
-      className={cn(
-        "rounded-xl border px-3.5 py-3",
-        tone === "brand" && "border-brand/40 bg-brand/[0.07]",
-        tone === "gold" && "border-gold/35 bg-gold/[0.06]",
-        tone === "muted" && "border-border bg-foreground/[0.02]",
-      )}
-    >
-      <p
-        className={cn(
-          "num text-[24px] font-bold leading-none tracking-[-0.02em]",
-          tone === "gold" ? "gold-figure" : "text-foreground",
-        )}
-      >
-        {value}
-      </p>
-      <p className="mt-1.5 text-[11px] font-bold uppercase tracking-[0.09em] text-foreground/85">
-        {label}
-      </p>
-      <p className="mt-0.5 text-[11px] text-muted-foreground">{note}</p>
-    </div>
-  );
-}
 
 function DailyDetail({
   daily: d,
@@ -653,6 +602,45 @@ function DailyDetail({
   const [confirmDelete, setConfirmDelete] = React.useState(false);
 
   const decided = d.status === "Approved" || d.status === "Denied";
+
+  /**
+   * The four checks below, as data, so the heading can count them.
+   *
+   * The heading used to read off `flags` alone, which meant a day with no
+   * photographs and no as-built announced "No discrepancies detected" while
+   * the list directly underneath it showed that check failing — and the row
+   * in the table, which has always counted documentation, showed a warning
+   * against the same day. A reviewer trusting the heading skips exactly the
+   * daily somebody needs to chase. One source, three places.
+   */
+  const checks = [
+    {
+      ok: d.unpricedCodes === 0,
+      label: t("Units matched the rate card"),
+      fail: `${d.unpricedCodes} ${t("code(s) the card has never heard of — those quantities bill nothing")}`,
+    },
+    {
+      ok: d.totalFt > 0,
+      label: t("Footage reconciled"),
+      fail: t("No footage on this day — a zero day needs a note saying why"),
+    },
+    {
+      ok: d.flags.length === 0,
+      label: t("Quantities verified"),
+      fail: `${d.flags.length} ${t("quantity flagged below")}`,
+    },
+    {
+      ok: d.photos > 0 && d.hasAsBuilt,
+      label: t("Required documentation attached"),
+      fail: [
+        d.photos === 0 ? t("no field photos") : null,
+        !d.hasAsBuilt ? t("no redline or as-built") : null,
+      ]
+        .filter(Boolean)
+        .join(", "),
+    },
+  ];
+  const failed = checks.filter((c) => !c.ok).length;
 
   // A different daily selected means a different decision — never carry a
   // half-typed reason across.
@@ -790,13 +778,13 @@ function DailyDetail({
       </Panel>
 
       {/* AI review */}
-      <Panel className={cn(d.flags.length > 0 && toneStyles[d.tone].glow)}>
+      <Panel className={cn(failed > 0 && toneStyles[d.tone].glow)}>
         <PanelHeader
           title={t("AI review")}
           description={
-            d.flags.length === 0
+            failed === 0
               ? t("No discrepancies detected")
-              : `${d.flags.length} ${t("for your team to review")}`
+              : `${failed} ${t("for your team to review")}`
           }
           icon={<Sparkles className="size-3.5 text-brand-bright" />}
         />
@@ -808,31 +796,9 @@ function DailyDetail({
               named checks, each pass or fail, answers the question the reviewer
               is really asking: is there a reason to open this one. */}
           <ul className="flex flex-col gap-1.5">
-            <AiCheck
-              ok={d.unpricedCodes === 0}
-              label={t("Units matched the rate card")}
-              fail={`${d.unpricedCodes} ${t("code(s) the card has never heard of — those quantities bill nothing")}`}
-            />
-            <AiCheck
-              ok={d.totalFt > 0}
-              label={t("Footage reconciled")}
-              fail={t("No footage on this day — a zero day needs a note saying why")}
-            />
-            <AiCheck
-              ok={d.flags.length === 0}
-              label={t("Quantities verified")}
-              fail={`${d.flags.length} ${t("quantity flagged below")}`}
-            />
-            <AiCheck
-              ok={d.photos > 0 && d.hasAsBuilt}
-              label={t("Required documentation attached")}
-              fail={[
-                d.photos === 0 ? t("no field photos") : null,
-                !d.hasAsBuilt ? t("no redline or as-built") : null,
-              ]
-                .filter(Boolean)
-                .join(", ")}
-            />
+            {checks.map((c) => (
+              <AiCheck key={c.label} ok={c.ok} label={c.label} fail={c.fail} />
+            ))}
           </ul>
 
           {d.flags.length > 0
@@ -1221,5 +1187,557 @@ function DeleteDaily({
         Keep
       </button>
     </div>
+  );
+}
+
+/** The status tabs. Every status the application stores, plus the derived one. */
+const TABS = [
+  "All",
+  "Need review",
+  "Draft",
+  "Submitted",
+  "In review",
+  "Approved",
+  "Denied",
+  "Flagged",
+] as const;
+
+/** One of the four figures above the queue. */
+function Kpi({
+  icon,
+  label,
+  value,
+  note,
+  accent,
+  tone,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  note: string;
+  accent: "blue" | "green" | "cyan" | "violet";
+  tone: "neutral" | "positive" | "caution";
+}) {
+  return (
+    <div
+      style={{ ["--accent" as string]: `var(--vq-${accent})` }}
+      className="rounded-xl border border-border/60 bg-foreground/[0.02] p-3"
+    >
+      <div className="flex items-center gap-2">
+        <span className="grid size-7 shrink-0 place-items-center rounded-lg border border-[color-mix(in_oklab,var(--accent)_32%,transparent)] bg-[color-mix(in_oklab,var(--accent)_13%,transparent)] text-[var(--accent)]">
+          {icon}
+        </span>
+        <span className="eyebrow truncate text-[10.5px]">{label}</span>
+      </div>
+      <p
+        className={cn(
+          "num mt-2 text-[24px] font-bold tracking-[-0.02em]",
+          tone === "positive"
+            ? "text-success"
+            : tone === "caution"
+              ? "text-warning"
+              : "text-foreground",
+        )}
+      >
+        {value}
+      </p>
+      <p className="mt-0.5 truncate text-[11.5px] text-muted-foreground">{note}</p>
+    </div>
+  );
+}
+
+/**
+ * Up to three photographs from the day, and a count of the rest.
+ *
+ * Drawn at the size they are displayed rather than at the size they were
+ * taken: a phone photograph is several megabytes and there may be a hundred
+ * rows, so the browser is told to fetch them lazily and decode them
+ * asynchronously. Where a URL cannot be resolved the row falls back to the
+ * count it always had rather than losing the information entirely.
+ */
+function Thumbs({ shot, count }: { shot?: { urls: string[]; total: number }; count: number }) {
+  if (!shot?.urls.length) {
+    return count > 0 ? (
+      <span className="num inline-flex items-center gap-1 text-[11.5px] text-muted-foreground">
+        <ImageIcon className="size-3.5" />
+        {count}
+      </span>
+    ) : (
+      <span className="inline-flex items-center gap-1 text-[11px] text-warning/80" title="No field photos">
+        <AlertTriangle className="size-3" />
+        none
+      </span>
+    );
+  }
+  const more = Math.max(0, (shot.total || count) - shot.urls.length);
+  return (
+    <span className="flex items-center gap-1">
+      {shot.urls.map((u) => (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          key={u}
+          src={u}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          width={36}
+          height={36}
+          className="size-9 shrink-0 rounded border border-border/60 object-cover"
+        />
+      ))}
+      {more > 0 ? (
+        <span className="num grid size-9 shrink-0 place-items-center rounded border border-border/60 bg-foreground/[0.04] text-[10.5px] text-muted-foreground">
+          +{more}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+/** The sections of a selected daily. Only what the application can answer. */
+const SECTIONS = [
+  { id: "overview", label: "Overview", icon: ClipboardList },
+  { id: "photos", label: "Photos & media", icon: Camera },
+  { id: "crew", label: "Crew & notes", icon: MapPin },
+] as const;
+
+/**
+ * One daily, opened underneath the queue.
+ *
+ * The detail itself is the component that has always rendered it —
+ * `DailyDetail` holds the line items, the rate columns, the approve and deny
+ * decisions and the billing week, and none of that is re-implemented here.
+ * What is new is the frame: a header that says what this day is, and a rail
+ * that lets somebody move between what the day produced, what was
+ * photographed, and who did it, without scrolling past all three.
+ */
+function DailyWorkspace({
+  d,
+  t,
+  canReview,
+  reviewerName,
+  sheet,
+  shot,
+  onClose,
+  onSetStatus,
+}: {
+  d: DailyReport;
+  t: (s: string) => string;
+  canReview: boolean;
+  reviewerName?: string;
+  sheet?: { sheetId: string; projectId: string };
+  shot?: { urls: string[]; total: number };
+  onClose: () => void;
+  onSetStatus: (id: string, status: DailyStatus, tone: DailyReport["tone"]) => void;
+}) {
+  const [section, setSection] = React.useState<(typeof SECTIONS)[number]["id"]>("overview");
+  const why = attentionReasons(d);
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-brand/30 bg-foreground/[0.02]">
+      {/* Who, what, when — before anything asks to be read. */}
+      <div className="flex flex-wrap items-start gap-3 border-b border-border/60 px-3 py-2.5">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-[16px] font-semibold tracking-[-0.01em] text-foreground">
+              {d.project}
+            </h2>
+            <StatusPill label={t(d.status)} tone={d.tone} className="text-[10px]" />
+          </div>
+          <p className="mt-0.5 text-[12px] text-muted-foreground">
+            {d.subcontractor || d.crew}
+            {d.sheetNumber ? (
+              <>
+                <span className="px-1.5 text-muted-foreground/40">·</span>
+                {t("Sheet")} {d.sheetNumber}
+              </>
+            ) : null}
+            <span className="px-1.5 text-muted-foreground/40">·</span>
+            {formatWhen(d.submittedAt)}
+          </p>
+          {d.roads ? (
+            <p className="mt-0.5 inline-flex items-center gap-1 text-[12px] text-brand-bright">
+              <MapPin className="size-3" /> {d.roads}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1.5">
+          {sheet ? (
+            <>
+              <a
+                href={`/api/daily-sheet/${sheet.sheetId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="focus-ring inline-flex h-7 items-center gap-1.5 rounded-lg border border-border px-2.5 text-[11.5px] text-muted-foreground hover:text-foreground"
+              >
+                <FileText className="size-3" /> {t("PDF")}
+              </a>
+              <Link
+                href={`/dailies/sheet/${sheet.projectId}?sheet=${sheet.sheetId}`}
+                className="focus-ring inline-flex h-7 items-center gap-1.5 rounded-lg border border-border px-2.5 text-[11.5px] text-muted-foreground hover:text-foreground"
+              >
+                <ExternalLink className="size-3" /> {t("Open sheet")}
+              </Link>
+            </>
+          ) : null}
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={t("Close")}
+            className="focus-ring grid size-7 place-items-center rounded-lg text-muted-foreground hover:text-foreground"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+      </div>
+
+      <div className="flex flex-col lg:flex-row">
+        {/* Section rail. Horizontal on a laptop, vertical once there is room. */}
+        <nav className="flex shrink-0 gap-1 overflow-x-auto border-b border-border/60 px-2 py-2 lg:w-[176px] lg:flex-col lg:overflow-visible lg:border-b-0 lg:border-r">
+          {SECTIONS.map((s) => {
+            const on = section === s.id;
+            const Icon = s.icon;
+            return (
+              <button
+                key={s.id}
+                onClick={() => setSection(s.id)}
+                className={cn(
+                  "focus-ring inline-flex shrink-0 items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[12.5px] transition-colors",
+                  on
+                    ? "bg-brand/15 font-medium text-brand-bright"
+                    : "text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground",
+                )}
+              >
+                <Icon className="size-3.5 shrink-0" />
+                {t(s.label)}
+                {s.id === "photos" && (shot?.total ?? d.photos) > 0 ? (
+                  <span className="num ml-auto text-[10.5px] text-muted-foreground/70">
+                    {shot?.total ?? d.photos}
+                  </span>
+                ) : null}
+              </button>
+            );
+          })}
+        </nav>
+
+        <div className="min-w-0 flex-1">
+          {section === "overview" ? (
+            <>
+              {/* The five facts, then the detail that has always been here. */}
+              <div className="grid grid-cols-2 gap-2 p-2.5 lg:grid-cols-5">
+                <Fact label={t("Production")} value={d.totalFt ? formatFeet(d.totalFt) : "—"} />
+                <Fact
+                  label={t("Est. value")}
+                  value={d.billableAmount ? formatCurrency(d.billableAmount) : "—"}
+                />
+                {/* A daily that was never submitted has no time to show, and
+                    an empty card reads as a rendering fault rather than as a
+                    fact about the day. */}
+                <Fact
+                  label={t("Submitted")}
+                  value={d.submittedAt ? formatWhen(d.submittedAt) || d.workDate : t("Not filed")}
+                />
+                <Fact label={t("Crew")} value={d.crew || d.subcontractor || "—"} />
+                <Fact
+                  label={t("Documentation")}
+                  value={why.length ? t("Needs attention") : t("Complete")}
+                  tone={why.length ? "caution" : "positive"}
+                />
+              </div>
+              <DailyDetail
+                daily={d}
+                onSetStatus={onSetStatus}
+                sheet={sheet}
+                reviewerName={reviewerName}
+                canReview={canReview}
+              />
+            </>
+          ) : section === "photos" ? (
+            <PhotosSection d={d} shot={shot} sheet={sheet} t={t} />
+          ) : (
+            <CrewSection d={d} t={t} />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Fact({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone?: "positive" | "caution";
+}) {
+  return (
+    <div className="rounded-lg border border-border/60 bg-foreground/[0.02] px-2.5 py-2">
+      <p className="eyebrow text-[9.5px]">{label}</p>
+      <p
+        className={cn(
+          "num mt-1 truncate text-[14px] font-semibold",
+          tone === "positive"
+            ? "text-success"
+            : tone === "caution"
+              ? "text-warning"
+              : "text-foreground",
+        )}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
+/*
+ * There is no AiReviewShell here on purpose.
+ *
+ * A first version of this redesign rendered its own review panel in the
+ * section rail: four checks, drawn from unpricedCodes, totalFt, flags and
+ * the documentation state. DailyDetail already renders exactly those four,
+ * from exactly those fields, with better failure text. Two identical panels
+ * one above the other is not more review, it is the same review twice, and
+ * the second one is the copy that goes stale.
+ *
+ * The panel that survives is the older one, reached from Overview. It is
+ * honest about what it is: every tick is computed from a real field, none of
+ * it is a model's opinion, and it is where Vantara's review plugs in when
+ * there is one.
+ */
+
+/** The photographs filed with the day, at a size worth looking at. */
+function PhotosSection({
+  d,
+  shot,
+  sheet,
+  t,
+}: {
+  d: DailyReport;
+  shot?: { urls: string[]; total: number };
+  sheet?: { sheetId: string; projectId: string };
+  t: (s: string) => string;
+}) {
+  if (!shot?.urls.length) {
+    return (
+      <div className="px-4 py-10 text-center">
+        <Camera className="mx-auto size-6 text-muted-foreground/40" />
+        <p className="mt-2 text-[13px] font-medium text-foreground">
+          {d.photos > 0 ? t("Photographs are on the sheet") : t("No photographs attached")}
+        </p>
+        <p className="mt-1 text-[12px] text-muted-foreground">
+          {d.photos > 0
+            ? t("This day has {n}, filed before evidence records existed.").replace(
+                "{n}",
+                String(d.photos),
+              )
+            : t("A day with no photographs behind the number is the one that comes back.")}
+        </p>
+        {sheet ? (
+          <Link
+            href={`/dailies/sheet/${sheet.projectId}?sheet=${sheet.sheetId}`}
+            className="focus-ring mt-2 inline-flex text-[12px] font-medium text-brand-bright hover:underline"
+          >
+            {t("Open the sheet")} →
+          </Link>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-3">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+        {shot.urls.map((u) => (
+          <a key={u} href={u} target="_blank" rel="noopener noreferrer" className="focus-ring block">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={u}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              className="h-28 w-full rounded-lg border border-border/60 object-cover"
+            />
+          </a>
+        ))}
+      </div>
+      {shot.total > shot.urls.length && sheet ? (
+        <Link
+          href={`/dailies/sheet/${sheet.projectId}?sheet=${sheet.sheetId}`}
+          className="focus-ring mt-2 inline-flex text-[12px] font-medium text-brand-bright hover:underline"
+        >
+          {t("See all {n} on the sheet").replace("{n}", String(shot.total))} →
+        </Link>
+      ) : null}
+    </div>
+  );
+}
+
+/** Who filed it, and anything the office wrote on it. */
+function CrewSection({ d, t }: { d: DailyReport; t: (s: string) => string }) {
+  const rows: [string, string][] = [
+    [t("Subcontractor"), d.subcontractor || "—"],
+    [t("Crew"), d.crew || "—"],
+    [t("Customer"), d.customer || "—"],
+    [t("Work date"), d.workDate],
+    [t("Bills to week ending"), d.billingWeekEnd || "—"],
+  ];
+  return (
+    <div className="p-3">
+      <dl className="grid grid-cols-1 gap-x-4 gap-y-1.5 sm:grid-cols-2">
+        {rows.map(([k, v]) => (
+          <div key={k} className="flex items-baseline justify-between border-b border-border/40 py-1.5">
+            <dt className="text-[12px] text-muted-foreground">{k}</dt>
+            <dd className="num text-[12.5px] font-medium text-foreground">{v}</dd>
+          </div>
+        ))}
+      </dl>
+      {d.reviewNote ? (
+        <div className="mt-3 rounded-lg border border-border/60 bg-foreground/[0.02] p-3">
+          <p className="eyebrow text-[9.5px]">{t("Review note")}</p>
+          <p className="mt-1 text-[12.5px] leading-relaxed text-foreground">{d.reviewNote}</p>
+          {d.reviewedBy ? (
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              {d.reviewedBy}
+              {d.reviewedAt ? ` · ${formatWhen(d.reviewedAt)}` : ""}
+            </p>
+          ) : null}
+        </div>
+      ) : (
+        <p className="mt-3 text-[12px] text-muted-foreground">{t("No review note on this day.")}</p>
+      )}
+    </div>
+  );
+}
+
+/** The rail's shared frame, so three panels do not each invent their own. */
+function Rail({
+  title,
+  icon,
+  children,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="overflow-hidden rounded-xl border border-border/60 bg-foreground/[0.015]">
+      <header className="flex items-center gap-2 border-b border-border/60 px-3 py-2">
+        <span className="text-muted-foreground">{icon}</span>
+        <h3 className="text-[12.5px] font-semibold text-foreground">{title}</h3>
+      </header>
+      {children}
+    </section>
+  );
+}
+
+/** Reserved for Vantara's review. Says so, rather than showing invented advice. */
+function AiPanel({ t }: { t: (s: string) => string }) {
+  return (
+    <Rail title={t("Vantara insights")} icon={<Sparkles className="size-3.5" />}>
+      <div className="px-3 py-4 text-center">
+        <Sparkles className="mx-auto size-5 text-brand-bright/50" />
+        <p className="mt-2 text-[12px] font-medium text-foreground">{t("Not connected yet")}</p>
+        <p className="mt-1 text-[11.5px] leading-relaxed text-muted-foreground">
+          {t(
+            "This is where Vantara will flag unusual quantities, codes a rate card has never seen, and days filed without documentation. It stays empty until it has something true to say.",
+          )}
+        </p>
+      </div>
+    </Rail>
+  );
+}
+
+/** Only things that already exist and already work. */
+function QuickActions({ t }: { t: (s: string) => string }) {
+  const items = [
+    { href: "/dailies/sheet", label: t("Create a daily sheet"), icon: FileText },
+    { href: "/projects", label: t("Projects"), icon: MapPin },
+    { href: "/invoicing", label: t("Invoicing"), icon: Coins },
+  ];
+  return (
+    <Rail title={t("Quick actions")} icon={<ArrowRight className="size-3.5" />}>
+      <div className="flex flex-col p-1.5">
+        {items.map((a) => (
+          <Link
+            key={a.href}
+            href={a.href}
+            className="focus-ring flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[12.5px] text-muted-foreground transition-colors hover:bg-foreground/[0.04] hover:text-foreground"
+          >
+            <a.icon className="size-3.5 shrink-0 text-brand-bright" />
+            {a.label}
+          </Link>
+        ))}
+      </div>
+    </Rail>
+  );
+}
+
+/**
+ * What actually happened to the selected day.
+ *
+ * Built from the day's own record — when it was filed, when somebody decided
+ * it, who that was — and nothing else. There is no event log behind dailies,
+ * so a longer timeline would have to be invented, and a short true one is
+ * worth more than a full imaginary one. With nothing selected it says so.
+ */
+function ActivityPanel({ d, t }: { d: DailyReport | null; t: (s: string) => string }) {
+  if (!d) {
+    return (
+      <Rail title={t("Activity")} icon={<ClipboardList className="size-3.5" />}>
+        <p className="px-3 py-4 text-center text-[11.5px] text-muted-foreground">
+          {t("Open a daily to see what has happened to it.")}
+        </p>
+      </Rail>
+    );
+  }
+
+  const events: { label: string; when: string; who?: string; tone: Tone }[] = [];
+  if (d.submittedAt) {
+    events.push({ label: t("Filed by the crew"), when: formatWhen(d.submittedAt), tone: "info" });
+  }
+  if (d.reviewedAt) {
+    events.push({
+      label: d.status === "Approved" ? t("Approved") : d.status === "Denied" ? t("Sent back") : t("Reviewed"),
+      when: formatWhen(d.reviewedAt),
+      who: d.reviewedBy,
+      tone: d.status === "Approved" ? "success" : d.status === "Denied" ? "critical" : "neutral",
+    });
+  }
+
+  return (
+    <Rail title={t("Activity")} icon={<ClipboardList className="size-3.5" />}>
+      {events.length === 0 ? (
+        <p className="px-3 py-4 text-center text-[11.5px] text-muted-foreground">
+          {t("Nothing has happened to this day yet.")}
+        </p>
+      ) : (
+        <ol className="flex flex-col p-2.5">
+          {events.map((e, i) => (
+            <li key={e.label + i} className="flex gap-2.5 py-1.5">
+              <span
+                className={cn(
+                  "mt-1 size-1.5 shrink-0 rounded-full",
+                  e.tone === "success"
+                    ? "bg-success"
+                    : e.tone === "critical"
+                      ? "bg-critical"
+                      : "bg-brand-bright",
+                )}
+              />
+              <span className="min-w-0">
+                <span className="block text-[12px] text-foreground">{e.label}</span>
+                <span className="block text-[11px] text-muted-foreground">
+                  {e.when}
+                  {e.who ? ` · ${e.who}` : ""}
+                </span>
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </Rail>
   );
 }

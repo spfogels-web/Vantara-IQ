@@ -3,6 +3,7 @@ import { FileText } from "lucide-react";
 
 import {
   getDailies,
+  getDailyThumbnails,
   getProjects,
   getSheetIndexByDaily,
   getSubcontractors,
@@ -32,6 +33,17 @@ export default async function DailiesPage({
 
   const staff = !!me && isStaff(me.role);
 
+  /**
+   * A few photographs per daily, for the table.
+   *
+   * One query for the whole page, keyed by the sheet each daily came from.
+   * Dailies filed before evidence records existed simply have none, and
+   * those rows fall back to the count they always showed.
+   */
+  const thumbs = await getDailyThumbnails(
+    Object.values(sheetByDaily).map((x) => x.sheetId),
+  );
+
   // Only fetched for the importer, which is staff-only — a crew has no use for
   // the full job list or the roster of other companies.
   const [projects, crews] = staff
@@ -45,11 +57,11 @@ export default async function DailiesPage({
   return (
     <PageShell
       eyebrow={t("Overview")}
-      title={t("Dailies")}
+      title={t("Daily production")}
       description={
         staff
           ? t(
-              "Every crew's daily production, digitized from the field. The AI reads each sheet, reconciles quantities and documentation, and stages it for your team's review.",
+              "Every crew's daily production, digitized from the field. Review quantities, documentation, production and billing from one workspace.",
             )
           : t("The days your crew has filed, and where each one stands with {company}.").replace(
               "{company}",
@@ -76,10 +88,11 @@ export default async function DailiesPage({
           <ImportDaily
             projects={projects.map((p) => ({ id: p.id, name: p.name, number: p.number }))}
             crews={crews.map((c) => ({ id: c.id, company: c.company }))}
-            startOpen={
-              dailies.filter((d) => d.status === "Submitted" || d.status === "In review")
-                .length === 0
-            }
+            // Folded away always, now that the queue is the page. Reading
+            // somebody's emailed sheet is the second job here; the first is
+            // deciding the days already filed, and an open dropzone pushed
+            // them below the fold on a laptop.
+            startOpen={false}
           />
         </div>
       ) : null}
@@ -88,6 +101,7 @@ export default async function DailiesPage({
         dailies={dailies}
         initialId={sp.sheet}
         sheetByDaily={sheetByDaily}
+        thumbs={thumbs}
         reviewerName={me?.name}
         canReview={staff}
       />

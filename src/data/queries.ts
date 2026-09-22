@@ -4741,3 +4741,42 @@ export async function getSubPeople(): Promise<
   }
   return out;
 }
+
+/**
+ * A few photographs per daily, for the list.
+ *
+ * One query for the whole page. The obvious shape — ask for each daily's
+ * photos as the row renders — is a query per row, and a hundred dailies is a
+ * hundred round trips to draw thumbnails nobody has clicked yet.
+ *
+ * Only the two columns a thumbnail needs are selected — the sheet it hangs
+ * off and the URL. That URL is the same object the gallery serves, so the
+ * browser is told what size to draw it at and left to scale it down, rather
+ * than the row carrying a second, smaller copy of every photograph.
+ *
+ * Keyed by sheet id rather than daily id because that is the column the
+ * evidence carries — `sheetByDaily` already maps one to the other.
+ */
+export async function getDailyThumbnails(
+  sheetIds: string[],
+  perSheet = 3,
+): Promise<Record<string, { urls: string[]; total: number }>> {
+  const ids = [...new Set(sheetIds.filter(Boolean))];
+  if (!ids.length) return {};
+
+  const rows = await prisma.projectPhoto.findMany({
+    where: { dailySheetId: { in: ids }, kind: "PHOTO" },
+    select: { dailySheetId: true, url: true },
+    orderBy: [{ capturedAt: "asc" }, { createdAt: "asc" }],
+  });
+
+  const out: Record<string, { urls: string[]; total: number }> = {};
+  for (const r of rows) {
+    const key = r.dailySheetId;
+    if (!key) continue;
+    const bucket = (out[key] ??= { urls: [], total: 0 });
+    bucket.total += 1;
+    if (bucket.urls.length < perSheet) bucket.urls.push(r.url);
+  }
+  return out;
+}
