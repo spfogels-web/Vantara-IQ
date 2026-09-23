@@ -24,7 +24,7 @@ import {
 
 import { cn } from "@/lib/utils";
 import { toneStyles } from "@/lib/tone";
-import type { DailyReport, DailyStatus, Tone } from "@/lib/types";
+import type { DailyReport, DailyStatus } from "@/lib/types";
 import { formatCurrency, formatFeet, formatNumber, formatWhen, todayET } from "@/lib/format";
 import { addDays } from "@/lib/billing";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
@@ -130,13 +130,13 @@ const COLUMNS: {
   // Zero-width below the breakpoint, not merely hidden: a hidden cell still
   // held its column open, which is where 160px of the laptop table was going
   // while the project name was squeezed into 90px.
-  { key: "sheet", label: "Sheet #", width: "w-0 2xl:w-[68px]", wideOnly: true },
+  { key: "sheet", label: "Sheet #", width: "w-0 2xl:w-[84px]", wideOnly: true },
   { key: "date", label: "Date", width: "w-[86px]" },
   { key: "production", label: "Production", width: "w-[96px]", right: true },
   { key: "value", label: "Est. value", width: "w-[84px]", right: true },
   { key: "status", label: "Status", width: "w-[88px]" },
   { key: "week", label: "Billing wk", width: "w-[96px]" },
-  { key: "crew", label: "Crew", width: "w-0 2xl:w-[92px]", wideOnly: true },
+  { key: "crew", label: "Crew", width: "w-0 2xl:w-[76px]", wideOnly: true },
   { key: "photos", label: "Photos", width: "w-[158px]" },
   { key: "open", label: "", width: "w-[48px]" },
 ];
@@ -308,7 +308,6 @@ export function DailiesView({
     };
   }, [filtered]);
 
-  const open = openId ? filtered.find((d) => d.id === openId) ?? null : null;
 
   return (
     <div className="flex flex-col gap-3 2xl:flex-row 2xl:items-start">
@@ -599,7 +598,7 @@ export function DailiesView({
               <table className="w-full min-w-[860px] table-fixed border-collapse">
                 <thead>
                   <tr className="border-b border-border/60 text-left">
-                    {COLUMNS.map((c, i) => (
+                    {COLUMNS.map((c) => (
                       <th
                         key={c.key}
                         className={cn(
@@ -845,9 +844,7 @@ export function DailiesView({
 
       {/* ── The rail. Below the table on anything narrower. ────────── */}
       <aside className="flex w-full flex-col gap-3 2xl:w-[300px] 2xl:shrink-0">
-        <AiPanel t={t} />
         <QuickActions t={t} />
-        <ActivityPanel d={open} t={t} />
       </aside>
     </div>
   );
@@ -1925,23 +1922,6 @@ function Rail({
   );
 }
 
-/** Reserved for Vantara's review. Says so, rather than showing invented advice. */
-function AiPanel({ t }: { t: (s: string) => string }) {
-  return (
-    <Rail title={t("Vantara insights")} icon={<Sparkles className="size-3.5" />}>
-      <div className="px-3 py-4 text-center">
-        <Sparkles className="mx-auto size-5 text-brand-bright/50" />
-        <p className="mt-2 text-[12px] font-medium text-foreground">{t("Not connected yet")}</p>
-        <p className="mt-1 text-[11.5px] leading-relaxed text-muted-foreground">
-          {t(
-            "This is where Vantara will flag unusual quantities, codes a rate card has never seen, and days filed without documentation. It stays empty until it has something true to say.",
-          )}
-        </p>
-      </div>
-    </Rail>
-  );
-}
-
 /** Only things that already exist and already work. */
 function QuickActions({ t }: { t: (s: string) => string }) {
   const items = [
@@ -1963,73 +1943,6 @@ function QuickActions({ t }: { t: (s: string) => string }) {
           </Link>
         ))}
       </div>
-    </Rail>
-  );
-}
-
-/**
- * What actually happened to the selected day.
- *
- * Built from the day's own record — when it was filed, when somebody decided
- * it, who that was — and nothing else. There is no event log behind dailies,
- * so a longer timeline would have to be invented, and a short true one is
- * worth more than a full imaginary one. With nothing selected it says so.
- */
-function ActivityPanel({ d, t }: { d: DailyReport | null; t: (s: string) => string }) {
-  if (!d) {
-    return (
-      <Rail title={t("Activity")} icon={<ClipboardList className="size-3.5" />}>
-        <p className="px-3 py-4 text-center text-[11.5px] text-muted-foreground">
-          {t("Open a daily to see what has happened to it.")}
-        </p>
-      </Rail>
-    );
-  }
-
-  const events: { label: string; when: string; who?: string; tone: Tone }[] = [];
-  if (d.submittedAt) {
-    events.push({ label: t("Filed by the crew"), when: formatWhen(d.submittedAt), tone: "info" });
-  }
-  if (d.reviewedAt) {
-    events.push({
-      label: d.status === "Approved" ? t("Approved") : d.status === "Denied" ? t("Sent back") : t("Reviewed"),
-      when: formatWhen(d.reviewedAt),
-      who: d.reviewedBy,
-      tone: d.status === "Approved" ? "success" : d.status === "Denied" ? "critical" : "neutral",
-    });
-  }
-
-  return (
-    <Rail title={t("Activity")} icon={<ClipboardList className="size-3.5" />}>
-      {events.length === 0 ? (
-        <p className="px-3 py-4 text-center text-[11.5px] text-muted-foreground">
-          {t("Nothing has happened to this day yet.")}
-        </p>
-      ) : (
-        <ol className="flex flex-col p-2.5">
-          {events.map((e, i) => (
-            <li key={e.label + i} className="flex gap-2.5 py-1.5">
-              <span
-                className={cn(
-                  "mt-1 size-1.5 shrink-0 rounded-full",
-                  e.tone === "success"
-                    ? "bg-success"
-                    : e.tone === "critical"
-                      ? "bg-critical"
-                      : "bg-brand-bright",
-                )}
-              />
-              <span className="min-w-0">
-                <span className="block text-[12px] text-foreground">{e.label}</span>
-                <span className="block text-[11px] text-muted-foreground">
-                  {e.when}
-                  {e.who ? ` · ${e.who}` : ""}
-                </span>
-              </span>
-            </li>
-          ))}
-        </ol>
-      )}
     </Rail>
   );
 }
