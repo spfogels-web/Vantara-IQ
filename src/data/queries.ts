@@ -4743,6 +4743,32 @@ export async function getSubPeople(): Promise<
 }
 
 /**
+ * The face of each job, for the dailies queue.
+ *
+ * One query, same shape as the thumbnails below: a queue of eighty days spans
+ * a handful of jobs, so this is a few rows however long the list is. Only the
+ * two columns `ProjectThumb` chooses between are read — it prefers the
+ * jobsite photograph, falls back to the uploaded map, and draws a stable
+ * gradient when a job has neither, so a project with no cover still looks
+ * deliberate rather than broken.
+ */
+export async function getProjectCovers(
+  projectIds: (string | null)[],
+): Promise<Record<string, { photoUrl: string | null; mapUrl: string | null }>> {
+  const ids = [...new Set(projectIds.filter(Boolean))] as string[];
+  if (!ids.length) return {};
+
+  const rows = await prisma.project.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, photoUrl: true, mapUrl: true },
+  });
+
+  const out: Record<string, { photoUrl: string | null; mapUrl: string | null }> = {};
+  for (const r of rows) out[r.id] = { photoUrl: r.photoUrl, mapUrl: r.mapUrl };
+  return out;
+}
+
+/**
  * A few photographs per daily, for the list.
  *
  * One query for the whole page. The obvious shape — ask for each daily's

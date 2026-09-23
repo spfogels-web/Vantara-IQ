@@ -14,6 +14,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { BASE_URL, fixtures } from "../support/load";
 import { sessionCookie } from "../support/session";
 import { testClient } from "../support/test-db";
+import { billingWeekFor } from "@/lib/billing";
 
 const OUT = join(process.cwd(), "tests", "visual", "screens");
 const tenant = fixtures().a;
@@ -376,5 +377,409 @@ describe("the dailies command centre", () => {
   it("stacks on a laptop", async () => {
     const page = (globalThis as { __page?: Page }).__page!;
     await shot(page, "dailies-laptop", 1280, 900);
+  });
+});
+
+/**
+ * Opening a day, on a queue the size a real one is.
+ *
+ * The redesign moved the detail out of the row and put it after the whole
+ * table. With three fixture rows that reads as "just below"; with the
+ * seventy-odd days a contractor actually has on the page, clicking the
+ * second row scrolls nothing and paints nothing the viewer can see — the
+ * workspace opens somewhere past the bottom of a very long table. To the
+ * person clicking, the row does not open.
+ *
+ * So the assertion is not that state changed. It is that the workspace is
+ * on screen, near the row that was clicked, which is the only version of
+ * "it opened" that matters. The days here carry no daily sheet and no
+ * photographs, because that is the shape most production days have.
+ */
+describe("opening a daily from a full-size queue", () => {
+  const MANY = 40;
+  let ids: string[] = [];
+
+  beforeAll(async () => {
+    const base = await db.daily.findFirst({ where: { projectId: tenant.projectId } });
+    if (!base) throw new Error("no daily to model the bulk on");
+    ids = Array.from({ length: MANY }, (_, i) => `${base.id}-bulk-${i}`);
+    await db.daily.createMany({
+      data: ids.map((id, i) => ({
+        id,
+        sheetNumber: `BULK-${String(i + 1).padStart(4, "0")}`,
+        projectId: base.projectId,
+        projectName: base.projectName,
+        customer: base.customer,
+        subcontractor: base.subcontractor,
+        crew: base.crew,
+        workDate: base.workDate,
+        status: "Submitted",
+        totalFt: 500 + i,
+      })),
+      skipDuplicates: true,
+    });
+  }, 120_000);
+
+  afterAll(async () => {
+    await db.daily.deleteMany({ where: { id: { in: ids } } }).catch(() => undefined);
+  });
+
+  for (const [label, width, height] of [
+    ["desktop", 1680, 1100],
+    ["laptop", 1280, 900],
+  ] as const) {
+    it(`shows the workspace on screen after a click at ${label} width`, async () => {
+      const page = (globalThis as { __page?: Page }).__page!;
+      await page.setViewportSize({ width, height });
+      await page.goto(`${BASE_URL}/dailies`, { waitUntil: "networkidle" });
+
+      const rows = page.locator("tbody tr").filter({ has: page.locator("td p") });
+      expect(await rows.count(), "the bulk days did not render").toBeGreaterThan(20);
+
+      // The second row, near the top — where somebody actually starts.
+      const row = rows.nth(1);
+      await row.scrollIntoViewIfNeeded();
+      const rowBox = (await row.boundingBox())!;
+      await row.click();
+      await page.waitForTimeout(800);
+
+      // The workspace's own close control identifies it, and is inside it.
+      const workspace = page
+        .locator("div")
+        .filter({ hasText: /AI review/ })
+        .filter({ has: page.locator("li") })
+        .last();
+      expect(await workspace.count(), "no workspace rendered at all").toBeGreaterThan(0);
+
+      // Present in the DOM is not open. It has to be where the eye is.
+      await expect
+        .poll(() => workspace.isVisible(), { timeout: 5_000 })
+        .toBe(true);
+
+      const box = (await workspace.boundingBox())!;
+      const scrollY = await page.evaluate(() => window.scrollY);
+      const viewportTop = scrollY;
+      const viewportBottom = scrollY + height;
+      const onScreen = box.y < viewportBottom && box.y + box.height > viewportTop;
+      expect(
+        onScreen,
+        `workspace sits at y=${Math.round(box.y)} while the viewport is ${Math.round(viewportTop)}-${Math.round(viewportBottom)} (clicked row at y=${Math.round(rowBox.y)})`,
+      ).toBe(true);
+    });
+  }
+});
+
+/**
+ * The row as a click target, and the table as something that fits.
+ *
+ * Both were reported from production together, and they turned out to be
+ * one fault: `truncate` on a paragraph does not constrain a column in an
+ * auto-layout table, so cells grew to their content, the table outgrew its
+ * container, and the right-hand columns — photographs, and the open/close
+ * control — sat outside the visible area. They were not unclickable
+ * because of event handling. They were off the edge of the page.
+ *
+ * So these assert the two halves: every region of a row opens the day, and
+ * the table does not spill out of the area it is given.
+ */
+describe("a daily row is one click target", () => {
+  const WIDTHS = [
+    ["desktop", 1680, 1100],
+    ["laptop", 1280, 900],
+  ] as const;
+
+  /**
+   * Names the length of real ones.
+   *
+   * The fixture's "Whitfield Loop / Pellham Boring" is short enough that the
+   * table very nearly fits by luck, which is why the first version of these
+   * tests passed against the layout that was failing in production. Real
+   * jobs and real companies are not that tidy, and the columns that get
+   * pushed off the edge are the ones on the right — the photographs and the
+   * control that opens the day.
+   */
+  beforeAll(async () => {
+    const d = await db.daily.findFirst({ where: { projectId: tenant.projectId } });
+    if (!d) throw new Error("no daily to lengthen");
+    await db.daily.update({
+      where: { id: d.id },
+      data: {
+        projectName: "Whitfield Loop Phase II — Colbert to Milledgeville Reroute",
+        subcontractor: "Pellham Boring & Directional Services of Georgia, LLC",
+        crew: "Pellham Boring & Directional Services of Georgia, LLC",
+        roads: "Keener Rd — or Hwy 17 to Pierce Creek, then along Old Mill Rd",
+      },
+    });
+  }, 120_000);
+
+  /** Where the workspace is, if it is open at all. */
+  async function workspaceOpen(page: Page): Promise<boolean> {
+    const panel = page
+      .locator("div")
+      .filter({ hasText: /AI review/ })
+      .filter({ has: page.locator("li") })
+      .last();
+    return (await panel.count()) > 0 && (await panel.isVisible());
+  }
+
+  async function firstRow(page: Page) {
+    return page.locator("tbody tr").filter({ has: page.locator("td p") }).first();
+  }
+
+  for (const [label, width, height] of WIDTHS) {
+    it(`does not overflow its container at ${label} width`, async () => {
+      const page = (globalThis as { __page?: Page }).__page!;
+      await page.setViewportSize({ width, height });
+      await page.goto(`${BASE_URL}/dailies`, { waitUntil: "networkidle" });
+
+      const m = await page.evaluate(() => {
+        const table = document.querySelector("table")!;
+        const box = table.parentElement!;
+        return {
+          table: table.getBoundingClientRect().width,
+          container: box.clientWidth,
+          scrollW: box.scrollWidth,
+          bodyScroll: document.documentElement.scrollWidth,
+          bodyClient: document.documentElement.clientWidth,
+        };
+      });
+
+      /**
+       * The columns have to add up, and the project has to get a share.
+       *
+       * Every fixed column sat at its stated width while 182px went
+       * nowhere, leaving the project name 90px on a laptop — the table did
+       * not overflow, so the check above was happy, and the row was still
+       * unreadable. A column marked hidden keeps holding its width open,
+       * and an auto column does not reclaim it; the project column asks
+       * for 100% so that it does.
+       */
+      const cols = await page.evaluate(() => {
+        const t = document.querySelector("table")!;
+        const body = (t.querySelector("tbody tr:nth-child(2)") || t.querySelector("tbody tr"))!;
+        return [...body.querySelectorAll("td")].map((c) => c.getBoundingClientRect().width);
+      });
+      const summed = Math.round(cols.reduce((a, b) => a + b, 0));
+      expect(
+        Math.abs(summed - Math.round(m.table)),
+        `columns add up to ${summed}px in a ${Math.round(m.table)}px table — the rest is dead space`,
+      ).toBeLessThanOrEqual(2);
+
+      // The project and its road are how a row is found. Anything under
+      // this and the name is an ellipsis.
+      expect(
+        Math.round(cols[1]),
+        `the project column is ${Math.round(cols[1])}px wide`,
+      ).toBeGreaterThanOrEqual(160);
+      expect(
+        m.scrollW - m.container,
+        `table scrolls ${m.scrollW - m.container}px inside a ${m.container}px container`,
+      ).toBeLessThanOrEqual(1);
+      expect(
+        m.bodyScroll - m.bodyClient,
+        `the page itself scrolls sideways by ${m.bodyScroll - m.bodyClient}px`,
+      ).toBeLessThanOrEqual(1);
+    });
+
+    it(`opens the day from every region of the row at ${label} width`, async () => {
+      const page = (globalThis as { __page?: Page }).__page!;
+      await page.setViewportSize({ width, height });
+
+      // Each named region of the row, by the cell it lives in.
+      // Located by column heading rather than by a hard-coded index.
+      // These pointed one column to the left the moment the cover square
+      // was added at the head of the row, and passed anyway — because
+      // every cell opens the day, a wrong index still looks like a pass.
+      const headers = await page.locator("thead th").allInnerTexts();
+      const at = (name: string) => {
+        const i = headers.findIndex((h) => h.trim().toLowerCase().startsWith(name));
+        expect(i, `no column headed "${name}"`).toBeGreaterThan(-1);
+        return i;
+      };
+      const regions: [string, number][] = [
+        ["cover square", 0],
+        ["project text", at("project")],
+        ["sheet number", at("sheet")],
+        ["production", at("producti")],
+        ["billing week", at("billing")],
+        ["status", at("status")],
+        ["crew", at("crew")],
+        ["photo strip", at("photos")],
+      ];
+
+      for (const [name, cell] of regions) {
+        await page.goto(`${BASE_URL}/dailies`, { waitUntil: "networkidle" });
+        const row = await firstRow(page);
+        const target = row.locator("td").nth(cell);
+        expect(await target.count(), `${name}: cell ${cell} is missing`).toBeGreaterThan(0);
+        // Crew is deliberately dropped below a wide desktop. A column
+        // that is not on screen is not a dead click area.
+        if (!(await target.isVisible())) continue;
+
+        // Click the cell itself, not a child — that is the whitespace a
+        // person actually hits, and the part that was dead.
+        await target.click({ position: { x: 4, y: 4 } });
+        await page.waitForTimeout(500);
+        expect(await workspaceOpen(page), `${name} did not open the daily`).toBe(true);
+      }
+    });
+  }
+
+  it("opens the day from the keyboard", async () => {
+    const page = (globalThis as { __page?: Page }).__page!;
+    await page.setViewportSize({ width: 1680, height: 1100 });
+
+    for (const key of ["Enter", "Space"]) {
+      await page.goto(`${BASE_URL}/dailies`, { waitUntil: "networkidle" });
+      const row = await firstRow(page);
+      await row.focus();
+      expect(
+        await row.evaluate((el) => el === document.activeElement),
+        `${key}: the row did not take focus — it is not reachable by keyboard`,
+      ).toBe(true);
+      await page.keyboard.press(key);
+      await page.waitForTimeout(500);
+      expect(await workspaceOpen(page), `${key} did not open the daily`).toBe(true);
+    }
+  });
+});
+
+/**
+ * The billing-week column says what the open day says.
+ *
+ * The column is not a second calculation — it renders `billingWeekEnd` and
+ * `billingWeekLate`, the same two fields the workspace prints in "Bills to
+ * week ending … · filed after the Friday cutoff". This proves that rather
+ * than asserting it: the Friday is read out of the database, then looked
+ * for in the row and in the panel, and the cutoff note has to agree with
+ * the flag the application already set.
+ */
+describe("billing week, in the table and in the day", () => {
+  it("shows the same Friday in the row as in the open daily", async () => {
+    const page = (globalThis as { __page?: Page }).__page!;
+    await page.setViewportSize({ width: 1680, height: 1100 });
+    await page.goto(`${BASE_URL}/dailies`, { waitUntil: "networkidle" });
+
+    const daily = await db.daily.findUnique({ where: { id: seeded.dailyId } });
+    if (!daily) throw new Error("the seeded daily vanished");
+
+    /**
+     * The expected Friday, from the application's own function.
+     *
+     * Not from the column: `Daily.billingWeekEnd` holds only an override,
+     * and is empty on almost every day. The Friday a normal day bills to is
+     * derived by `billingWeekFor` from the work date, which is what the page
+     * renders — so that is what this compares against. Recomputing the week
+     * here with fresh arithmetic would be a second source of truth, and a
+     * test that agrees with itself rather than with the product.
+     */
+    const week = billingWeekFor({
+      workDate: daily.workDate,
+      billingWeekEnd: daily.billingWeekEnd,
+    });
+    if (!week) throw new Error("the seeded daily has no resolvable billing week");
+
+    const [, m, dd] = week.end.split("-");
+    const short = `${["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"][Number(m) - 1]} ${Number(dd)}`;
+
+    const row = page.locator("tbody tr").filter({ hasText: daily.sheetNumber }).first();
+    const rowText = await row.innerText();
+    expect(rowText, `the row does not carry the billing week ${short}`).toContain(short);
+
+    // The flag the application set decides whether the row shouts.
+    if (daily.billingWeekLate) {
+      expect(rowText, "a late daily does not say so in the table").toMatch(/Missed cutoff/i);
+    } else {
+      expect(rowText, "an on-time daily is shouting about a cutoff it made").not.toMatch(
+        /Missed cutoff/i,
+      );
+    }
+
+    // And the open day agrees, because it is the same field.
+    await row.click();
+    await page.waitForTimeout(800);
+    const panel = page
+      .locator("div")
+      .filter({ hasText: /Bills to week ending/ })
+      .last();
+    const panelText = await panel.innerText();
+    expect(panelText, "the open daily lost its billing week").toContain(week.end);
+    expect(
+      /filed after the Friday cutoff/i.test(panelText),
+      "the table and the open daily disagree about the cutoff",
+    ).toBe(Boolean(daily.billingWeekLate));
+  });
+});
+
+/**
+ * Every day opens, whatever state it is in.
+ *
+ * "Review" and "View" are the same action wearing two labels — one for a day
+ * still waiting on a decision, one for a day already decided. Nothing about
+ * the status may gate whether the row opens, because the commonest reason to
+ * open an approved day is to check what was approved.
+ */
+describe("status does not decide whether a day opens", () => {
+  it("opens a submitted day and an approved day alike", async () => {
+    const page = (globalThis as { __page?: Page }).__page!;
+    await page.setViewportSize({ width: 1680, height: 1100 });
+
+    const mine = await db.daily.findMany({
+      where: { id: { in: [seeded.dailyId, seeded.bareId] } },
+      select: { sheetNumber: true, status: true },
+    });
+    // One of each, or this proves only one branch.
+    expect(new Set(mine.map((d) => d.status)).size, "both dailies share a status").toBe(2);
+
+    for (const { sheetNumber, status } of mine) {
+      await page.goto(`${BASE_URL}/dailies`, { waitUntil: "networkidle" });
+      const row = page.locator("tbody tr").filter({ hasText: sheetNumber }).first();
+      await row.click();
+      await page.waitForTimeout(600);
+      const panel = page
+        .locator("div")
+        .filter({ hasText: /AI review/ })
+        .filter({ has: page.locator("li") })
+        .last();
+      expect(
+        (await panel.count()) > 0 && (await panel.isVisible()),
+        `a daily in "${status}" would not open`,
+      ).toBe(true);
+    }
+  });
+
+  it("reads as a list on a phone, with no sideways scrolling", async () => {
+    const page = (globalThis as { __page?: Page }).__page!;
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`${BASE_URL}/dailies`, { waitUntil: "networkidle" });
+
+    // The table is for desks. A phone gets the card list.
+    // Scoped to the card list itself. "ul > li [role=button]" also
+    // matched the sidebar navigation, so .first() tapped a nav item and
+    // left the page — which read as "the card did not open".
+    const cards = page.locator('ul[class*="md:hidden"] > li [role=button]');
+    expect(await cards.count(), "no cards rendered on a phone").toBeGreaterThan(0);
+
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow, `the phone layout scrolls sideways by ${overflow}px`).toBeLessThanOrEqual(1);
+
+    // And a card opens the same day the table would.
+    await cards.first().click();
+    await page.waitForTimeout(800);
+    // Scoped inside the card list. The desktop table is still in the
+    // DOM at this width, only hidden by CSS, so it holds a second copy of
+    // the workspace — and .last() picked that invisible one.
+    const panel = page
+      .locator('ul[class*="md:hidden"]')
+      .locator("div")
+      .filter({ hasText: /AI review/ })
+      .filter({ has: page.locator("li") })
+      .last();
+    expect((await panel.count()) > 0 && (await panel.isVisible()), "a card did not open the day").toBe(
+      true,
+    );
+    await page.screenshot({ path: join(OUT, "dailies-phone.png"), fullPage: true });
   });
 });

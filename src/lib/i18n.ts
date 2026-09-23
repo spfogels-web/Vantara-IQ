@@ -141,6 +141,11 @@ const ES: Record<string, string> = {
   "Bore log": "Registro de perforación",
   Attached: "Adjunto",
   Missing: "Falta",
+  // The billing-week column. The Friday itself is a date, not a phrase, so
+  // only the two exceptions need saying in Spanish.
+  "Billing wk": "Semana fact.",
+  "Missed cutoff": "Fuera de plazo",
+  Moved: "Cambiado",
   "AI review": "Revisión de la IA",
   "No discrepancies detected": "No se detectaron diferencias",
   "for your team to review": "para que su equipo revise",

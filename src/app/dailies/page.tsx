@@ -4,6 +4,7 @@ import { FileText } from "lucide-react";
 import {
   getDailies,
   getDailyThumbnails,
+  getProjectCovers,
   getProjects,
   getSheetIndexByDaily,
   getSubcontractors,
@@ -43,6 +44,9 @@ export default async function DailiesPage({
   const thumbs = await getDailyThumbnails(
     Object.values(sheetByDaily).map((x) => x.sheetId),
   );
+
+  /** The job's own cover, so a row is recognisable before it is read. */
+  const covers = await getProjectCovers(dailies.map((d) => d.projectId));
 
   // Only fetched for the importer, which is staff-only — a crew has no use for
   // the full job list or the roster of other companies.
@@ -102,6 +106,7 @@ export default async function DailiesPage({
         initialId={sp.sheet}
         sheetByDaily={sheetByDaily}
         thumbs={thumbs}
+        covers={covers}
         reviewerName={me?.name}
         canReview={staff}
       />

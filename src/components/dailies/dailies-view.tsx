@@ -31,6 +31,7 @@ import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { useT } from "@/components/layout/language-provider";
 import { useOrgName } from "@/components/layout/org-provider";
 import { StatusPill } from "@/components/common/status-pill";
+import { ProjectThumb } from "@/components/common/project-thumb";
 import { Button } from "@/components/ui/button";
 import { deleteDaily, reopenDailyReview, reviewDaily, setDailyBillingWeek } from "@/app/actions";
 
@@ -100,11 +101,70 @@ function bucketOf(workDate: string, today: string): string {
 
 const BUCKET_ORDER = ["Today", "Yesterday", "This week", "Earlier this month", "Older", "No work date"];
 
+/**
+ * The queue's columns, and what each one is allowed to take.
+ *
+ * Widths live on the header cells rather than in a <colgroup>, because a
+ * <col> marked hidden still reserves its width: the cells disappeared and
+ * the gap stayed, which is what squeezed the project name to 90px on a
+ * laptop while 160px sat empty in the middle of the row. A hidden <th>
+ * contributes nothing, so the space goes where it is needed.
+ *
+ * `wideOnly` columns step out below a wide desktop. Both of them — the
+ * sheet number and the crew — are in the open day's own header, whereas
+ * the project and the road are how a row is found in the first place.
+ */
+const COLUMNS: {
+  key: string;
+  label: string;
+  width?: string;
+  right?: boolean;
+  wideOnly?: boolean;
+}[] = [
+  { key: "cover", label: "", width: "w-[48px]" },
+  // w-full, not auto: an auto column did not pick up the slack left when
+  // the two wide-only columns drop out, and the project name stayed at 90px
+  // with 180px unallocated beside it. Asking for 100% makes this the column
+  // that absorbs whatever the fixed ones do not take.
+  { key: "project", label: "Project / location", width: "w-full" },
+  // Zero-width below the breakpoint, not merely hidden: a hidden cell still
+  // held its column open, which is where 160px of the laptop table was going
+  // while the project name was squeezed into 90px.
+  { key: "sheet", label: "Sheet #", width: "w-0 2xl:w-[68px]", wideOnly: true },
+  { key: "date", label: "Date", width: "w-[86px]" },
+  { key: "production", label: "Production", width: "w-[96px]", right: true },
+  { key: "value", label: "Est. value", width: "w-[84px]", right: true },
+  { key: "status", label: "Status", width: "w-[88px]" },
+  { key: "week", label: "Billing wk", width: "w-[96px]" },
+  { key: "crew", label: "Crew", width: "w-0 2xl:w-[92px]", wideOnly: true },
+  { key: "photos", label: "Photos", width: "w-[158px]" },
+  { key: "open", label: "", width: "w-[48px]" },
+];
+const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+
+/**
+ * "2026-09-25" as "SEP 25", for the column.
+ *
+ * Split rather than parsed. `new Date("2026-09-25")` is read as midnight UTC
+ * and printed in the viewer's zone, which in Eastern time is the evening of
+ * the 24th — an off-by-one on the Friday a week's money lands in, which is
+ * the one number on this page nobody can be wrong about.
+ *
+ * The Friday itself is not computed here. It is `billingWeekEnd`, already on
+ * the daily, and the same field the open workspace prints.
+ */
+function shortWeek(iso: string): string {
+  const [, m, d] = iso.split("-");
+  const month = MONTHS[Number(m) - 1];
+  return month && d ? `${month} ${Number(d)}` : iso;
+}
+
 export function DailiesView({
   dailies,
   initialId,
   sheetByDaily,
   thumbs,
+  covers,
   reviewerName,
   canReview = false,
 }: {
@@ -121,6 +181,8 @@ export function DailiesView({
    * had rather than nothing at all.
    */
   thumbs?: Record<string, { urls: string[]; total: number }>;
+  /** projectId -> the job's cover, for the square at the head of each row. */
+  covers?: Record<string, { photoUrl: string | null; mapUrl: string | null }>;
   /** Who is signed in — recorded on the approval or denial. */
   reviewerName?: string;
   /**
@@ -423,39 +485,168 @@ export function DailiesView({
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[920px] border-collapse">
+            <>
+            {/*
+              A phone gets cards, not a scrolled-off table.
+
+              Eleven columns cannot be read on a 390px screen, and the
+              horizontal scroll hid the half of each row that says whether
+              anything is wrong with the day. The card carries the same facts
+              in the order somebody asks for them — which job, what was built,
+              what it is worth, and whether it is short of documentation —
+              and opens the same workspace when tapped.
+            */}
+            <ul className="flex flex-col divide-y divide-border/40 md:hidden">
+              {filtered.map((d) => {
+                const on = openId === d.id;
+                const why = attentionReasons(d);
+                const cover = d.projectId ? covers?.[d.projectId] : undefined;
+                return (
+                  <li key={d.id}>
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={on}
+                      onClick={() => setSelectedId(on ? null : d.id)}
+                      onKeyDown={(e) => {
+                        if (e.key !== "Enter" && e.key !== " ") return;
+                        e.preventDefault();
+                        setSelectedId(on ? null : d.id);
+                      }}
+                      className={cn(
+                        "focus-ring flex w-full cursor-pointer items-start gap-2.5 border-l-2 px-3 py-3 text-left",
+                        on ? "border-l-brand bg-brand/[0.07]" : "border-l-transparent",
+                      )}
+                    >
+                      <ProjectThumb
+                        id={d.projectId ?? d.project}
+                        name={d.project}
+                        photoUrl={cover?.photoUrl}
+                        mapUrl={cover?.mapUrl}
+                        size={40}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="truncate text-[13.5px] font-semibold text-foreground">
+                            {d.project}
+                          </p>
+                          <StatusPill label={t(d.status)} tone={d.tone} className="shrink-0 text-[10px]" />
+                        </div>
+                        <p className="truncate text-[11.5px] text-muted-foreground">
+                          {d.subcontractor || d.crew}
+                          {d.roads ? (
+                            <>
+                              <span className="px-1.5 text-muted-foreground/40">·</span>
+                              {d.roads}
+                            </>
+                          ) : null}
+                        </p>
+                        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px]">
+                          <span className="num text-muted-foreground">{d.workDate}</span>
+                          <span className="num font-semibold text-foreground">
+                            {d.totalFt ? formatFeet(d.totalFt) : "—"}
+                          </span>
+                          <span className="num font-semibold text-foreground">
+                            {d.billableAmount ? formatCurrency(d.billableAmount) : "—"}
+                          </span>
+                          {d.billingWeekEnd ? (
+                            <span
+                              className={cn("num", d.billingWeekLate ? "text-warning" : "text-muted-foreground")}
+                            >
+                              {shortWeek(d.billingWeekEnd)}
+                              {d.billingWeekLate ? ` · ${t("Missed cutoff")}` : ""}
+                            </span>
+                          ) : null}
+                          {why.length ? (
+                            <span className="inline-flex items-center gap-1 text-warning">
+                              <AlertTriangle className="size-3" />
+                              {why.join(" · ")}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                    {on ? (
+                      <DailyWorkspace
+                        d={d}
+                        t={t}
+                        canReview={canReview}
+                        reviewerName={reviewerName}
+                        sheet={sheetByDaily?.[d.id]}
+                        shot={thumbs?.[sheetByDaily?.[d.id]?.sheetId ?? ""]}
+                        onClose={() => setSelectedId(null)}
+                        onSetStatus={setStatus}
+                      />
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+
+            <div className="hidden overflow-x-auto md:block">
+              {/*
+                Fixed layout, with every column but the first given a width.
+
+                `truncate` on a paragraph does nothing to a column in an
+                auto-layout table: the cell still grows to its content, so a
+                long company name pushed the table past its container and
+                carried the photographs and the open control off the right
+                edge, where they could not be clicked. Fixed layout makes the
+                widths the table's, not the content's, and the ellipsis real.
+                The minimum is for phones, where scrolling sideways is the
+                honest answer.
+              */}
+              <table className="w-full min-w-[860px] table-fixed border-collapse">
                 <thead>
                   <tr className="border-b border-border/60 text-left">
-                    {[
-                      t("Project / location"),
-                      t("Sheet #"),
-                      t("Date"),
-                      t("Production"),
-                      t("Est. value"),
-                      t("Status"),
-                      t("Crew"),
-                      t("Photos"),
-                      "",
-                    ].map((h, i) => (
+                    {COLUMNS.map((c, i) => (
                       <th
-                        key={h + i}
+                        key={c.key}
                         className={cn(
-                          "eyebrow whitespace-nowrap px-3 py-2 text-[10px]",
-                          (i === 3 || i === 4) && "text-right",
+                          "eyebrow truncate px-2 py-2 text-[10px]",
+                          c.width,
+                          c.right && "text-right",
+                          c.wideOnly && "hidden 2xl:table-cell",
                         )}
                       >
-                        {h}
+                        {c.label ? t(c.label) : ""}
                       </th>
                     ))}
                   </tr>
                 </thead>
                 {groups.map((g) => (
                   <tbody key={g.label || "all"}>
+                    {/* The bands that separate this week from last.
+                        They were the same grey as everything else, which made
+                        a long queue read as one undifferentiated run. Colour
+                        by recency rather than decoratively: the week in hand
+                        is the brand, the month behind it cools off, and what
+                        is older than that stays quiet. */}
                     {g.label ? (
                       <tr>
-                        <td colSpan={9} className="bg-foreground/[0.02] px-3 py-1.5">
-                          <span className="eyebrow text-[10px]">{t(g.label)}</span>
+                        <td
+                          colSpan={11}
+                          className={cn(
+                            "border-l-2 px-3 py-1.5",
+                            g.label === "Today" || g.label === "Yesterday" || g.label === "This week"
+                              ? "border-l-brand bg-brand/[0.06]"
+                              : g.label === "Earlier this month"
+                                ? "border-l-gold/70 bg-gold/[0.05]"
+                                : "border-l-border bg-foreground/[0.02]",
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "eyebrow text-[10px]",
+                              g.label === "Today" || g.label === "Yesterday" || g.label === "This week"
+                                ? "text-brand-bright"
+                                : g.label === "Earlier this month"
+                                  ? "text-gold"
+                                  : undefined,
+                            )}
+                          >
+                            {t(g.label)}
+                          </span>
                           <span className="num ml-2 text-[11px] text-muted-foreground">
                             {formatFeet(g.rows.reduce((n, d) => n + (d.totalFt || 0), 0))}
                             <span className="px-1.5 text-muted-foreground/40">·</span>
@@ -468,20 +659,71 @@ export function DailiesView({
                       const on = openId === d.id;
                       const why = attentionReasons(d);
                       const shot = thumbs?.[sheetByDaily?.[d.id]?.sheetId ?? ""];
+                      const cover = d.projectId ? covers?.[d.projectId] : undefined;
                       return (
+                        <React.Fragment key={d.id}>
                         <tr
-                          key={d.id}
-                          onClick={() => setSelectedId(on ? null : d.id)}
+                          // The row is the control. It carries the focus, the
+                          // keyboard, and the state — rather than a button in
+                          // one cell that leaves the other nine inert.
+                          role="button"
+                          tabIndex={0}
+                          aria-expanded={on}
+                          aria-label={`${d.project} ${d.sheetNumber}`}
+                          onClick={(e) => {
+                            // Anything genuinely interactive inside the row
+                            // speaks for itself. There is nothing but text in
+                            // here today, and this is what keeps it that way
+                            // when somebody adds a menu to the last column.
+                            if ((e.target as HTMLElement).closest("button,a,input,select,textarea")) {
+                              return;
+                            }
+                            setSelectedId(on ? null : d.id);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key !== "Enter" && e.key !== " ") return;
+                            if ((e.target as HTMLElement).closest("button,a,input,select,textarea")) {
+                              return;
+                            }
+                            // Space scrolls the page otherwise, which moves
+                            // the row out from under the person using it.
+                            e.preventDefault();
+                            setSelectedId(on ? null : d.id);
+                          }}
                           className={cn(
-                            "cursor-pointer border-b border-border/40 transition-colors",
-                            on ? "bg-brand/[0.07]" : "hover:bg-foreground/[0.03]",
+                            // The left edge marks the open day, so it stays
+                            // findable once the workspace has pushed the rest
+                            // of the queue down the page.
+                            "focus-ring cursor-pointer border-b border-l-2 border-border/40 transition-colors",
+                            on
+                              ? "border-l-brand bg-brand/[0.07]"
+                              : "border-l-transparent hover:bg-foreground/[0.03]",
                           )}
                         >
-                          <td className="px-3 py-2.5">
-                            <p className="truncate text-[13px] font-semibold text-foreground">
+                          {/* The job's cover. A row is recognised by the look
+                              of the place before anybody reads the name. */}
+                          <td className="py-2.5 pl-2 pr-0">
+                            <ProjectThumb
+                              id={d.projectId ?? d.project}
+                              name={d.project}
+                              photoUrl={cover?.photoUrl}
+                              mapUrl={cover?.mapUrl}
+                              size={40}
+                            />
+                          </td>
+                          <td className="px-2 py-2.5">
+                            <p
+                              title={d.project}
+                              className="truncate text-[13px] font-semibold text-foreground"
+                            >
                               {d.project}
                             </p>
-                            <p className="truncate text-[11.5px] text-muted-foreground">
+                            {/* The road stays under the project. It is how
+                                somebody finds the day they are thinking of. */}
+                            <p
+                              title={[d.subcontractor || d.crew, d.roads].filter(Boolean).join(" · ")}
+                              className="truncate text-[11.5px] text-muted-foreground"
+                            >
                               {d.subcontractor || d.crew}
                               {d.roads ? (
                                 <>
@@ -491,64 +733,114 @@ export function DailiesView({
                               ) : null}
                             </p>
                           </td>
-                          <td className="num whitespace-nowrap px-3 py-2.5 text-[12px] text-muted-foreground">
+                          <td className="num hidden truncate px-2 py-2.5 text-[12px] text-muted-foreground 2xl:table-cell">
                             {d.sheetNumber || "—"}
                           </td>
-                          <td className="num whitespace-nowrap px-3 py-2.5 text-[12px] text-muted-foreground">
+                          <td className="num truncate px-2 py-2.5 text-[12px] text-muted-foreground">
                             {d.workDate}
                           </td>
-                          <td className="num whitespace-nowrap px-3 py-2.5 text-right text-[12.5px] font-semibold text-foreground">
+                          <td className="num truncate px-2 py-2.5 text-right text-[12.5px] font-semibold text-foreground">
                             {d.totalFt ? formatFeet(d.totalFt) : "—"}
                           </td>
-                          <td className="num whitespace-nowrap px-3 py-2.5 text-right text-[12.5px] font-semibold text-foreground">
+                          <td className="num truncate px-2 py-2.5 text-right text-[12.5px] font-semibold text-foreground">
                             {d.billableAmount ? formatCurrency(d.billableAmount) : "—"}
                           </td>
-                          <td className="px-3 py-2.5">
+                          {/* Not truncated: clipping here cut the warning
+                              count down to a stray dot beside the pill. */}
+                          <td className="whitespace-nowrap px-2 py-2.5">
                             <StatusPill label={t(d.status)} tone={d.tone} className="text-[10px]" />
+                            {/* Under the pill, not beside it: side by side the
+                                count ran past the column and sat on top of the
+                                billing week. */}
                             {why.length ? (
                               <span
                                 title={why.join(" · ")}
-                                className="ml-1.5 inline-flex items-center gap-1 text-[10.5px] text-warning"
+                                className="mt-1 flex items-center gap-1 text-[10.5px] text-warning"
                               >
-                                <AlertTriangle className="size-3" />
+                                <AlertTriangle className="size-3 shrink-0" />
                                 {why.length}
                               </span>
                             ) : null}
                           </td>
-                          <td className="whitespace-nowrap px-3 py-2.5 text-[12px] text-muted-foreground">
+                          {/* Which week's money this is, without opening it.
+                              Straight off `billingWeekEnd` — the same field
+                              the open day prints, not a second opinion. */}
+                          <td className="px-2 py-2.5">
+                            {d.billingWeekEnd ? (
+                              <>
+                                <p
+                                  className="num truncate text-[12px] font-medium text-foreground"
+                                  title={`${t("Bills to week ending ")}${d.billingWeekEnd}`}
+                                >
+                                  {shortWeek(d.billingWeekEnd)}
+                                </p>
+                                {d.billingWeekLate ? (
+                                  <p
+                                    className="truncate text-[10px] text-warning"
+                                    title={t("filed after the Friday cutoff, so it bills next week")}
+                                  >
+                                    {t("Missed cutoff")}
+                                  </p>
+                                ) : d.billingWeekOverridden ? (
+                                  <p className="truncate text-[10px] text-warning" title={t("moved by the office")}>
+                                    {t("Moved")}
+                                  </p>
+                                ) : null}
+                              </>
+                            ) : (
+                              <span className="text-[12px] text-muted-foreground">—</span>
+                            )}
+                          </td>
+                          <td
+                            title={d.crew || undefined}
+                            className="hidden truncate px-2 py-2.5 text-[12px] text-muted-foreground 2xl:table-cell"
+                          >
                             {d.crew || "—"}
                           </td>
-                          <td className="px-3 py-2.5">
+                          <td className="px-2 py-2.5">
                             <Thumbs shot={shot} count={d.photos} />
                           </td>
-                          <td className="px-3 py-2.5 text-right">
+                          <td className="px-2 py-2.5 text-right">
                             <span className="text-[11.5px] font-medium text-brand-bright">
                               {on ? t("Close") : d.status === "Approved" || d.status === "Denied" ? t("View") : t("Review")}
                             </span>
                           </td>
                         </tr>
+                        {/* Everything about the day, under the day.
+                            Rendering it after the whole table looked the same
+                            on a three-row fixture and was useless on a real
+                            queue: clicking the second of seventy days opened
+                            the workspace three thousand pixels below the
+                            fold, so the row appeared not to open at all. Its
+                            own row is the context, and the context is what
+                            makes it findable. */}
+                        {on ? (
+                          <tr>
+                            <td colSpan={11} className="border-b border-border/40 p-0">
+                              <DailyWorkspace
+                                d={d}
+                                t={t}
+                                canReview={canReview}
+                                reviewerName={reviewerName}
+                                sheet={sheetByDaily?.[d.id]}
+                                shot={shot}
+                                onClose={() => setSelectedId(null)}
+                                onSetStatus={setStatus}
+                              />
+                            </td>
+                          </tr>
+                        ) : null}
+                        </React.Fragment>
                       );
                     })}
                   </tbody>
                 ))}
               </table>
             </div>
+            </>
           )}
         </div>
 
-        {/* ── The day itself ───────────────────────────────────────── */}
-        {open ? (
-          <DailyWorkspace
-            d={open}
-            t={t}
-            canReview={canReview}
-            reviewerName={reviewerName}
-            sheet={sheetByDaily?.[open.id]}
-            shot={thumbs?.[sheetByDaily?.[open.id]?.sheetId ?? ""]}
-            onClose={() => setSelectedId(null)}
-            onSetStatus={setStatus}
-          />
-        ) : null}
       </div>
 
       {/* ── The rail. Below the table on anything narrower. ────────── */}
