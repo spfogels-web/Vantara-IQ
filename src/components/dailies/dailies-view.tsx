@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
-  ArrowRight,
   Camera,
   CheckCircle2,
   Coins,
@@ -33,7 +32,13 @@ import { useOrgName } from "@/components/layout/org-provider";
 import { StatusPill } from "@/components/common/status-pill";
 import { ProjectThumb } from "@/components/common/project-thumb";
 import { Button } from "@/components/ui/button";
-import { deleteDaily, reopenDailyReview, reviewDaily, setDailyBillingWeek } from "@/app/actions";
+import {
+  deleteDaily,
+  reopenDailyReview,
+  reviewDaily,
+  setDailyBillingWeek,
+  startDailyReview,
+} from "@/app/actions";
 
 /**
  * What the queue can be narrowed to.
@@ -193,7 +198,19 @@ export function DailiesView({
   canReview?: boolean;
 }) {
   const t = useT();
+  /**
+   * The queue, seeded from the server and corrected by it.
+   *
+   * useState takes its argument once. After a delete the action succeeded,
+   * router.refresh() refetched, and the page handed down a list without the
+   * deleted day on it — which this state then ignored, so the row stayed put
+   * and the button looked broken. Optimistic edits still land instantly; the
+   * server just gets the last word, which is the right way round.
+   */
   const [items, setItems] = React.useState(dailies);
+  React.useEffect(() => {
+    setItems(dailies);
+  }, [dailies]);
   const [filter, setFilter] = React.useState<Filter>("All");
   // Which day is open, or null for none. A row toggles rather than only
   // selecting, so a day you have finished with can be shut again.
@@ -310,8 +327,12 @@ export function DailiesView({
 
 
   return (
-    <div className="flex flex-col gap-3 2xl:flex-row 2xl:items-start">
+    <div className="flex min-w-0 flex-col gap-3">
       <div className="flex min-w-0 flex-1 flex-col gap-3">
+        {/* The three places worth going from here, on one line. They were a
+            panel in a 300px rail that cost the table a fifth of the screen
+            for two links and a paragraph saying nothing was connected. */}
+        <QuickActions t={t} />
         {/* ── What the day looks like, in four numbers ─────────────── */}
         <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
           <Kpi
@@ -801,7 +822,7 @@ export function DailiesView({
                           </td>
                           <td className="px-2 py-2.5 text-right">
                             <span className="text-[11.5px] font-medium text-brand-bright">
-                              {on ? t("Close") : d.status === "Approved" || d.status === "Denied" ? t("View") : t("Review")}
+                              {on ? t("Close") : t("View")}
                             </span>
                           </td>
                         </tr>
@@ -842,10 +863,6 @@ export function DailiesView({
 
       </div>
 
-      {/* ── The rail. Below the table on anything narrower. ────────── */}
-      <aside className="flex w-full flex-col gap-3 2xl:w-[300px] 2xl:shrink-0">
-        <QuickActions t={t} />
-      </aside>
     </div>
   );
 }
@@ -1621,6 +1638,24 @@ function DailyWorkspace({
 }) {
   const [section, setSection] = React.useState<(typeof SECTIONS)[number]["id"]>("overview");
   const why = attentionReasons(d);
+  const [claiming, setClaiming] = React.useState(false);
+
+  /**
+   * Take this day up for review.
+   *
+   * The row used to offer "Review", which opened it and nothing more — the
+   * word promised a state the click did not produce, and a second reviewer
+   * had no way to see that somebody was already on it. Opening is "View";
+   * this is the button that actually moves it, and it moves it into the
+   * filter of the same name.
+   */
+  async function claim() {
+    if (claiming) return;
+    setClaiming(true);
+    const res = await startDailyReview(d.id);
+    setClaiming(false);
+    if (res.ok) onSetStatus(d.id, "In review", "warning");
+  }
 
   return (
     <div className="overflow-hidden rounded-xl border border-brand/30 bg-foreground/[0.02]">
@@ -1652,6 +1687,19 @@ function DailyWorkspace({
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
+          {/* Only while it is still waiting on somebody. A day already in
+              review says so on its pill, and a decided day is reopened from
+              the foot of the panel instead. */}
+          {canReview && d.status === "Submitted" ? (
+            <button
+              type="button"
+              onClick={claim}
+              disabled={claiming}
+              className="focus-ring inline-flex h-7 items-center gap-1.5 rounded-lg bg-brand px-2.5 text-[11.5px] font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
+            >
+              <ClipboardList className="size-3" /> {claiming ? t("Working…") : t("Review")}
+            </button>
+          ) : null}
           {sheet ? (
             <>
               <a
@@ -1901,28 +1949,16 @@ function CrewSection({ d, t }: { d: DailyReport; t: (s: string) => string }) {
   );
 }
 
-/** The rail's shared frame, so three panels do not each invent their own. */
-function Rail({
-  title,
-  icon,
-  children,
-}: {
-  title: string;
-  icon: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="overflow-hidden rounded-xl border border-border/60 bg-foreground/[0.015]">
-      <header className="flex items-center gap-2 border-b border-border/60 px-3 py-2">
-        <span className="text-muted-foreground">{icon}</span>
-        <h3 className="text-[12.5px] font-semibold text-foreground">{title}</h3>
-      </header>
-      {children}
-    </section>
-  );
-}
 
 /** Only things that already exist and already work. */
+/**
+ * Where else to go, on one line.
+ *
+ * This was a panel in the right-hand rail: a heading, three rows, and 300px
+ * of the screen that the table wanted more. Three links do not need a card
+ * around them, and up here they are read on the way past rather than parked
+ * beside the work.
+ */
 function QuickActions({ t }: { t: (s: string) => string }) {
   const items = [
     { href: "/dailies/sheet", label: t("Create a daily sheet"), icon: FileText },
@@ -1930,19 +1966,17 @@ function QuickActions({ t }: { t: (s: string) => string }) {
     { href: "/invoicing", label: t("Invoicing"), icon: Coins },
   ];
   return (
-    <Rail title={t("Quick actions")} icon={<ArrowRight className="size-3.5" />}>
-      <div className="flex flex-col p-1.5">
-        {items.map((a) => (
-          <Link
-            key={a.href}
-            href={a.href}
-            className="focus-ring flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[12.5px] text-muted-foreground transition-colors hover:bg-foreground/[0.04] hover:text-foreground"
-          >
-            <a.icon className="size-3.5 shrink-0 text-brand-bright" />
-            {a.label}
-          </Link>
-        ))}
-      </div>
-    </Rail>
+    <nav className="flex flex-wrap items-center gap-1.5" aria-label={t("Quick actions")}>
+      {items.map((a) => (
+        <Link
+          key={a.href}
+          href={a.href}
+          className="focus-ring inline-flex items-center gap-1.5 rounded-lg border border-border/60 bg-foreground/[0.02] px-2.5 py-1.5 text-[12px] text-muted-foreground transition-colors hover:border-border hover:bg-foreground/[0.05] hover:text-foreground"
+        >
+          <a.icon className="size-3.5 shrink-0 text-brand-bright" />
+          {a.label}
+        </Link>
+      ))}
+    </nav>
   );
 }

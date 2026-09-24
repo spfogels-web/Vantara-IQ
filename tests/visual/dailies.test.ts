@@ -783,3 +783,105 @@ describe("status does not decide whether a day opens", () => {
     await page.screenshot({ path: join(OUT, "dailies-phone.png"), fullPage: true });
   });
 });
+
+/**
+ * The two buttons that change something.
+ *
+ * "Review" on the row used to only open the day — the word named a state
+ * the click never produced, so a second reviewer could not tell which of
+ * thirty submitted days somebody was already working. Opening is "View"
+ * now, and Review is a button inside the day that moves it.
+ *
+ * Delete is here because it had quietly stopped working: the action
+ * succeeded and the refetch returned a list without the day on it, but the
+ * queue was seeded into useState and never took the correction, so the row
+ * stayed and the button looked dead. Asserting on the row rather than on
+ * the request is the only version of this test that would have caught it.
+ */
+describe("the buttons that move a daily", () => {
+  it("says View on every row, whatever the status", async () => {
+    const page = (globalThis as { __page?: Page }).__page!;
+    await page.setViewportSize({ width: 1680, height: 1100 });
+    await page.goto(`${BASE_URL}/dailies`, { waitUntil: "networkidle" });
+
+    const rows = page.locator("tbody tr").filter({ has: page.locator("td p") });
+    const n = await rows.count();
+    expect(n).toBeGreaterThan(1);
+    for (let i = 0; i < n; i++) {
+      const last = (await rows.nth(i).locator("td").last().innerText()).trim();
+      expect(last, `a row still offers "${last}"`).toBe("View");
+    }
+  });
+
+  it("moves a submitted day into review, and the filter agrees", async () => {
+    const page = (globalThis as { __page?: Page }).__page!;
+    await page.setViewportSize({ width: 1680, height: 1100 });
+    await page.goto(`${BASE_URL}/dailies`, { waitUntil: "networkidle" });
+
+    const daily = await db.daily.findUnique({ where: { id: seeded.bareId } });
+    expect(daily?.status, "this test needs a submitted day").toBe("Submitted");
+
+    await page.locator("tbody tr").filter({ hasText: daily!.sheetNumber }).first().click();
+    await page.waitForTimeout(600);
+    await page.getByRole("button", { name: /^review$/i }).first().click();
+    await page.waitForTimeout(1_500);
+
+    // The database is the fact; the tab is what the office reads.
+    const after = await db.daily.findUnique({ where: { id: seeded.bareId } });
+    expect(after?.status, "the day did not move").toBe("In review");
+    await expect
+      .poll(async () => (await page.getByText(/In review\s*1/).count()) > 0, { timeout: 6_000 })
+      .toBe(true);
+
+    // Put it back, so the rest of the file sees what it expects.
+    await db.daily.update({
+      where: { id: seeded.bareId },
+      data: { status: "Submitted", tone: "info" },
+    });
+  });
+
+  it("takes a deleted daily off the queue without a reload", async () => {
+    const page = (globalThis as { __page?: Page }).__page!;
+    await page.setViewportSize({ width: 1680, height: 1100 });
+
+    // A throwaway day, so nothing the other tests rely on is destroyed.
+    const base = (await db.daily.findUnique({ where: { id: seeded.dailyId } }))!;
+    const doomed = await db.daily.create({
+      data: {
+        sheetNumber: "DOOMED-0001",
+        projectId: base.projectId,
+        projectName: base.projectName,
+        customer: base.customer,
+        subcontractor: base.subcontractor,
+        crew: base.crew,
+        workDate: base.workDate,
+        status: "Submitted",
+        totalFt: 120,
+      },
+    });
+
+    try {
+      await page.goto(`${BASE_URL}/dailies`, { waitUntil: "networkidle" });
+      const row = page.locator("tbody tr").filter({ hasText: "DOOMED-0001" });
+      expect(await row.count(), "the throwaway day is not in the queue").toBeGreaterThan(0);
+
+      await row.first().click();
+      await page.waitForTimeout(600);
+      // Two presses: the first asks the server what the delete would take.
+      const bin = page.getByRole("button", { name: /delete this daily|delete it/i }).first();
+      await bin.click();
+      await page.waitForTimeout(800);
+      await page.getByRole("button", { name: /delete it/i }).first().click();
+
+      // The row has to leave the screen on its own.
+      await expect
+        .poll(() => page.locator("tbody tr").filter({ hasText: "DOOMED-0001" }).count(), {
+          timeout: 15_000,
+        })
+        .toBe(0);
+      expect(await db.daily.findUnique({ where: { id: doomed.id } })).toBeNull();
+    } finally {
+      await db.daily.delete({ where: { id: doomed.id } }).catch(() => undefined);
+    }
+  });
+});

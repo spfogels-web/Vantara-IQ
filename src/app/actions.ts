@@ -2364,6 +2364,48 @@ export async function reviewDaily(input: {
  * the two records would disagree from then on. Void or credit that invoice
  * first; the reviewer is told which one.
  */
+/**
+ * Pick a filed day up for review.
+ *
+ * The office opens a submitted day, reads it, and needs somewhere to put it
+ * that says "this one is mine and I am not done with it" — otherwise the only
+ * states are "nobody has touched it" and "decided", and a queue of thirty
+ * submitted days gives a second reviewer no way to tell which.
+ *
+ * Deliberately not reopenDailyReview: that one unfiles the day from whatever
+ * invoice holds it, which is right for undoing a decision and wrong for
+ * simply starting one. Nothing here touches an invoice, a rate or an amount —
+ * it moves the status and nothing else.
+ */
+export async function startDailyReview(dailyId: string) {
+  await requireStaff();
+
+  const daily = await prisma.daily.findUnique({
+    where: { id: dailyId },
+    select: { id: true, status: true, projectId: true },
+  });
+  if (!daily) return { ok: false as const, error: "Daily not found." };
+
+  // Already decided is a different action, with different consequences.
+  if (daily.status === "Approved" || daily.status === "Denied") {
+    return {
+      ok: false as const,
+      error: "This day has already been decided. Reopen it to put it back into review.",
+    };
+  }
+  // Idempotent: a second click is not an error.
+  if (daily.status === "In review") return { ok: true as const };
+
+  await prisma.daily.update({
+    where: { id: dailyId },
+    data: { status: "In review", tone: "warning" },
+  });
+
+  revalidatePath("/dailies");
+  if (daily.projectId) revalidatePath(`/projects/${daily.projectId}`);
+  return { ok: true as const };
+}
+
 export async function reopenDailyReview(dailyId: string) {
   await requireStaff();
 

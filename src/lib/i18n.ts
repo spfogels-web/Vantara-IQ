@@ -146,6 +146,10 @@ const ES: Record<string, string> = {
   "Billing wk": "Semana fact.",
   "Missed cutoff": "Fuera de plazo",
   Moved: "Cambiado",
+  // The row opens a day; the button inside it takes the day up.
+  View: "Ver",
+  Review: "Revisar",
+  "Working…": "Trabajando…",
   "AI review": "Revisión de la IA",
   "No discrepancies detected": "No se detectaron diferencias",
   "for your team to review": "para que su equipo revise",
