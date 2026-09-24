@@ -7,6 +7,11 @@ export const navSections: NavSection[] = [
       { label: "Operations Center", href: "/", icon: "dashboard", shortcut: "O" },
       { label: "Projects", href: "/projects", icon: "projects", badge: 2, shortcut: "P" },
       { label: "Dailies", href: "/dailies", icon: "clipboard", badge: 12, shortcut: "D" },
+      // Staff only, and deliberately absent from subNavSections below: a crew
+      // has no business seeing when another company mobilises, what a
+      // customer owes, or when the office is meeting. The page redirects too
+      // — a missing link is not access control.
+      { label: "Calendar", href: "/calendar", icon: "calendar", shortcut: "C" },
     ],
   },
   {

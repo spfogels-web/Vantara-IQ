@@ -7408,3 +7408,96 @@ async function consumeDailyIntoMaterial(dailyId: string) {
     }).catch(() => undefined);
   }
 }
+
+/** YYYY-MM-DD, or nothing. Typed dates are the one input people fat-finger. */
+function asDay(v: unknown): string {
+  const d = String(v ?? "").trim();
+  return /^d{4}-d{2}-d{2}$/.test(d) ? d : "";
+}
+
+/** HH:MM on a 24-hour clock, or blank for all day. */
+function asClock(v: unknown): string {
+  const t = String(v ?? "").trim();
+  return /^([01]d|2[0-3]):[0-5]d$/.test(t) ? t : "";
+}
+
+const CALENDAR_KINDS = ["MILESTONE", "LOCATE", "FINANCIAL", "CREW", "MATERIAL", "OTHER"] as const;
+type CalendarKind = (typeof CALENDAR_KINDS)[number];
+
+/**
+ * Put something on the calendar.
+ *
+ * Staff only, like every other write here. Only the things nobody else knows
+ * go in this table — a crew mobilising, a walk, a delivery, a meeting. A
+ * locate's expiry and an invoice's due date are read off those records and
+ * cannot be created here, because two copies of a date is one date too many.
+ */
+export async function createCalendarEvent(input: {
+  title: string;
+  kind: string;
+  startDate: string;
+  endDate?: string;
+  startTime?: string;
+  endTime?: string;
+  note?: string;
+  projectId?: string | null;
+  subcontractorId?: string | null;
+}) {
+  const user = await requireStaff();
+
+  const title = String(input.title ?? "").trim();
+  if (!title) return { ok: false as const, error: "Give it a name." };
+
+  const startDate = asDay(input.startDate);
+  if (!startDate) return { ok: false as const, error: "Pick a date." };
+
+  const endDate = asDay(input.endDate);
+  // A run that ends before it starts is a typo, not a schedule.
+  if (endDate && endDate < startDate) {
+    return { ok: false as const, error: "That ends before it starts." };
+  }
+
+  const kind: CalendarKind = (CALENDAR_KINDS as readonly string[]).includes(input.kind)
+    ? (input.kind as CalendarKind)
+    : "OTHER";
+
+  // A job or crew that is not this organisation's is not a thing to attach to.
+  const projectId = input.projectId?.trim() || null;
+  if (projectId) await assertProjectAccess(projectId);
+
+  const event = await prisma.calendarEvent.create({
+    data: {
+      title,
+      kind,
+      startDate,
+      endDate,
+      startTime: asClock(input.startTime),
+      endTime: asClock(input.endTime),
+      note: String(input.note ?? "").trim(),
+      projectId,
+      subcontractorId: input.subcontractorId?.trim() || null,
+      createdBy: user.name || user.email || "",
+    },
+    select: { id: true },
+  });
+
+  revalidatePath("/calendar");
+  if (projectId) revalidatePath(`/projects/${projectId}`);
+  return { ok: true as const, id: event.id };
+}
+
+/** Take something off the calendar. Only rows this calendar owns exist here. */
+export async function deleteCalendarEvent(id: string) {
+  await requireStaff();
+
+  const event = await prisma.calendarEvent.findUnique({
+    where: { id },
+    select: { id: true, projectId: true },
+  });
+  if (!event) return { ok: false as const, error: "That event is already gone." };
+
+  await prisma.calendarEvent.delete({ where: { id } });
+  revalidatePath("/calendar");
+  if (event.projectId) revalidatePath(`/projects/${event.projectId}`);
+  return { ok: true as const };
+}

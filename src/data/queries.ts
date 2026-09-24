@@ -21,7 +21,8 @@ import { packetStatus } from "@/lib/vendor-packet";
 import { badgeReadiness } from "@/lib/badge";
 import { isStaff } from "@/lib/auth";
 import { getUnreadMessageCount } from "@/data/messages";
-import { addDays, balanceOf, billingWeekFor, easternDate, isPastDue, weekOf } from "@/lib/billing";
+import { CUTOFF_LABEL, addDays, balanceOf, billingWeekFor, easternDate, isPastDue, weekOf } from "@/lib/billing";
+import { todayET } from "@/lib/format";
 import { canElectFastPay, dueDateFromCutoff } from "@/lib/fast-pay";
 import { schedulePosition, type SchedulePosition } from "@/lib/schedule";
 import {
@@ -4803,6 +4804,177 @@ export async function getDailyThumbnails(
     const bucket = (out[key] ??= { urls: [], total: 0 });
     bucket.total += 1;
     if (bucket.urls.length < perSheet) bucket.urls.push(r.url);
+  }
+  return out;
+}
+
+/** One thing on a day, whatever it came from. */
+export type CalendarItem = {
+  id: string;
+  title: string;
+  kind: "MILESTONE" | "LOCATE" | "FINANCIAL" | "CREW" | "MATERIAL" | "OTHER" | "TASK";
+  /** YYYY-MM-DD. */
+  date: string;
+  endDate: string;
+  /** HH:MM, or blank for all day. */
+  time: string;
+  note: string;
+  project: string;
+  /** True for the rows this calendar owns; false for everything it reads. */
+  editable: boolean;
+  /** Something that will hurt if it passes — an expiring locate, a late day. */
+  urgent: boolean;
+  href: string;
+};
+
+/**
+ * Everything happening between two dates, from wherever it is already written.
+ *
+ * Five sources, one list. Only the first is this calendar's own: locates carry
+ * their expiry, invoices their due date, tasks their deadline, and the billing
+ * week its Friday — so those are read where they live rather than copied here.
+ * A copied date is a date that can disagree with the record it came from, and
+ * a calendar that disagrees with the invoice is worse than no calendar.
+ *
+ * Which is also why only the first kind is editable. Moving a locate's expiry
+ * by dragging it about on a month view would be a lie about what the 811
+ * centre said.
+ *
+ * Staff-only, and the page enforces that; this is a read, and it reads through
+ * the same organisation-scoped client as everything else.
+ */
+export async function getCalendarItems(from: string, to: string): Promise<CalendarItem[]> {
+  const [events, locates, invoices, tasks] = await Promise.all([
+    prisma.calendarEvent.findMany({
+      where: { startDate: { gte: from, lte: to } },
+      select: {
+        id: true, title: true, kind: true, startDate: true, endDate: true,
+        startTime: true, note: true, projectId: true,
+        project: { select: { name: true } },
+      },
+      orderBy: [{ startDate: "asc" }, { startTime: "asc" }],
+    }),
+    prisma.locateTicket.findMany({
+      where: { expiresOn: { gte: from, lte: to } },
+      select: { id: true, number: true, expiresOn: true, state: true, project: { select: { name: true } } },
+    }),
+    prisma.invoice.findMany({
+      where: { dueAt: { gte: new Date(`${from}T00:00:00Z`), lte: new Date(`${to}T23:59:59Z`) } },
+      select: { id: true, number: true, dueAt: true, status: true, customer: { select: { name: true } } },
+    }),
+    prisma.task.findMany({
+      where: { dueDate: { gte: from, lte: to }, status: { not: "DONE" } },
+      select: { id: true, title: true, dueDate: true, project: { select: { name: true } } },
+    }),
+  ]);
+
+  const today = todayET();
+  const out: CalendarItem[] = [];
+
+  for (const e of events) {
+    out.push({
+      id: e.id,
+      title: e.title,
+      kind: e.kind,
+      date: e.startDate,
+      endDate: e.endDate,
+      time: e.startTime,
+      note: e.note,
+      project: e.project?.name ?? "",
+      editable: true,
+      urgent: false,
+      href: e.projectId ? `/projects/${e.projectId}` : "",
+    });
+  }
+
+  // A locate that lapses stops a crew standing on the ground. Inside a
+  // fortnight it is the loudest thing on the page.
+  for (const l of locates) {
+    const days = daysUntil(l.expiresOn);
+    out.push({
+      id: `locate-${l.id}`,
+      title: `Locate #${l.number} expires${l.state ? ` (${l.state})` : ""}`,
+      kind: "LOCATE",
+      date: l.expiresOn,
+      endDate: "",
+      time: "",
+      note: days !== null && days <= 14 ? `Expires in ${days} day${days === 1 ? "" : "s"}` : "",
+      project: l.project?.name ?? "",
+      editable: false,
+      urgent: days !== null && days <= 14,
+      href: "/locates",
+    });
+  }
+
+  for (const i of invoices) {
+    const due = i.dueAt ? i.dueAt.toISOString().slice(0, 10) : "";
+    if (!due) continue;
+    out.push({
+      id: `invoice-${i.id}`,
+      title: `${i.number} due`,
+      kind: "FINANCIAL",
+      date: due,
+      endDate: "",
+      time: "",
+      note: i.customer?.name ?? "",
+      project: "",
+      editable: false,
+      urgent: i.status !== "PAID" && due < today,
+      href: "/invoicing",
+    });
+  }
+
+  for (const t of tasks) {
+    out.push({
+      id: `task-${t.id}`,
+      title: t.title,
+      kind: "TASK",
+      date: t.dueDate,
+      endDate: "",
+      time: "",
+      note: "",
+      project: t.project?.name ?? "",
+      editable: false,
+      urgent: t.dueDate < today,
+      href: "/tasks",
+    });
+  }
+
+  // The Friday every week closes on. Not a record anywhere — it is a rule, and
+  // the rule is in one place (src/lib/billing.ts) so this cannot drift from
+  // what the dailies page enforces.
+  for (const friday of fridaysBetween(from, to)) {
+    out.push({
+      id: `cutoff-${friday}`,
+      title: "Billing week closes",
+      kind: "FINANCIAL",
+      date: friday,
+      endDate: "",
+      time: "",
+      note: CUTOFF_LABEL,
+      project: "",
+      editable: false,
+      urgent: false,
+      href: "/dailies",
+    });
+  }
+
+  return out.sort(
+    (a, b) => a.date.localeCompare(b.date) || (a.time || "99").localeCompare(b.time || "99"),
+  );
+}
+
+/** Every Friday in a window, as YYYY-MM-DD. UTC, for the reason weekOf gives. */
+function fridaysBetween(from: string, to: string): string[] {
+  const start = new Date(`${from}T00:00:00Z`);
+  const end = new Date(`${to}T00:00:00Z`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return [];
+  const out: string[] = [];
+  const d = new Date(start);
+  d.setUTCDate(d.getUTCDate() + ((5 - d.getUTCDay() + 7) % 7));
+  while (d <= end) {
+    out.push(d.toISOString().slice(0, 10));
+    d.setUTCDate(d.getUTCDate() + 7);
   }
   return out;
 }

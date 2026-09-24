@@ -389,6 +389,7 @@ model Project {
   /// Who locates what on this job. Empty means every utility is a member
   /// locate, which is the ordinary case.
   locateRules       ProjectLocateRule[]
+  calendarEvents    CalendarEvent[]
 }
 
 /// A saved Globe-style subcontractor daily billing sheet. The grids are stored
@@ -679,6 +680,7 @@ model Subcontractor {
   contracts         Document[]
   locateTickets     LocateTicket[]
   contractorLocates ContractorLocate[]
+  calendarEvents    CalendarEvent[]
   createdAt         DateTime            @default(now())
 }
 
@@ -3376,4 +3378,66 @@ model DemoRequest {
 
   @@index([status, createdAt])
   @@index([createdAt])
+}
+
+/// What a calendar entry is about.
+///
+/// Mirrors the filters the office actually reasons in — a locate expiring is
+/// not the same kind of problem as an invoice falling due, and a person
+/// scanning a month wants to switch one off without losing the other.
+enum CalendarEventKind {
+  MILESTONE
+  LOCATE
+  FINANCIAL
+  CREW
+  MATERIAL
+  OTHER
+}
+
+/// Something the office has put on the calendar itself.
+///
+/// Only what nothing else already knows. Locates carry their own expiry,
+/// invoices their due date, tasks their deadline — those are read where they
+/// live and never copied here, because a second copy of a date is a date that
+/// can disagree with the record it came from.
+///
+/// What is left is everything nobody has anywhere else: a crew mobilising on
+/// Tuesday, a pre-construction walk, a delivery booked for Thursday morning, a
+/// safety meeting. Dates are YYYY-MM-DD strings like every other date a person
+/// types in this system — Task.dueDate, LocateTicket.expiresOn, Daily.workDate
+/// — so a day means the day it says in the field, not a timestamp that shifts
+/// by one either side of midnight depending on where it is read.
+model CalendarEvent {
+  id    String            @id @default(cuid())
+  title String
+  kind  CalendarEventKind @default(OTHER)
+
+  /// YYYY-MM-DD. The day it happens, or the first day of a run.
+  startDate String
+  /// YYYY-MM-DD, blank for a single day. Inclusive.
+  endDate   String @default("")
+  /// HH:MM, 24-hour, blank for all day. Eastern, like the billing cutoff.
+  startTime String @default("")
+  /// Blank unless there is a start time to end.
+  endTime   String @default("")
+
+  note String @default("")
+
+  /// The job this belongs to, when it belongs to one. Nullable because a
+  /// safety meeting or a pay-application deadline belongs to the company.
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  projectId String?
+
+  /// Which crew, for a crew assignment. Same reasoning as projectId.
+  subcontractor   Subcontractor? @relation(fields: [subcontractorId], references: [id], onDelete: SetNull)
+  subcontractorId String?
+
+  createdBy String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// The month view asks for a date window and nothing else.
+  @@index([startDate])
+  @@index([projectId])
+  @@index([kind, startDate])
 }
