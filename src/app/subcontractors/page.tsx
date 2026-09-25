@@ -1,5 +1,4 @@
 import { getProjects, getSubPeople, getSubcontractors } from "@/data/queries";
-import { PageShell } from "@/components/common/page-shell";
 import { SubcontractorsView } from "@/components/subcontractors/subcontractors-view";
 import { requireStaffPage } from "@/lib/authz";
 
@@ -16,13 +15,12 @@ export default async function SubcontractorsPage() {
     getSubPeople(),
   ]);
 
+  // The page's own banner carries the title, so PageShell's header would be a
+  // second one. Same gutter and max width as every other module, kept here
+  // rather than by passing an empty title into a component that requires one.
   return (
-    <PageShell
-      eyebrow="Network"
-      title="Subcontractors"
-      description="The contractor portal — compliance, assignments and a running scorecard for every crew you work with."
-    >
+    <div className="mx-auto w-full max-w-[1600px] px-4 py-5 sm:px-6 sm:py-6 lg:px-8">
       <SubcontractorsView subs={subs} projects={projects} people={people} />
-    </PageShell>
+    </div>
   );
 }
