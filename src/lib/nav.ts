@@ -18,6 +18,7 @@ export const navSections: NavSection[] = [
     title: "Network",
     items: [
       { label: "Prospects", href: "/prospects", icon: "prospects" },
+      { label: "Workforce", href: "/workforce", icon: "crew" },
       { label: "Subcontractors", href: "/subcontractors", icon: "users" },
       { label: "Customers", href: "/customers", icon: "customers" },
       { label: "Materials", href: "/materials", icon: "materials" },
@@ -85,9 +86,16 @@ export const subNavSections: NavSection[] = [
   },
 ];
 
-/** Subcontractors have no Operations Center to go home to. */
+/**
+ * Where each role lands after signing in.
+ *
+ * Neither of the non-staff roles has an Operations Center to go home to, and
+ * an employee in particular must not be shown one on the way past — the
+ * middleware would bounce them, but a redirect through a page they may not
+ * read is a page they may not read. Employees start where their work starts.
+ */
 export const homeHrefFor = (role?: string | null) =>
-  role === "SUBCONTRACTOR" ? "/dailies" : "/";
+  role === "SUBCONTRACTOR" ? "/dailies" : role === "EMPLOYEE" ? "/time-clock" : "/";
 
 /**
  * The crew's own pay page, shown only where the office has turned it on.
@@ -97,16 +105,49 @@ export const homeHrefFor = (role?: string | null) =>
  */
 const PAY_ITEM = { label: "Pay statements", href: "/pay", icon: "payapps" } as const;
 
+/**
+ * A field employee's rail: their clock, their hours, and nothing else.
+ *
+ * They are not staff. Offering them Invoicing or the customer list and then
+ * having middleware bounce them is worse than not offering it — it advertises
+ * the inside of a business they work for but do not run.
+ */
+export const employeeNavSections: NavSection[] = [
+  {
+    title: "My work",
+    items: [
+      { label: "Time Clock", href: "/time-clock", icon: "clock", shortcut: "T" },
+      { label: "My timesheets", href: "/my-timesheets", icon: "clipboard" },
+    ],
+  },
+];
+
+/**
+ * Which rail each role gets.
+ *
+ * Written as an explicit map rather than `role !== "SUBCONTRACTOR" ? staff :
+ * crew`, which is what this was. That shape gave the full management
+ * navigation to every role that was not a subcontractor — correct while there
+ * were only two kinds of person, and wrong the moment EMPLOYEE existed.
+ *
+ * Staff is the fallback because the four staff roles genuinely share one rail.
+ * Any non-staff role must be named here, and the middleware allowlist must
+ * agree with it — a link nobody can follow is a bug, and a page with no link
+ * is still reachable by typing it.
+ */
 export const navSectionsFor = (
   role?: string | null,
   showPay = false,
-): NavSection[] =>
-  role !== "SUBCONTRACTOR"
-    ? navSections
-    : subNavSections.map((section) => ({
-        ...section,
-        items: showPay ? [...section.items, PAY_ITEM] : section.items,
-      }));
+): NavSection[] => {
+  if (role === "SUBCONTRACTOR") {
+    return subNavSections.map((section) => ({
+      ...section,
+      items: showPay ? [...section.items, PAY_ITEM] : section.items,
+    }));
+  }
+  if (role === "EMPLOYEE") return employeeNavSections;
+  return navSections;
+};
 
 /** Flattened list used by the ⌘K palette. */
 export const allNavItems = [...navSections.flatMap((s) => s.items), ...footerNav.items];

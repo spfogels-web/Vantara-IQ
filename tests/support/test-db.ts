@@ -318,11 +318,56 @@ export async function createTestSchema(schema = TEST_SCHEMA): Promise<void> {
     }
   }
 
+  await installPartialIndexes(schema);
+
   const after = await publicTableCount();
   if (after !== before) {
     throw new Error(
       `Tripwire: the public schema went from ${before} tables to ${after}. Something escaped the test schema.`,
     );
+  }
+}
+
+/**
+ * The constraints `db push` cannot create.
+ *
+ * Prisma's schema language has no partial index, so this one lives only in
+ * prisma/pending/007-workforce.sql — and `db push` builds the test schema
+ * from schema.prisma. Without this the suite would run against a database
+ * missing the single invariant Workforce depends on most, and a test proving
+ * an employee cannot open two shifts at once would pass for the wrong reason,
+ * or fail for one.
+ *
+ * Kept deliberately small: it mirrors one statement from 007 and nothing
+ * else. Anything larger belongs in the migration, not here.
+ *
+ * Fails the run if it cannot be created. A test environment that quietly
+ * differs from production on the constraint under test is worse than no test
+ * environment, because it produces evidence nobody can use.
+ */
+async function installPartialIndexes(schema: string): Promise<void> {
+  const db = new PrismaClient({ datasources: { db: { url: testDatabaseUrl(schema) } } });
+  try {
+    await db.$executeRawUnsafe(
+      `CREATE UNIQUE INDEX IF NOT EXISTS "TimeEntry_one_open_per_employee"
+         ON "TimeEntry"("employeeId") WHERE "clockOutAt" IS NULL`,
+    );
+    const rows = await db.$queryRawUnsafe<{ indexname: string }[]>(
+      `SELECT indexname FROM pg_indexes
+        WHERE schemaname = current_schema() AND indexname = 'TimeEntry_one_open_per_employee'`,
+    );
+    if (rows.length !== 1) {
+      throw new Error("the partial unique index was not created");
+    }
+  } catch (e) {
+    throw new Error(
+      "Could not install TimeEntry_one_open_per_employee into the test schema. " +
+        "Production enforces one open shift per employee with this index and the suite " +
+        "must run against the same rule. Refusing to continue. " +
+        (e instanceof Error ? e.message : String(e)),
+    );
+  } finally {
+    await db.$disconnect();
   }
 }
 

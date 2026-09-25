@@ -24,7 +24,13 @@ import { runWithOrg } from "@/lib/org-context";
 export const SESSION_COOKIE = "vq_session";
 const SESSION_DAYS = 7;
 
-export type SessionRole = "ADMIN" | "PM" | "OFFICE" | "SUPERVISOR" | "SUBCONTRACTOR";
+export type SessionRole =
+  | "ADMIN"
+  | "PM"
+  | "OFFICE"
+  | "SUPERVISOR"
+  | "EMPLOYEE"
+  | "SUBCONTRACTOR";
 
 export interface SessionPayload {
   userId: string;

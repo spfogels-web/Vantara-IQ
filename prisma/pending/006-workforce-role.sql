@@ -1,0 +1,43 @@
+-- Step 11a: the EMPLOYEE role.
+--
+-- NOT APPLIED. Prepared and reviewed; applied under its own gate.
+--
+-- WHY THIS IS ITS OWN FILE
+--
+-- Postgres will let ALTER TYPE ... ADD VALUE run inside a transaction, but it
+-- will not let the new value be *used* in that same transaction. 007 creates
+-- nothing that references this value, so strictly they could share a file —
+-- but the day somebody adds a seed row with role 'EMPLOYEE' to 007, a single
+-- file would fail in a way that reads as a mystery. Two files, and an order:
+--
+--   ORDER: 006 must COMMIT before 007 runs.
+--
+-- WHY IT IS A ONE-WAY DOOR
+--
+-- Postgres has no DROP VALUE. Once 'EMPLOYEE' exists in this type it cannot
+-- be removed without recreating the type and rewriting every column that uses
+-- it — which here means User.role, i.e. every account in the business. A
+-- rollback of the Workforce feature therefore leaves this value present and
+-- unused, which is harmless, and that is the accepted position.
+--
+-- WHAT THIS DOES NOT DO
+--
+-- It does not make anybody an employee. No row is written, no account is
+-- changed, no permission moves. Until somebody's role is deliberately set,
+-- this is an unused label in a type.
+--
+-- AND WHAT IT MUST NOT DO
+--
+-- EMPLOYEE is not staff. isStaff() in src/lib/auth.ts lists ADMIN, PM, OFFICE
+-- and SUPERVISOR, and this value must never be added to it. The middleware
+-- allowlist is what actually holds an employee to their own time clock; the
+-- absence of a navigation link is decoration.
+
+-- BEFORE 'SUBCONTRACTOR' so the type's order matches prisma/schema.prisma.
+-- The order is not load-bearing today — nothing sorts by role — but a schema
+-- and a database that disagree about a type are a trap for whoever next runs
+-- `prisma db push` against a scratch copy and diffs it.
+ALTER TYPE "Role" ADD VALUE IF NOT EXISTS 'EMPLOYEE' BEFORE 'SUBCONTRACTOR';
+
+-- ROLLBACK: not possible as a simple statement. See above. The value may be
+-- left in place unused; nothing reads it until an account is given it.

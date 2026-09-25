@@ -114,6 +114,53 @@ const SUB_ALLOWED_PREFIXES = [
 ];
 
 /**
+ * Everywhere an employee may go, and nowhere else.
+ *
+ * Short on purpose. An employee is here to start a shift, end it, and see
+ * their own hours — they are not staff, and every screen this product has for
+ * running a business is closed to them. /projects is absent deliberately:
+ * they pick a job from the list their own record authorises, which is a
+ * server-side question, not a page they browse.
+ *
+ * Adding a line here grants real access. Nothing else in the application
+ * checks this list again on their behalf.
+ */
+const EMPLOYEE_ALLOWED_PREFIXES = [
+  "/time-clock",
+  "/my-timesheets",
+  "/settings",
+  "/support",
+];
+
+/**
+ * Which non-staff role may reach what.
+ *
+ * This replaced `if (role === "SUBCONTRACTOR")`, which denied exactly one
+ * role and let every other authenticated session through to everything. That
+ * was survivable while SUBCONTRACTOR was the only non-staff role and stopped
+ * being survivable the moment EMPLOYEE existed: an employee would have
+ * reached invoicing, the customer list and the executive dashboard, because
+ * nothing said they could not.
+ *
+ * Absence from this map is not permission. A role with no entry that is also
+ * not staff is refused everything below — so the next role somebody adds is
+ * closed until it is deliberately opened, which is the right way round.
+ */
+const NON_STAFF_ALLOWLISTS: Record<string, string[]> = {
+  SUBCONTRACTOR: SUB_ALLOWED_PREFIXES,
+  EMPLOYEE: EMPLOYEE_ALLOWED_PREFIXES,
+};
+
+/** Where each non-staff role is sent when they ask for something else. */
+const NON_STAFF_HOME: Record<string, string> = {
+  SUBCONTRACTOR: "/dailies",
+  EMPLOYEE: "/time-clock",
+};
+
+/** The roles that run the business. Must match isStaff in src/lib/auth.ts. */
+const STAFF_ROLES = ["ADMIN", "PM", "OFFICE", "SUPERVISOR"];
+
+/**
  * Carved back out of the allowed prefixes above. Creating and editing projects
  * lives under /projects, so the prefix match would otherwise hand a crew the
  * customer picker and the contract fields on the way past.
@@ -172,13 +219,16 @@ export async function middleware(request: NextRequest) {
   // remove. It costs the holder one sign-in.
   if (!org) return redirectToLogin(request);
 
-  if (role === "SUBCONTRACTOR") {
+  if (!STAFF_ROLES.includes(role)) {
+    // Fail closed: a non-staff role nobody has written a list for gets an
+    // empty one, not the run of the application.
+    const prefixes = NON_STAFF_ALLOWLISTS[role] ?? [];
     const allowed =
-      SUB_ALLOWED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`)) &&
+      prefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`)) &&
       !SUB_DENIED_PATTERNS.some((re) => re.test(pathname));
     if (!allowed) {
       const url = request.nextUrl.clone();
-      url.pathname = "/dailies";
+      url.pathname = NON_STAFF_HOME[role] ?? "/login";
       url.search = "";
       return NextResponse.redirect(url);
     }

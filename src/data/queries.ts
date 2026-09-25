@@ -23,6 +23,13 @@ import { isStaff } from "@/lib/auth";
 import { getUnreadMessageCount } from "@/data/messages";
 import { CUTOFF_LABEL, addDays, balanceOf, billingWeekFor, easternDate, isPastDue, weekOf } from "@/lib/billing";
 import { todayET } from "@/lib/format";
+import { employeeForSession } from "@/lib/workforce-authz";
+import {
+  coverageFor,
+  observedMetres,
+  routeSegments,
+  trackingState,
+} from "@/lib/workforce-location";
 import { canElectFastPay, dueDateFromCutoff } from "@/lib/fast-pay";
 import { schedulePosition, type SchedulePosition } from "@/lib/schedule";
 import {
@@ -4977,4 +4984,466 @@ function fridaysBetween(from: string, to: string): string[] {
     d.setUTCDate(d.getUTCDate() + 7);
   }
   return out;
+}
+
+/** A shift as the person who worked it sees it. No money, ever. */
+export type MyShift = {
+  id: string;
+  projectName: string;
+  clockInAt: string;
+  clockOutAt: string | null;
+  workDate: string;
+  durationSeconds: number | null;
+  status: string;
+};
+
+/**
+ * This employee's own clock, and their recent days.
+ *
+ * Takes the employee from the session rather than an argument, so there is no
+ * id for a caller to pass wrongly. Selects nothing financial — not because
+ * the fields are hidden in the markup, but because they are never read.
+ */
+export async function getMyTimeClock(): Promise<{
+  employeeName: string;
+  open: MyShift | null;
+  recent: MyShift[];
+} | null> {
+  const me = await employeeForSession();
+  if (!me) return null;
+
+  const rows = await prisma.timeEntry.findMany({
+    where: { employeeId: me.employeeId },
+    select: {
+      id: true, projectName: true, clockInAt: true, clockOutAt: true,
+      workDate: true, durationSeconds: true, status: true,
+    },
+    orderBy: { clockInAt: "desc" },
+    take: 15,
+  });
+
+  const shape = (r: (typeof rows)[number]): MyShift => ({
+    id: r.id,
+    projectName: r.projectName,
+    clockInAt: r.clockInAt.toISOString(),
+    clockOutAt: r.clockOutAt ? r.clockOutAt.toISOString() : null,
+    workDate: r.workDate,
+    durationSeconds: r.durationSeconds,
+    status: r.status,
+  });
+
+  return {
+    employeeName: me.name,
+    open: rows.filter((r) => !r.clockOutAt).map(shape)[0] ?? null,
+    recent: rows.filter((r) => r.clockOutAt).map(shape),
+  };
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Workforce — management reads.
+
+   Every function here is gated by the caller (requireWorkforceManager or
+   requireWorkforceOperational) and selects no financial column. Not because
+   the markup hides them: because they are never read. A rate cannot leak
+   through a response that never contained one.
+   ──────────────────────────────────────────────────────────────────────── */
+
+export type WorkforceToday = {
+  employees: number;
+  clockedIn: number;
+  clockedOutToday: number;
+  hoursToday: number;
+  active: {
+    timeEntryId: string;
+    employeeId: string;
+    name: string;
+    title: string;
+    avatarUrl: string | null;
+    projectName: string;
+    clockInAt: string;
+    lastPointAt: string | null;
+    tracking: "ACTIVE" | "STALE" | "NONE";
+    points: number;
+  }[];
+};
+
+/** Who is working right now, and whether their phone is still reporting. */
+export async function getWorkforceToday(): Promise<WorkforceToday> {
+  const today = todayET();
+
+  const [employees, open, doneToday] = await Promise.all([
+    prisma.employee.count({ where: { status: "ACTIVE" } }),
+    prisma.timeEntry.findMany({
+      where: { clockOutAt: null },
+      select: {
+        id: true,
+        employeeId: true,
+        projectName: true,
+        clockInAt: true,
+        employee: { select: { name: true, title: true, avatarUrl: true } },
+        locations: {
+          select: { capturedAt: true },
+          orderBy: { capturedAt: "desc" },
+          take: 1,
+        },
+        _count: { select: { locations: true } },
+      },
+      orderBy: { clockInAt: "asc" },
+    }),
+    prisma.timeEntry.findMany({
+      where: { workDate: today, clockOutAt: { not: null } },
+      select: { durationSeconds: true },
+    }),
+  ]);
+
+  const openSeconds = open.reduce(
+    (n, e) => n + Math.max(0, (Date.now() - e.clockInAt.getTime()) / 1000),
+    0,
+  );
+  const doneSeconds = doneToday.reduce((n, e) => n + (e.durationSeconds ?? 0), 0);
+
+  return {
+    employees,
+    clockedIn: open.length,
+    clockedOutToday: doneToday.length,
+    hoursToday: Math.round(((openSeconds + doneSeconds) / 3600) * 10) / 10,
+    active: open.map((e) => {
+      const last = e.locations[0]?.capturedAt ?? null;
+      return {
+        timeEntryId: e.id,
+        employeeId: e.employeeId,
+        name: e.employee.name,
+        title: e.employee.title,
+        avatarUrl: e.employee.avatarUrl,
+        projectName: e.projectName,
+        clockInAt: e.clockInAt.toISOString(),
+        lastPointAt: last ? last.toISOString() : null,
+        tracking: trackingState(last),
+        points: e._count.locations,
+      };
+    }),
+  };
+}
+
+export type WorkforceEmployee = {
+  id: string;
+  name: string;
+  title: string;
+  status: string;
+  avatarUrl: string | null;
+  hasLogin: boolean;
+  projects: { id: string; name: string }[];
+  clockedIn: boolean;
+  currentProject: string;
+  hoursToday: number;
+};
+
+/** The roster, with what each person is on and whether they are on the clock. */
+export async function getWorkforceEmployees(): Promise<WorkforceEmployee[]> {
+  const today = todayET();
+  const rows = await prisma.employee.findMany({
+    select: {
+      id: true,
+      name: true,
+      title: true,
+      status: true,
+      avatarUrl: true,
+      userId: true,
+      projects: { select: { project: { select: { id: true, name: true } } } },
+      timeEntries: {
+        where: { workDate: today },
+        select: { clockOutAt: true, durationSeconds: true, projectName: true, clockInAt: true },
+      },
+    },
+    orderBy: [{ status: "asc" }, { name: "asc" }],
+  });
+
+  return rows.map((e) => {
+    const openEntry = e.timeEntries.find((t) => !t.clockOutAt);
+    const seconds = e.timeEntries.reduce(
+      (n, t) =>
+        n +
+        (t.clockOutAt
+          ? (t.durationSeconds ?? 0)
+          : Math.max(0, (Date.now() - t.clockInAt.getTime()) / 1000)),
+      0,
+    );
+    return {
+      id: e.id,
+      name: e.name,
+      title: e.title,
+      status: e.status,
+      avatarUrl: e.avatarUrl,
+      hasLogin: Boolean(e.userId),
+      projects: e.projects.map((p) => p.project),
+      clockedIn: Boolean(openEntry),
+      currentProject: openEntry?.projectName ?? "",
+      hoursToday: Math.round((seconds / 3600) * 10) / 10,
+    };
+  });
+}
+
+export type TimesheetRow = {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  projectName: string;
+  workDate: string;
+  clockInAt: string;
+  clockOutAt: string | null;
+  hours: number | null;
+  status: string;
+  coveragePercent: number;
+  points: number;
+  needsAttention: boolean;
+};
+
+/** The timesheet list, filtered the way the office asks for it. */
+export async function getTimesheets(filter: {
+  from?: string;
+  to?: string;
+  employeeId?: string;
+  projectId?: string;
+  status?: string;
+}): Promise<TimesheetRow[]> {
+  const rows = await prisma.timeEntry.findMany({
+    where: {
+      workDate: {
+        gte: filter.from || undefined,
+        lte: filter.to || undefined,
+      },
+      employeeId: filter.employeeId || undefined,
+      projectId: filter.projectId || undefined,
+      status: (filter.status as never) || undefined,
+    },
+    select: {
+      id: true,
+      employeeId: true,
+      projectName: true,
+      workDate: true,
+      clockInAt: true,
+      clockOutAt: true,
+      durationSeconds: true,
+      status: true,
+      clockOutLocationOk: true,
+      employee: { select: { name: true } },
+      locations: { select: { capturedAt: true, latitude: true, longitude: true, accuracyMeters: true } },
+    },
+    orderBy: [{ workDate: "desc" }, { clockInAt: "desc" }],
+    take: 300,
+  });
+
+  return rows.map((r) => {
+    // Coverage from the shared helper, so this list and the detail page and
+    // the employee's own history cannot disagree about the same shift.
+    const cov = coverageFor(r.locations, r.clockInAt, r.clockOutAt ?? new Date());
+    return {
+      id: r.id,
+      employeeId: r.employeeId,
+      employeeName: r.employee.name,
+      projectName: r.projectName,
+      workDate: r.workDate,
+      clockInAt: r.clockInAt.toISOString(),
+      clockOutAt: r.clockOutAt ? r.clockOutAt.toISOString() : null,
+      hours: r.durationSeconds === null ? null : Math.round((r.durationSeconds / 3600) * 100) / 100,
+      status: r.status,
+      coveragePercent: cov.percent,
+      points: r.locations.length,
+      // Worth a look: reporting mostly absent, a missing closing fix, or a
+      // shift somebody corrected.
+      needsAttention:
+        cov.percent < 60 ||
+        (r.clockOutAt !== null && !r.clockOutLocationOk) ||
+        r.status === "EDITED" ||
+        r.status === "NEEDS_REVIEW",
+    };
+  });
+}
+
+export type TimesheetDetail = {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  employeeTitle: string;
+  projectId: string | null;
+  projectName: string;
+  workDate: string;
+  clockInAt: string;
+  clockOutAt: string | null;
+  clockInNote: string;
+  clockOutNote: string;
+  hours: number | null;
+  status: string;
+  clockInLocationOk: boolean;
+  clockOutLocationOk: boolean;
+  coverage: {
+    percent: number;
+    points: number;
+    interruptions: number;
+    longestGapSeconds: number;
+    gaps: { from: string; to: string; seconds: number }[];
+  };
+  segments: {
+    points: {
+      id: string;
+      kind: string;
+      capturedAt: string;
+      latitude: number;
+      longitude: number;
+      accuracyMeters: number | null;
+    }[];
+    gapAfterSeconds: number | null;
+  }[];
+  observedMetres: number;
+  /** Every correction anybody has made, oldest first. Append-only. */
+  adjustments: {
+    id: string;
+    field: string;
+    oldValue: string;
+    newValue: string;
+    reason: string;
+    actor: string;
+    at: string;
+  }[];
+};
+
+/**
+ * One shift, everything recorded about it.
+ *
+ * The caller must already have decided this viewer may see it —
+ * assertCanViewTimeEntry does that, and does it by looking the entry up
+ * rather than trusting anybody's word about whose it is.
+ */
+export async function getTimesheetDetail(id: string): Promise<TimesheetDetail | null> {
+  const r = await prisma.timeEntry.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      employeeId: true,
+      projectId: true,
+      projectName: true,
+      workDate: true,
+      clockInAt: true,
+      clockOutAt: true,
+      clockInNote: true,
+      clockOutNote: true,
+      durationSeconds: true,
+      status: true,
+      clockInLocationOk: true,
+      clockOutLocationOk: true,
+      employee: { select: { name: true, title: true } },
+      locations: {
+        select: {
+          id: true,
+          kind: true,
+          capturedAt: true,
+          latitude: true,
+          longitude: true,
+          accuracyMeters: true,
+        },
+        orderBy: { capturedAt: "asc" },
+      },
+      audits: {
+        select: {
+          id: true,
+          field: true,
+          oldValue: true,
+          newValue: true,
+          reason: true,
+          actorUserId: true,
+          actorEmail: true,
+          at: true,
+        },
+        orderBy: { at: "asc" },
+      },
+    },
+  });
+  if (!r) return null;
+
+  /**
+   * Who made each correction, by name where the account still exists.
+   *
+   * The audit row keeps the email, which is durable and cannot be edited
+   * afterwards; the name is looked up for readability only, and falls back to
+   * the recorded email when the account has gone. The history never loses who
+   * did it, even if the person has left.
+   */
+  const actorIds = [...new Set(r.audits.map((a) => a.actorUserId).filter(Boolean))];
+  const actors = actorIds.length
+    ? await prisma.user.findMany({
+        where: { id: { in: actorIds } },
+        select: { id: true, name: true },
+      })
+    : [];
+  const actorName = new Map(actors.map((u) => [u.id, u.name]));
+
+  const end = r.clockOutAt ?? new Date();
+  const cov = coverageFor(r.locations, r.clockInAt, end);
+  const segs = routeSegments(
+    r.locations.map((l) => ({
+      id: l.id,
+      kind: l.kind as "CLOCK_IN" | "PERIODIC" | "CLOCK_OUT",
+      capturedAt: l.capturedAt,
+      latitude: l.latitude,
+      longitude: l.longitude,
+      accuracyMeters: l.accuracyMeters,
+    })),
+  );
+
+  return {
+    id: r.id,
+    employeeId: r.employeeId,
+    employeeName: r.employee.name,
+    employeeTitle: r.employee.title,
+    projectId: r.projectId,
+    projectName: r.projectName,
+    workDate: r.workDate,
+    clockInAt: r.clockInAt.toISOString(),
+    clockOutAt: r.clockOutAt ? r.clockOutAt.toISOString() : null,
+    clockInNote: r.clockInNote,
+    clockOutNote: r.clockOutNote,
+    hours: r.durationSeconds === null ? null : Math.round((r.durationSeconds / 3600) * 100) / 100,
+    status: r.status,
+    clockInLocationOk: r.clockInLocationOk,
+    clockOutLocationOk: r.clockOutLocationOk,
+    coverage: {
+      percent: cov.percent,
+      points: cov.points,
+      interruptions: cov.gaps.length,
+      longestGapSeconds: cov.longestGapSeconds,
+      gaps: cov.gaps.map((g) => ({
+        from: g.from.toISOString(),
+        to: g.to.toISOString(),
+        seconds: g.seconds,
+      })),
+    },
+    segments: segs.map((seg) => ({
+      points: seg.points.map((pt) => ({
+        id: pt.id,
+        kind: pt.kind,
+        capturedAt: pt.capturedAt.toISOString(),
+        latitude: pt.latitude,
+        longitude: pt.longitude,
+        accuracyMeters: pt.accuracyMeters,
+      })),
+      gapAfterSeconds: seg.gapAfterSeconds,
+    })),
+    observedMetres: observedMetres(segs),
+    adjustments: r.audits.map((a) => ({
+      id: a.id,
+      field: a.field,
+      oldValue: a.oldValue,
+      newValue: a.newValue,
+      reason: a.reason,
+      actor: actorName.get(a.actorUserId) || a.actorEmail || "somebody no longer on the system",
+      at: a.at.toISOString(),
+    })),
+  };
+}
+
+/** This employee's own finished shifts, for /my-timesheets. */
+export async function getMyTimesheets(): Promise<TimesheetRow[]> {
+  const me = await employeeForSession();
+  if (!me) return [];
+  return getTimesheets({ employeeId: me.employeeId });
 }

@@ -46,5 +46,19 @@ export const QUICK_ACTIONS: QuickAction[] = [
 ];
 
 export function quickActionsFor(role?: string | null): QuickAction[] {
-  return role === "SUBCONTRACTOR" ? QUICK_ACTIONS.filter((a) => !a.staffOnly) : QUICK_ACTIONS;
+  /**
+   * Staff get everything; everybody else gets what their role is given.
+   *
+   * This read `role === "SUBCONTRACTOR" ? filtered : all`, which handed the
+   * full list — including the staff-only entries — to every role that was not
+   * a subcontractor. Correct while there were two kinds of person, and wrong
+   * the moment EMPLOYEE existed: a field worker's Create menu would have
+   * offered New Project.
+   *
+   * An employee gets nothing here. Both entries go somewhere they may not
+   * follow, and a menu item that bounces you is worse than no menu.
+   */
+  if (role === "EMPLOYEE") return [];
+  if (role === "SUBCONTRACTOR") return QUICK_ACTIONS.filter((a) => !a.staffOnly);
+  return QUICK_ACTIONS;
 }

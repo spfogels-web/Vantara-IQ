@@ -21,6 +21,12 @@ enum Role {
   OFFICE
   /// Field supervisor working for Fortitude — staff access, same as a PM.
   SUPERVISOR
+  /// An internal field worker who clocks in. Deliberately NOT staff: see
+  /// isStaff in src/lib/auth.ts, which does not include this and must not.
+  /// An employee reaches their own time clock and their own hours, and
+  /// nothing else — the middleware allowlist is what holds that, not the
+  /// absence of a link.
+  EMPLOYEE
   SUBCONTRACTOR
 }
 
@@ -117,6 +123,9 @@ model User {
   /// False by default, so a new account — and every existing one — operates
   /// nothing until somebody says otherwise.
   isPlatformAdmin Boolean @default(false)
+
+  /// Their employment record, when this login belongs to a field employee.
+  employee Employee?
 
   createdAt DateTime @default(now())
 }
@@ -390,6 +399,8 @@ model Project {
   /// locate, which is the ordinary case.
   locateRules       ProjectLocateRule[]
   calendarEvents    CalendarEvent[]
+  timeEntries       TimeEntry[]
+  employeeAssignments EmployeeProject[]
 }
 
 /// A saved Globe-style subcontractor daily billing sheet. The grids are stored
@@ -3440,4 +3451,236 @@ model CalendarEvent {
   @@index([startDate])
   @@index([projectId])
   @@index([kind, startDate])
+}
+
+/// Whether somebody is still on the books.
+///
+/// Not a delete. A person who has left still has timecards behind them, and
+/// an hour worked in March does not stop having been worked because they
+/// resigned in June.
+enum EmployeeStatus {
+  ACTIVE
+  INACTIVE
+}
+
+/// Where a shift has got to.
+///
+/// EDITED is kept distinct from COMPLETE on purpose: a timecard somebody has
+/// corrected is still a correct timecard, but a reviewer is entitled to know
+/// at a glance that a human changed it, without opening the audit trail.
+enum TimeEntryStatus {
+  OPEN
+  COMPLETE
+  EDITED
+  NEEDS_REVIEW
+}
+
+/// Why a location point exists.
+///
+/// The two forced captures are worth telling apart from the periodic ones:
+/// they are the only two the employee actually asked for, and they are what
+/// the map draws in green and red.
+enum LocationPointKind {
+  CLOCK_IN
+  PERIODIC
+  CLOCK_OUT
+}
+
+/// Somebody who works for this contractor and puts hours on a clock.
+///
+/// Internal staff only in V1. A subcontractor's crew is a different
+/// relationship — they are a company we engage, not people we employ — and
+/// merging the two here would make the first question anybody asks of this
+/// table ("who do we pay?") unanswerable.
+model Employee {
+  id String @id @default(cuid())
+
+  /// Their login, when they have one.
+  ///
+  /// Optional because somebody is on the books before their account is set
+  /// up, and unique because one login controls exactly one timecard. That
+  /// second half is the whole guarantee that a person cannot clock somebody
+  /// else in, and it is the database's to keep rather than a check in an
+  /// action that somebody later forgets to write.
+  ///
+  /// SetNull rather than Cascade: removing a login must not delete the hours
+  /// that person worked.
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId String? @unique
+
+  name String
+  /// Free text, like CrewContact.role — job titles in this trade are not a
+  /// list anybody agrees on.
+  title  String         @default("")
+  phone  String         @default("")
+  status EmployeeStatus @default(ACTIVE)
+
+  /// Optional, and the UI falls back to initials. Nothing requires a photo.
+  avatarUrl String?
+
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  timeEntries TimeEntry[]
+  projects    EmployeeProject[]
+
+  @@index([status, name])
+}
+
+/// Which jobs a person is allowed to put hours against.
+///
+/// This is authorization, not a schedule. It answers one question — may this
+/// employee book time to this job — and nothing about when they are expected
+/// on site. Scheduling, if it ever exists, is a separate feature that can
+/// read this; it must not be folded in here, because "allowed to" and
+/// "expected to" diverge the first time somebody covers a shift.
+///
+/// Deliberately not ProjectCrew. That table links a project to a
+/// subcontractor: a company we engage, not a person we employ. The two
+/// relationships look alike and mean different things, and merging them would
+/// make "who may clock into this job" unanswerable for either.
+///
+/// Both sides cascade. An assignment is a statement about a live pairing; if
+/// the job or the person goes, the statement is meaningless. Note that this
+/// removes only the permission — TimeEntry keeps its own projectId and
+/// projectName, so hours already worked are untouched by unassigning
+/// somebody, which is the behaviour anybody reading a timesheet expects.
+model EmployeeProject {
+  id         String   @id @default(cuid())
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId String
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId  String
+  /// Who put them on it, for the question "why can this person bill here".
+  assignedBy String   @default("")
+  assignedAt DateTime @default(now())
+
+  /// One assignment per pairing. Assigning twice is not two permissions.
+  @@unique([employeeId, projectId])
+  @@index([projectId])
+}
+
+/// One shift: a clock-in, eventually a clock-out, and what happened between.
+///
+/// Both timestamps are the server's. A phone with the wrong clock, or a
+/// helpful one, is not evidence of when somebody started work.
+model TimeEntry {
+  id String @id @default(cuid())
+
+  /// Restrict, not Cascade. A timecard is a record of work and of what
+  /// somebody is owed for it; deleting a person must not be able to delete
+  /// that. Removing an employee who has ever clocked in is refused, and
+  /// INACTIVE is what you actually want.
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+  employeeId String
+
+  /// SetNull: deleting a job must never delete the hours worked on it. The
+  /// name is kept alongside so the timecard still reads correctly afterwards.
+  project     Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  projectId   String?
+  projectName String   @default("")
+
+  clockInAt  DateTime
+  clockOutAt DateTime?
+
+  /// The Eastern calendar day the shift belongs to, fixed at clock-in.
+  ///
+  /// So a shift that starts at 10pm and ends at 6am stays on the day it
+  /// started, which is how anybody reading a timesheet expects it to group.
+  /// Duration is never computed from this — see durationSeconds.
+  workDate String
+
+  /// Computed by the server at clock-out, from the two timestamps.
+  ///
+  /// The timestamps remain authoritative; this is here so a month of
+  /// timesheets does not recompute on every read. Null while the shift is
+  /// open, which is also how "still clocked in" is asked cheaply.
+  durationSeconds Int?
+
+  status       TimeEntryStatus @default(OPEN)
+  clockInNote  String          @default("")
+  clockOutNote String          @default("")
+
+  /// Whether each forced capture actually produced a fix.
+  ///
+  /// False is a fact worth keeping rather than a failure to hide: a shift
+  /// that closed with no final location is a real thing that happens in a
+  /// basement or a dead spot, and the manager should see it said plainly.
+  clockInLocationOk  Boolean @default(false)
+  clockOutLocationOk Boolean @default(false)
+
+  createdAt DateTime            @default(now())
+  updatedAt DateTime            @updatedAt
+  locations TimeEntryLocation[]
+  audits    TimeEntryAudit[]
+
+  /// NOTE: one further constraint cannot be written here. Postgres enforces
+  /// at most one open shift per employee through a PARTIAL unique index,
+  /// which Prisma has no syntax for:
+  ///
+  ///   CREATE UNIQUE INDEX "TimeEntry_one_open_per_employee"
+  ///     ON "TimeEntry"("employeeId") WHERE "clockOutAt" IS NULL;
+  ///
+  /// It lives in prisma/pending/007-workforce.sql, and tests/global-setup.ts
+  /// installs it after db push so the suite runs against the real constraint.
+  @@index([employeeId, workDate])
+  @@index([workDate, status])
+  @@index([projectId, workDate])
+}
+
+/// One position the device actually reported during a shift.
+///
+/// Deliberately carries no employeeId. A point reaches its employee only
+/// through its entry, so it is structurally incapable of disagreeing about
+/// whose it is — there is no second copy of that answer to drift.
+///
+/// Nothing is ever written here that the browser did not return. Gaps stay
+/// gaps: see the coverage calculation, which measures them rather than
+/// filling them in.
+model TimeEntryLocation {
+  id          String    @id @default(cuid())
+  timeEntry   TimeEntry @relation(fields: [timeEntryId], references: [id], onDelete: Cascade)
+  timeEntryId String
+
+  capturedAt DateTime
+  latitude   Float
+  longitude  Float
+  /// As reported. Null when the browser declined to say, which is not the
+  /// same as accurate.
+  accuracyMeters Float?
+  kind           LocationPointKind @default(PERIODIC)
+
+  createdAt DateTime @default(now())
+
+  /// Both queries this table serves: draw one shift in order, and find the
+  /// most recent point for the live view.
+  @@index([timeEntryId, capturedAt])
+}
+
+/// What somebody changed on a timecard, and why.
+///
+/// Append-only by construction: no action updates or deletes a row here, and
+/// the only writer is the correction path. A corrected timecard keeps its
+/// original value in this table rather than in a comment nobody reads.
+///
+/// Location history is not correctable through this or any other route. An
+/// hour can be wrong and be fixed; a claim about where a device was cannot be
+/// edited into something it did not report.
+model TimeEntryAudit {
+  id          String    @id @default(cuid())
+  timeEntry   TimeEntry @relation(fields: [timeEntryId], references: [id], onDelete: Cascade)
+  timeEntryId String
+
+  /// Which field moved — "clockInAt", "clockOutAt", "projectId".
+  field    String
+  oldValue String @default("")
+  newValue String @default("")
+  /// Required by the action. A correction without a reason is a correction
+  /// nobody can check.
+  reason   String
+
+  actorUserId String   @default("")
+  actorEmail  String   @default("")
+  at          DateTime @default(now())
+
+  @@index([timeEntryId, at])
 }

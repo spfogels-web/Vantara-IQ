@@ -52,6 +52,15 @@ describe("the schema carries a tenant", () => {
     "Task",
     "Document",
     "Conversation",
+    // Workforce. Added with the tables themselves rather than afterwards, so
+    // Phase 4 cannot finish believing it has covered everything while an
+    // employee's hours and every location they reported sit outside the
+    // policy. These fail today exactly like the rest of this list.
+    "Employee",
+    "TimeEntry",
+    "TimeEntryLocation",
+    "TimeEntryAudit",
+    "EmployeeProject",
   ];
 
   it("has organizationId on every root table", async () => {

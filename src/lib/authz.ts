@@ -146,7 +146,14 @@ export async function assertOwnSubcontractor(subcontractorId: string): Promise<C
   return user;
 }
 
-/** True when this viewer is a subcontractor login rather than Fortitude staff. */
+/**
+ * True when this viewer is a subcontractor login rather than Fortitude staff.
+ *
+ * NOTE: this answers "not staff", which stopped being the same question when
+ * EMPLOYEE arrived — an employee is not staff and is not a subcontractor
+ * either. It currently has no callers. Anything that starts using it must
+ * decide which of those two it actually means, or ask for the role directly.
+ */
 export function isSubViewer(user: CurrentUser | null): boolean {
   return !!user && !isStaff(user.role);
 }

@@ -9,7 +9,13 @@
  */
 import { SignJWT } from "jose";
 
-export type Role = "ADMIN" | "PM" | "OFFICE" | "SUPERVISOR" | "SUBCONTRACTOR";
+export type Role =
+  | "ADMIN"
+  | "PM"
+  | "OFFICE"
+  | "SUPERVISOR"
+  | "EMPLOYEE"
+  | "SUBCONTRACTOR";
 
 /**
  * @param org Which organisation's database this session reads. Defaults to the
