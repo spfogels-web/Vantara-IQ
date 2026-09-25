@@ -5132,6 +5132,16 @@ export type WorkforceEmployee = {
   status: string;
   avatarUrl: string | null;
   hasLogin: boolean;
+  phone: string;
+  /**
+   * Where this person is in getting a login, which is three states and not
+   * two: they have one, they have been sent a link nobody has used, or nobody
+   * has started. The Employees tab has to tell them apart — "no login yet" on
+   * somebody invited a week ago is a different problem from "no login yet" on
+   * somebody nobody has invited.
+   */
+  invitePending: boolean;
+  inviteEmail: string;
   projects: { id: string; name: string }[];
   clockedIn: boolean;
   currentProject: string;
@@ -5149,6 +5159,8 @@ export async function getWorkforceEmployees(): Promise<WorkforceEmployee[]> {
       status: true,
       avatarUrl: true,
       userId: true,
+      phone: true,
+      invite: { select: { email: true, used: true } },
       projects: { select: { project: { select: { id: true, name: true } } } },
       timeEntries: {
         where: { workDate: today },
@@ -5175,6 +5187,11 @@ export async function getWorkforceEmployees(): Promise<WorkforceEmployee[]> {
       status: e.status,
       avatarUrl: e.avatarUrl,
       hasLogin: Boolean(e.userId),
+      phone: e.phone,
+      // A spent invitation is not pending, and neither is one belonging to
+      // somebody who has since been given a login another way.
+      invitePending: Boolean(e.invite && !e.invite.used && !e.userId),
+      inviteEmail: e.invite?.email ?? "",
       projects: e.projects.map((p) => p.project),
       clockedIn: Boolean(openEntry),
       currentProject: openEntry?.projectName ?? "",

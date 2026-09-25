@@ -1,5 +1,7 @@
 "use server";
 
+import { randomBytes } from "node:crypto";
+
 import { revalidatePath } from "next/cache";
 
 import { prisma } from "@/lib/prisma";
@@ -317,6 +319,286 @@ export async function recordLocation(input: {
     },
   });
 
+  return { ok: true as const };
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Putting somebody on the books.
+
+   Every action below is requireWorkforceManager, which is ADMIN and nothing
+   else. Creating an employee decides who may clock in and whose hours the
+   business owes; it is not an office task.
+
+   None of this issues a credential. Creating an employee optionally mints an
+   invitation, and an invitation is a token that lets one person set their own
+   password once. No administrator types, sees, or can read back a password —
+   there is no field for it here and no query that would return one.
+   ──────────────────────────────────────────────────────────────────────── */
+
+/** An address is usable if it looks like one and nobody already has it. */
+function normalisedEmail(raw: string | undefined | null): string {
+  return (raw ?? "").trim().toLowerCase();
+}
+
+function looksLikeEmail(email: string): boolean {
+  return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
+}
+
+/**
+ * A new employee, and optionally the link that will give them a login.
+ *
+ * One transaction. An employee whose assignments half-landed, or who exists
+ * with an invitation to an address that turned out to be taken, is worse than
+ * a refusal — somebody would have to notice, and nothing here would tell
+ * them. So it all commits or none of it does.
+ *
+ * The login is NOT created here. What is created is an invitation, which
+ * grants nothing until the person opens it and chooses a password. That is
+ * the difference between handing somebody a key and telling them where the
+ * door is.
+ */
+export async function createEmployee(input: {
+  name: string;
+  title?: string;
+  phone?: string;
+  status?: "ACTIVE" | "INACTIVE";
+  /** Required when withLogin. The address the account will be created with. */
+  email?: string;
+  /** Mint an invitation. Without it this is a roster entry and no more. */
+  withLogin?: boolean;
+  projectIds?: string[];
+}) {
+  const me = await requireWorkforceManager();
+
+  const name = input.name.trim();
+  if (!name) return { ok: false as const, error: "Enter their name." };
+
+  const status = input.status === "INACTIVE" ? "INACTIVE" : "ACTIVE";
+  const email = normalisedEmail(input.email);
+  const withLogin = !!input.withLogin;
+
+  if (withLogin) {
+    if (!email) return { ok: false as const, error: "An email is needed to set up a login." };
+    if (!looksLikeEmail(email)) {
+      return { ok: false as const, error: "Enter a valid email address." };
+    }
+    // Checked here for a readable message, and again inside the transaction
+    // because two admins can press the button at the same moment.
+    const taken = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+    if (taken) {
+      return {
+        ok: false as const,
+        error: "That address already has a login on this system. Use a different one.",
+      };
+    }
+  }
+
+  // Only jobs that exist. A stale id in the form must not create an
+  // assignment pointing at nothing.
+  const wanted = Array.from(new Set((input.projectIds ?? []).filter(Boolean)));
+  const projects = wanted.length
+    ? await prisma.project.findMany({ where: { id: { in: wanted } }, select: { id: true } })
+    : [];
+  if (projects.length !== wanted.length) {
+    return { ok: false as const, error: "One of those jobs no longer exists. Reload and try again." };
+  }
+
+  const token = withLogin ? randomBytes(32).toString("base64url") : null;
+
+  try {
+    const employee = await prisma.$transaction(async (tx) => {
+      const created = await tx.employee.create({
+        data: {
+          name,
+          title: (input.title ?? "").trim().slice(0, 80),
+          phone: (input.phone ?? "").trim().slice(0, 40),
+          status,
+        },
+        select: { id: true, name: true },
+      });
+
+      if (projects.length) {
+        await tx.employeeProject.createMany({
+          data: projects.map((p) => ({
+            employeeId: created.id,
+            projectId: p.id,
+            assignedBy: me.name || me.email || "",
+          })),
+        });
+      }
+
+      if (token) {
+        // Re-checked inside the transaction. The unique index on User.email is
+        // what actually holds; this turns the race into a clean refusal rather
+        // than a half-made employee.
+        const clash = await tx.user.findUnique({ where: { email }, select: { id: true } });
+        if (clash) throw new EmailTakenError();
+        await tx.employeeInvite.create({
+          data: { token, employeeId: created.id, email, invitedBy: me.name || me.email || "" },
+        });
+      }
+
+      return created;
+    });
+
+    revalidatePath("/workforce");
+    return { ok: true as const, employeeId: employee.id, name: employee.name, token };
+  } catch (e) {
+    if (e instanceof EmailTakenError) {
+      return {
+        ok: false as const,
+        error: "That address was taken while you were filling this in. Use a different one.",
+      };
+    }
+    throw e;
+  }
+}
+
+/** Thrown inside the transaction so nothing is left behind. */
+class EmailTakenError extends Error {}
+
+/**
+ * Editing who somebody is. Not what they may do.
+ *
+ * Name, title and phone only. Status is its own action because deactivating
+ * somebody takes their clock away, and project assignments are their own
+ * actions because they are authorization — neither belongs in a form that
+ * reads as "fix a typo in a phone number".
+ */
+export async function updateEmployee(input: {
+  employeeId: string;
+  name: string;
+  title?: string;
+  phone?: string;
+}) {
+  await requireWorkforceManager();
+
+  const name = input.name.trim();
+  if (!name) return { ok: false as const, error: "Enter their name." };
+
+  const exists = await prisma.employee.findUnique({
+    where: { id: input.employeeId },
+    select: { id: true },
+  });
+  if (!exists) return { ok: false as const, error: "That employee is gone." };
+
+  await prisma.employee.update({
+    where: { id: input.employeeId },
+    data: {
+      name,
+      title: (input.title ?? "").trim().slice(0, 80),
+      phone: (input.phone ?? "").trim().slice(0, 40),
+    },
+  });
+
+  revalidatePath("/workforce");
+  return { ok: true as const };
+}
+
+/**
+ * Putting somebody on or off the clock roster.
+ *
+ * This is the lever that stops a person clocking in, and it is reversible.
+ * employeeForSession returns null for anybody not ACTIVE, so an inactive
+ * employee sees the "not set up" message rather than a clock — while every
+ * hour they ever filed stays exactly where it is.
+ *
+ * Deliberately not a delete. TimeEntry_employeeId_fkey is RESTRICT: somebody
+ * who has worked cannot be removed, and should not be. This is the thing to
+ * use instead, and it is why there is no delete action in this file.
+ */
+export async function setEmployeeStatus(input: {
+  employeeId: string;
+  status: "ACTIVE" | "INACTIVE";
+}) {
+  await requireWorkforceManager();
+
+  const employee = await prisma.employee.findUnique({
+    where: { id: input.employeeId },
+    select: { id: true },
+  });
+  if (!employee) return { ok: false as const, error: "That employee is gone." };
+
+  const status = input.status === "INACTIVE" ? "INACTIVE" : "ACTIVE";
+
+  // An open shift left behind by somebody being deactivated would sit on the
+  // roster forever with nobody able to close it: clocking out needs a session
+  // this person no longer has. Said plainly rather than silently closed —
+  // manufacturing a clock-out time is exactly what the corrections trail
+  // exists to prevent.
+  if (status === "INACTIVE") {
+    const open = await prisma.timeEntry.findFirst({
+      where: { employeeId: input.employeeId, clockOutAt: null },
+      select: { id: true },
+    });
+    if (open) {
+      return {
+        ok: false as const,
+        error:
+          "They are on the clock. Correct that shift to close it first, then deactivate them.",
+        openEntryId: open.id,
+      };
+    }
+  }
+
+  await prisma.employee.update({ where: { id: input.employeeId }, data: { status } });
+
+  revalidatePath("/workforce");
+  return { ok: true as const };
+}
+
+/**
+ * Minting, or re-minting, somebody's invitation link.
+ *
+ * Replaces any existing row rather than adding a second, so exactly one link
+ * works at a time and yesterday's forwarded copy stops working. Refuses
+ * outright once the person has an account: a second invitation would create a
+ * second User, and Employee.userId holds exactly one.
+ */
+export async function inviteEmployee(input: { employeeId: string; email?: string }) {
+  const me = await requireWorkforceManager();
+
+  const employee = await prisma.employee.findUnique({
+    where: { id: input.employeeId },
+    select: { id: true, userId: true, invite: { select: { email: true } } },
+  });
+  if (!employee) return { ok: false as const, error: "That employee is gone." };
+  if (employee.userId) {
+    return { ok: false as const, error: "They already have a login." };
+  }
+
+  const email = normalisedEmail(input.email) || employee.invite?.email || "";
+  if (!looksLikeEmail(email)) {
+    return { ok: false as const, error: "Enter a valid email address." };
+  }
+
+  const taken = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+  if (taken) {
+    return {
+      ok: false as const,
+      error: "That address already has a login on this system. Use a different one.",
+    };
+  }
+
+  const token = randomBytes(32).toString("base64url");
+  await prisma.$transaction(async (tx) => {
+    await tx.employeeInvite.deleteMany({ where: { employeeId: employee.id } });
+    await tx.employeeInvite.create({
+      data: { token, employeeId: employee.id, email, invitedBy: me.name || me.email || "" },
+    });
+  });
+
+  revalidatePath("/workforce");
+  return { ok: true as const, token };
+}
+
+/** Withdraw an invitation that has not been used. */
+export async function revokeEmployeeInvite(input: { employeeId: string }) {
+  await requireWorkforceManager();
+  await prisma.employeeInvite.deleteMany({
+    where: { employeeId: input.employeeId, used: false },
+  });
+  revalidatePath("/workforce");
   return { ok: true as const };
 }
 

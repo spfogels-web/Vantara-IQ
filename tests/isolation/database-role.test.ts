@@ -61,6 +61,10 @@ describe("the schema carries a tenant", () => {
     "TimeEntryLocation",
     "TimeEntryAudit",
     "EmployeeProject",
+    // The invitation that turns an employee into a login. Listed here for the
+    // same reason as the five above: it holds an email and a token bound to a
+    // person, and it fails today exactly as they do.
+    "EmployeeInvite",
   ];
 
   it("has organizationId on every root table", async () => {

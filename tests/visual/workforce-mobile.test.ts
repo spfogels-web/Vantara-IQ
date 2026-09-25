@@ -157,6 +157,50 @@ describe("Workforce on a 390px phone", () => {
     await adminPage.screenshot({ path: join(OUT, "workforce-timesheet-phone.png"), fullPage: true });
   });
 
+  it("fits the employee roster and its controls on the screen", async () => {
+    // The roster row carries the most controls of anything in Workforce —
+    // invite, edit, deactivate and the job chips — so it is the one most
+    // likely to push a phone sideways.
+    await adminPage.goto(`${BASE_URL}/workforce?tab=employees`, { waitUntil: "networkidle" });
+    const over = await sidewaysOverflow(adminPage);
+    expect(over, `the employee roster scrolls sideways by ${over}px`).toBeLessThanOrEqual(1);
+    await adminPage.screenshot({ path: join(OUT, "workforce-employees-phone.png"), fullPage: true });
+  });
+
+  it("opens Add employee without pushing the page sideways", async () => {
+    await adminPage.goto(`${BASE_URL}/workforce`, { waitUntil: "networkidle" });
+    await adminPage.getByRole("tab", { name: /employees/i }).click().catch(async () => {
+      // The tabs are buttons in this view; fall back to the text.
+      await adminPage.getByRole("button", { name: /^employees$/i }).first().click();
+    });
+    await adminPage.getByRole("button", { name: /add employee/i }).first().click();
+    await adminPage.waitForTimeout(400);
+
+    const dialog = adminPage.getByRole("dialog", { name: /add employee/i });
+    expect(await dialog.count(), "the Add employee form did not open").toBeGreaterThan(0);
+
+    const over = await sidewaysOverflow(adminPage);
+    expect(over, `the Add employee form scrolls the page sideways by ${over}px`)
+      .toBeLessThanOrEqual(1);
+
+    // The form itself must fit the screen, not merely avoid scrolling the body.
+    const box = (await dialog.first().boundingBox())!;
+    expect(box.width, `the form is ${box.width}px wide on a 390px screen`).toBeLessThanOrEqual(390);
+
+    await adminPage.screenshot({ path: join(OUT, "workforce-add-employee-phone.png"), fullPage: true });
+  });
+
+  it("gives the Add employee fields a thumb-sized target", async () => {
+    const name = adminPage.getByRole("textbox").first();
+    const box = await name.boundingBox();
+    expect(box, "the form has no text field").not.toBeNull();
+    expect(box!.height, `a field is only ${box!.height}px tall`).toBeGreaterThanOrEqual(40);
+
+    const submit = adminPage.getByRole("button", { name: /^add employee$/i }).last();
+    const sb = await submit.boundingBox();
+    expect(sb!.height, `the submit button is only ${sb!.height}px tall`).toBeGreaterThanOrEqual(40);
+  });
+
   it("keeps the clock button big enough to hit with a glove on", async () => {
     await employeePage.goto(`${BASE_URL}/time-clock`, { waitUntil: "networkidle" });
     const button = employeePage.getByRole("button", { name: /clock (in|out)/i }).first();

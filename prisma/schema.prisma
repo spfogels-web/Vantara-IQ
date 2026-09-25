@@ -3522,8 +3522,52 @@ model Employee {
   updatedAt   DateTime    @updatedAt
   timeEntries TimeEntry[]
   projects    EmployeeProject[]
+  invite      EmployeeInvite?
 
   @@index([status, name])
+}
+
+/// An unused link that lets one person set their own password, once.
+///
+/// Deliberately its own table rather than a reuse of SubUserInvite. That one
+/// is bound to a Subcontractor by a required foreign key — a company we
+/// engage — and an employee is somebody we employ. The two look alike and are
+/// not the same thing, and forcing an employee through it would mean
+/// inventing a subcontractor to hang them off.
+///
+/// It is also not a column on Employee. Authentication state does not belong
+/// on the roster model, and a separate row can be replaced wholesale when a
+/// link is reissued, which leaves no stale token working.
+///
+/// WHAT THIS IS FOR, AND WHAT IT IS NOT
+///
+/// Vantara sends no email — there is no mail library in the application. Staff
+/// mint this, copy the link, and hand it over. So the token is the entire
+/// authority, exactly as it is for a subcontractor invite: it names one
+/// employee, fixed before the link was sent, and nothing typed on the page can
+/// move it to another. It is not a password reset — there is no such flow —
+/// and it is not a session.
+///
+/// The password is set by the person themselves on the page this token opens.
+/// No administrator ever types it, sees it, or can read it back.
+model EmployeeInvite {
+  token String @id
+
+  /// One live invitation per employee. Reissuing replaces the row, which is
+  /// what stops a forwarded copy of yesterday's link still working.
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  employeeId String   @unique
+
+  /// The address the account will be created with. Taken from here rather
+  /// than from the form, so accepting an invitation cannot change who it was
+  /// for.
+  email String
+
+  /// Burned in the same transaction as the account it creates, so two people
+  /// opening the same forwarded link cannot both get a login.
+  used      Boolean  @default(false)
+  invitedBy String   @default("")
+  createdAt DateTime @default(now())
 }
 
 /// Which jobs a person is allowed to put hours against.

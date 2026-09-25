@@ -3,11 +3,30 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Clock, MapPin, Users } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  Clock,
+  Copy,
+  Mail,
+  MapPin,
+  PencilLine,
+  UserCheck,
+  Users,
+  UserX,
+} from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import type { TimesheetRow, WorkforceEmployee, WorkforceToday } from "@/data/queries";
-import { assignEmployeeToProject, unassignEmployeeFromProject } from "@/app/workforce-actions";
+import {
+  assignEmployeeToProject,
+  inviteEmployee,
+  revokeEmployeeInvite,
+  setEmployeeStatus,
+  unassignEmployeeFromProject,
+  updateEmployee,
+} from "@/app/workforce-actions";
+import { AddEmployee } from "@/components/workforce/add-employee";
 
 /**
  * The office's view of the crew.
@@ -176,6 +195,10 @@ function EmployeeList({
 }) {
   const router = useRouter();
   const [busy, setBusy] = React.useState<string | null>(null);
+  const [editing, setEditing] = React.useState<string | null>(null);
+  const [notice, setNotice] = React.useState<string | null>(null);
+  /** A freshly minted invitation link, shown once next to the person it is for. */
+  const [link, setLink] = React.useState<{ id: string; url: string } | null>(null);
 
   async function add(employeeId: string, projectId: string) {
     if (!projectId) return;
@@ -192,10 +215,67 @@ function EmployeeList({
     router.refresh();
   }
 
-  if (rows.length === 0) return <Empty>No employees yet.</Empty>;
+  async function invite(employeeId: string, email: string) {
+    setBusy(employeeId);
+    setNotice(null);
+    const res = await inviteEmployee({ employeeId, email });
+    setBusy(null);
+    if (!res.ok) return setNotice(res.error);
+    setLink({ id: employeeId, url: `${window.location.origin}/invite/employee/${res.token}` });
+    router.refresh();
+  }
+
+  async function revoke(employeeId: string) {
+    setBusy(employeeId);
+    setNotice(null);
+    await revokeEmployeeInvite({ employeeId });
+    setBusy(null);
+    // Whatever link was on screen is dead now; take it off screen too.
+    setLink((l) => (l?.id === employeeId ? null : l));
+    router.refresh();
+  }
+
+  async function setStatus(employeeId: string, status: "ACTIVE" | "INACTIVE") {
+    setBusy(employeeId);
+    setNotice(null);
+    const res = await setEmployeeStatus({ employeeId, status });
+    setBusy(null);
+    // Refusing to deactivate somebody mid-shift is a real answer, not a
+    // failure — say what it was rather than leaving the toggle looking stuck.
+    if (!res.ok) setNotice(res.error);
+    router.refresh();
+  }
+
+  if (rows.length === 0) {
+    return (
+      <div className="flex flex-col items-center gap-3 rounded-xl border border-border/60 px-4 py-10 text-center">
+        <p className="text-[13px] text-muted-foreground">
+          Nobody is on the books yet. Add somebody and they can clock in from
+          their phone.
+        </p>
+        <AddEmployee projects={projects} />
+      </div>
+    );
+  }
 
   return (
-    <ul className="flex flex-col divide-y divide-border/40 rounded-xl border border-border/60">
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="num text-[11.5px] text-muted-foreground">
+          {rows.length} {rows.length === 1 ? "employee" : "employees"}
+        </span>
+        <div className="ml-auto">
+          <AddEmployee projects={projects} />
+        </div>
+      </div>
+
+      {notice ? (
+        <p className="rounded-xl border border-warning/35 bg-warning/[0.07] px-3 py-2 text-[12.5px] text-warning">
+          {notice}
+        </p>
+      ) : null}
+
+      <ul className="flex flex-col divide-y divide-border/40 rounded-xl border border-border/60">
       {rows.map((e) => (
         <li key={e.id} className="flex flex-col gap-2 p-3">
           <div className="flex flex-wrap items-center gap-3">
@@ -206,13 +286,39 @@ function EmployeeList({
                 {e.title ? <span className="ml-2 text-[11.5px] font-normal text-muted-foreground">{e.title}</span> : null}
               </p>
               <p className="truncate text-[11.5px] text-muted-foreground">
-                {e.status === "ACTIVE" ? "Active" : "Inactive"}
-                {e.hasLogin ? " · has a login" : " · no login yet"}
+                {e.status === "ACTIVE" ? "Active" : "Inactive — no clock"}
+                {e.hasLogin
+                  ? " · has a login"
+                  : e.invitePending
+                    ? " · invited, not set up yet"
+                    : " · no login yet"}
                 {e.clockedIn ? ` · on the clock${e.currentProject ? ` at ${e.currentProject}` : ""}` : ""}
               </p>
             </div>
             <span className="num shrink-0 text-[12.5px] text-foreground">{e.hoursToday.toFixed(1)} h today</span>
           </div>
+
+          {/* What still has to happen before this person can clock in, and the
+              control that does it. Only ever one of these shows. */}
+          {!e.hasLogin ? (
+            <div className="flex flex-wrap items-center gap-2 pl-[52px]">
+              <InviteControl
+                employee={e}
+                busy={busy === e.id}
+                onInvite={(email) => invite(e.id, email)}
+                onRevoke={() => revoke(e.id)}
+              />
+            </div>
+          ) : null}
+
+          {link?.id === e.id ? (
+            <div className="ml-[52px] flex items-center gap-2 rounded-xl border border-border/60 bg-foreground/[0.03] p-2">
+              <code className="min-w-0 flex-1 truncate text-[11.5px] text-muted-foreground">
+                {link.url}
+              </code>
+              <CopyLink url={link.url} />
+            </div>
+          ) : null}
 
           <div className="flex flex-wrap items-center gap-1.5 pl-[52px]">
             <span className="text-[11px] uppercase tracking-wider text-muted-foreground">Jobs</span>
@@ -249,9 +355,178 @@ function EmployeeList({
                 ))}
             </select>
           </div>
+
+          {/* Editing who somebody is, kept behind a toggle so the roster reads
+              as a list rather than a wall of inputs. */}
+          <div className="flex flex-wrap items-center gap-1.5 pl-[52px]">
+            <button
+              type="button"
+              onClick={() => setEditing((v) => (v === e.id ? null : e.id))}
+              className="focus-ring inline-flex h-8 items-center gap-1.5 rounded-lg border border-border/60 px-2.5 text-[11.5px] text-muted-foreground hover:text-foreground"
+            >
+              <PencilLine className="size-3" /> {editing === e.id ? "Cancel" : "Edit"}
+            </button>
+            <button
+              type="button"
+              disabled={busy === e.id}
+              onClick={() => setStatus(e.id, e.status === "ACTIVE" ? "INACTIVE" : "ACTIVE")}
+              className="focus-ring inline-flex h-8 items-center gap-1.5 rounded-lg border border-border/60 px-2.5 text-[11.5px] text-muted-foreground hover:text-foreground disabled:opacity-50"
+            >
+              {e.status === "ACTIVE" ? (
+                <>
+                  <UserX className="size-3" /> Deactivate
+                </>
+              ) : (
+                <>
+                  <UserCheck className="size-3" /> Reactivate
+                </>
+              )}
+            </button>
+          </div>
+
+          {editing === e.id ? (
+            <EditEmployee
+              employee={e}
+              onDone={() => {
+                setEditing(null);
+                router.refresh();
+              }}
+            />
+          ) : null}
         </li>
       ))}
-    </ul>
+      </ul>
+    </div>
+  );
+}
+
+/** Copy a one-time link. Vantara sends no email; somebody hands this over. */
+function CopyLink({ url }: { url: string }) {
+  const [copied, setCopied] = React.useState(false);
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        void navigator.clipboard.writeText(url);
+        setCopied(true);
+      }}
+      className="focus-ring inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-border px-2.5 text-[11.5px] text-foreground hover:border-brand/50"
+    >
+      {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
+      {copied ? "Copied" : "Copy link"}
+    </button>
+  );
+}
+
+/**
+ * Getting somebody a login, in whichever state they are in.
+ *
+ * Three of them: never invited, invited and waiting, or invited to an address
+ * that needs changing. All three end at the same action — mint a link — so
+ * the only thing that varies is what it is called and whether an address has
+ * to be typed first.
+ */
+function InviteControl({
+  employee,
+  busy,
+  onInvite,
+  onRevoke,
+}: {
+  employee: WorkforceEmployee;
+  busy: boolean;
+  onInvite: (email: string) => void;
+  onRevoke: () => void;
+}) {
+  const [email, setEmail] = React.useState(employee.inviteEmail);
+  const ready = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim());
+
+  return (
+    <>
+      <input
+        type="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+        placeholder="their@email.com"
+        aria-label={`Email for ${employee.name}`}
+        className="focus-ring h-8 min-w-0 flex-1 rounded-lg border border-border/60 bg-foreground/[0.03] px-2 text-[11.5px] text-foreground outline-none placeholder:text-muted-foreground/60 sm:max-w-[220px]"
+      />
+      <button
+        type="button"
+        disabled={busy || !ready}
+        onClick={() => onInvite(email.trim())}
+        className="focus-ring inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-border px-2.5 text-[11.5px] text-foreground hover:border-brand/50 disabled:opacity-50"
+      >
+        <Mail className="size-3" />
+        {employee.invitePending ? "New link" : "Invite"}
+      </button>
+      {/* Only where there is something to withdraw. Reissuing already
+          replaces the old link; this is for changing your mind entirely. */}
+      {employee.invitePending ? (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={onRevoke}
+          className="focus-ring inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border border-border/60 px-2.5 text-[11.5px] text-muted-foreground hover:border-critical/50 hover:text-critical disabled:opacity-50"
+        >
+          Cancel invite
+        </button>
+      ) : null}
+    </>
+  );
+}
+
+/** Name, title and phone. Not status, and not assignments — those are their own. */
+function EditEmployee({
+  employee,
+  onDone,
+}: {
+  employee: WorkforceEmployee;
+  onDone: () => void;
+}) {
+  const [name, setName] = React.useState(employee.name);
+  const [title, setTitle] = React.useState(employee.title);
+  const [phone, setPhone] = React.useState(employee.phone);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const field =
+    "focus-ring h-9 w-full rounded-lg border border-border/60 bg-foreground/[0.03] px-2.5 text-[12.5px] text-foreground outline-none";
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    const res = await updateEmployee({ employeeId: employee.id, name, title, phone });
+    setBusy(false);
+    if (!res.ok) return setError(res.error);
+    onDone();
+  }
+
+  return (
+    <div className="ml-[52px] flex flex-col gap-2 rounded-xl border border-border/60 p-2.5">
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <label className="flex flex-col gap-1">
+          <span className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Name</span>
+          <input value={name} onChange={(e) => setName(e.target.value)} className={field} />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Title</span>
+          <input value={title} onChange={(e) => setTitle(e.target.value)} className={field} />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-[10.5px] font-semibold uppercase tracking-wider text-muted-foreground">Phone</span>
+          <input value={phone} onChange={(e) => setPhone(e.target.value)} className={field} inputMode="tel" />
+        </label>
+      </div>
+      {error ? <p className="text-[12px] text-critical">{error}</p> : null}
+      <button
+        type="button"
+        disabled={busy || !name.trim()}
+        onClick={save}
+        className="focus-ring inline-flex h-9 w-full items-center justify-center rounded-lg bg-brand px-3 text-[12.5px] font-semibold text-white hover:bg-brand-bright disabled:opacity-50 sm:w-auto sm:self-start sm:px-4"
+      >
+        {busy ? "Saving…" : "Save"}
+      </button>
+    </div>
   );
 }
 
