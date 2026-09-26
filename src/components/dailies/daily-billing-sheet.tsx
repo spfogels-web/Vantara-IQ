@@ -1454,7 +1454,14 @@ export function DailyBillingSheet({
                         compared between crews. The code picker stays: these
                         are still billed against a unit code. */}
                     {MAT_FIXED[i] ? (
-                      <span className="mt-0.5 block text-[7.5px] font-bold tracking-[0.06em] text-gold print:text-[6px] print:text-black">
+                      /* Deliberately larger than every other label on this
+                         sheet. These three are the ones a crew has to find
+                         without hunting, and at the form's own 7.5px they
+                         read as more small print among forty columns of it.
+                         Tight tracking and leading so "Tick marks" can wrap
+                         to two lines inside a narrow column without pushing
+                         the grid wider. */
+                      <span className="mt-0.5 block text-[11.5px] font-extrabold leading-[1.05] tracking-[0.01em] text-gold print:text-[8px] print:text-black">
                         {MAT_FIXED[i]}
                       </span>
                     ) : null}
