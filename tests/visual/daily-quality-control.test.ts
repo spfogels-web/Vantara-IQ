@@ -118,6 +118,14 @@ describe("the daily sheet", () => {
       await sub.locator("text=What a finished one looks like").count(),
       "a crew cannot see the example photographs",
     ).toBeGreaterThan(0);
+    // The examples, in view, as a crew sees them.
+    const ex = sub.locator("text=What your photographs should look like").first();
+    await ex.scrollIntoViewIfNeeded();
+    await sub.waitForTimeout(900);
+    expect(
+      await sub.locator("img[src*=\"pedestal-BD4MPF\"]").count(),
+      "the stamped example photographs are not on the crew page",
+    ).toBe(2);
     await sub.screenshot({ path: join(OUT, "daily-qc-sub.png"), fullPage: false });
   });
 });

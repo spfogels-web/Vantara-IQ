@@ -20,16 +20,33 @@ that has to come back as a PDF, because an unknown path in this app is answered
 by the catch-all route with a healthy placeholder page. Absent, the whole block
 hides and the written checklist still stands.
 
-## `stamped-photo-example.jpg` — optional, and worth adding
+## `pedestal-BD4MPF.jpg` / `pedestal-BD4MPFrear.jpg` — our own work
 
-The panel shows one real field photograph under "What your photographs should
-look like": a pedestal shot with the location, address and time stamp on it, so
-a crew can see what a billable photograph carries rather than only read a list.
+The panel shows these two under "What your photographs should look like": a
+Fortitude ped on Rock Creek Rd, stamped the way every field photograph has to
+be. Real ones rather than a diagram, because a crew recognises the job before
+they read a word of the list beside it.
 
-Drop the file in as `stamped-photo-example.jpg` and it appears. It is loaded
-with an `onError` handler, so until the file exists that whole block hides
-itself — a broken image beside the words "this is what yours should look like"
-is worse than no example.
+The front shot carries the position, heading and address, the 811 and Uniti
+stickers, the route marker `2032 @ 3A` and the IN/OUT written on the tray. The
+rear shot is the grounding with the parts named on the picture — ground rod,
+acorn, copper wire — which is what an approver looks for and cannot infer from
+a photograph of a closed ped.
+
+**These are JPEGs on purpose.** They arrived as 2.3MB and 1.9MB PNGs, which is
+the wrong format for a photograph: 4.2MB of reference image on a page a crew
+opens from a truck twenty times a week. Re-encoded at 900px wide, quality 82,
+they are 384KB for the pair and the stamp is still readable opened full size.
+If they are ever replaced, run them through the same conversion — a PNG of a
+photograph is roughly ten times the bytes for no visible gain:
+
+```
+npx sharp-cli -i in.png -o out.jpg resize 900 -- jpeg --quality 82
+```
+
+Each hides itself with an `onError` handler if its file goes missing, so a
+broken frame never appears beside the words "this is what yours should look
+like".
 
 ## Who can read these
 

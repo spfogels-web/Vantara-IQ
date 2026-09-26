@@ -74,8 +74,31 @@ const TICK_MARKS = [
   "The same counts entered on this sheet under Tick marks, In and Out",
 ];
 
-/** The stamped field photograph shown as the example. Optional asset. */
-const STAMP_EXAMPLE = "/qc/stamped-photo-example.jpg";
+/**
+ * Two of our own photographs, from Rock Creek Rd, shown as the example.
+ *
+ * Real ones rather than a diagram: this is a Fortitude crew's work, stamped
+ * the way every field photograph has to be, and a crew recognises the job
+ * before they read a word of the list beside it.
+ *
+ * Converted from the 2.3MB and 1.9MB PNGs they arrived as. A daily is opened
+ * on a phone in a truck, and four megabytes of reference photograph on a page
+ * somebody loads twenty times a week is a real cost to them — 900px wide at
+ * quality 82 is 384KB for the pair and the stamp is still readable when it is
+ * opened full size.
+ */
+const STAMP_EXAMPLES = [
+  {
+    src: "/qc/pedestal-BD4MPF.jpg",
+    label: "Lid off, stamped",
+    note: "811 and route markers in frame, IN and OUT written on the tray",
+  },
+  {
+    src: "/qc/pedestal-BD4MPFrear.jpg",
+    label: "The grounding, called out",
+    note: "ground rod, acorn and copper wire, labelled on the picture",
+  },
+];
 
 /** Windstream's own standard, if it has been dropped into public/qc. */
 const GUIDE = {
@@ -345,29 +368,44 @@ function Guide() {
   );
 }
 
-/** What a stamped photograph has to carry before it can support a bill. */
+/**
+ * What the stamp has to carry, read off the examples below.
+ *
+ * Described from the photographs rather than from what a stamp could in
+ * principle contain: these carry the position, the heading and the address,
+ * and a crew comparing their own shot against this list should find every
+ * line of it on the picture.
+ */
 const STAMP_ITEMS = [
-  "Latitude and longitude, and the street address",
-  "The date and time the photograph was taken",
-  "The structure number and route marker in the frame — readable",
-  "Enough of the surroundings to show where it is, not just the box",
+  "Latitude and longitude — decimal and degrees, as the app writes them",
+  "The street address, town and county",
+  "The heading, so the direction the shot was taken from is on the picture",
+  "The structure number and route marker in frame and readable — 2032 @ 3A",
+  "Enough of the ground around it to place the structure, not just the box",
 ];
 
 /**
  * What a billable photograph actually looks like.
  *
  * A crew can read every list on this page and still send in a picture of an
- * open ped against a patch of dirt, which proves the work was done somewhere
- * by someone at some time. The stamp is what turns a photograph into
- * evidence: where it was taken, and when.
+ * open ped against a patch of dirt, which proves that work was done somewhere
+ * by someone. The stamp is what turns a photograph into evidence, and these
+ * two are our own — a Fortitude ped on Rock Creek Rd, shot the way every one
+ * of them has to be.
  *
- * The example renders only once somebody has dropped the file in. A broken
- * image beside the words "this is what yours should look like" is worse than
- * no example at all — see public/qc/README.md for the path.
+ * Two shots rather than one because they are different jobs. The first is the
+ * structure: stickers, route marker, lid off, the IN and OUT written on the
+ * tray. The second is the grounding, with the parts named on the picture —
+ * the ground rod, the acorn and the copper wire are the three things an
+ * approver looks for and cannot infer from a photograph of a closed ped.
+ *
+ * Each hides itself if its file is missing rather than showing a broken
+ * frame next to the words "this is what yours should look like".
  */
 function StampExample() {
-  const [there, setThere] = React.useState(true);
-  if (!there) return null;
+  const [gone, setGone] = React.useState<string[]>([]);
+  const shown = STAMP_EXAMPLES.filter((s) => !gone.includes(s.src));
+  if (shown.length === 0) return null;
 
   return (
     <div className="mt-4 rounded-lg border border-border bg-background/40 p-3">
@@ -376,22 +414,36 @@ function StampExample() {
         What your photographs should look like
       </p>
       <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
-        Every field photograph is taken with the stamp on. Same camera settings for
-        the outside shot, the lid-off shot and the tick marks.
+        Ours, from Rock Creek Rd. Every field photograph is taken with the stamp
+        on — the outside shot, the lid-off shot, the grounding and the tick marks.
       </p>
 
-      <div className="mt-2.5 flex flex-col gap-3 sm:flex-row">
-        <figure className="shrink-0 overflow-hidden rounded-lg border border-border bg-black sm:w-[220px]">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={STAMP_EXAMPLE}
-            alt="A pedestal photographed with the location and time stamp showing"
-            loading="lazy"
-            onError={() => setThere(false)}
-            className="block w-full object-contain"
-          />
-        </figure>
-        <ul className="min-w-0 flex-1 space-y-1">
+      <div className="mt-2.5 grid grid-cols-1 gap-3 sm:grid-cols-[repeat(2,minmax(0,200px))_1fr]">
+        {shown.map((s) => (
+          // self-start, or the shorter of the two stretches to the row's
+          // height and pads itself out with a black slab under the caption.
+          <figure
+            key={s.src}
+            className="self-start overflow-hidden rounded-lg border border-border bg-black"
+          >
+            <a href={s.src} target="_blank" rel="noreferrer">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={s.src}
+                alt={`${s.label} — ${s.note}`}
+                loading="lazy"
+                onError={() => setGone((g) => [...g, s.src])}
+                className="block w-full object-contain"
+              />
+            </a>
+            <figcaption className="border-t border-border bg-background px-2.5 py-1.5">
+              <span className="block text-[12px] font-medium text-foreground">{s.label}</span>
+              <span className="block text-[11px] leading-snug text-muted-foreground">{s.note}</span>
+            </figcaption>
+          </figure>
+        ))}
+
+        <ul className="min-w-0 space-y-1 sm:pt-0.5">
           {STAMP_ITEMS.map((i) => (
             <li key={i} className="flex gap-1.5 text-[12px] leading-relaxed text-muted-foreground">
               <CheckCircle2 className="mt-[3px] size-3 shrink-0 text-success/70" />
