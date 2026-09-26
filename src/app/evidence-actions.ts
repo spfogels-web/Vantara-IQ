@@ -203,9 +203,20 @@ export async function setPreConStatus(
   projectId: string,
   status: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETE",
 ) {
-  // Marking a route documented is an office decision, not a field one.
-  const user = await requireStaff();
-  await assertProjectAccess(projectId);
+  /**
+   * The crew that walked the route may say it is documented.
+   *
+   * This was requireStaff, which made the office assert that a route they had
+   * not walked was photographed. The person who can answer is the one who was
+   * standing there, and pre-construction now gates their own production — so
+   * the affirmation and the consequence land on the same people.
+   *
+   * assertProjectAccess is what holds it: a crew can only do this for a job
+   * they are actually assigned to, checked against the database rather than
+   * against a hidden button. An unassigned project — or a project id typed
+   * into the request by hand — throws before anything is written.
+   */
+  const user = await assertProjectAccess(projectId);
 
   const complete = status === "COMPLETE";
   await prisma.project.update({

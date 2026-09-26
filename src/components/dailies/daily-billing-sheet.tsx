@@ -22,7 +22,12 @@ import {
 import { cn } from "@/lib/utils";
 import { CodeCombobox } from "@/components/dailies/code-combobox";
 import { Button } from "@/components/ui/button";
-import { QualityControl } from "@/components/dailies/quality-control";
+import {
+  QcReminder,
+  QcFullStandard,
+  scrollToExamples,
+} from "@/components/qc/build-standards";
+import { qcProfileFor } from "@/lib/qc-standards";
 import { useT } from "@/components/layout/language-provider";
 import {
   deleteDailySheet,
@@ -135,6 +140,14 @@ export type SheetProject = {
   crewNumber: string;
   mapUrl?: string | null;
   markups?: unknown;
+  /**
+   * Which build standard applies to this job, by customer short code.
+   *
+   * The daily resolves the same profile the project does, from the same
+   * function, so a crew is never shown one standard on the job and a
+   * different one on the sheet.
+   */
+  customerShortCode?: string | null;
 };
 
 /**
@@ -538,6 +551,16 @@ export function DailyBillingSheet({
    * is frozen — this is the only thing that can still change, and it needs its
    * own way to be saved.
    */
+  /**
+   * The QC confirmation, and where the page should jump if it is missing.
+   *
+   * Never restored from a saved sheet: an acknowledgment is made at the
+   * moment of filing by the person filing, so reopening a draft asks again
+   * rather than carrying somebody else’s tick forward.
+   */
+  const [qcAck, setQcAck] = React.useState(false);
+  const qcRef = React.useRef<HTMLDivElement>(null);
+
   const [savingPhotos, setSavingPhotos] = React.useState(false);
   const submittedPhotoCount = React.useRef<number | null>(null);
   if (locked && submittedPhotoCount.current === null) {
@@ -566,6 +589,7 @@ export function DailyBillingSheet({
       crewNumber: header.crewNumber,
       roads,
       filedForId: filedForId || null,
+      qcAck,
       header,
       laborCodes,
       laborRows: labor,
@@ -581,7 +605,9 @@ export function DailyBillingSheet({
     // whoever was picked first.
     // roads for the same reason — it is read above, so leaving it out sends
     // whatever road was in the box when this closure was made.
-    [sheetId, project, header, laborCodes, labor, matCodes, mat, redlines, notes, photos, redlineFiles, filedForId, roads],
+    // qcAck for the same reason as the two above: it is read in this closure,
+    // so leaving it out would submit whatever it was when the closure was made.
+    [sheetId, project, header, laborCodes, labor, matCodes, mat, redlines, notes, photos, redlineFiles, filedForId, roads, qcAck],
   );
 
   /**
@@ -689,6 +715,26 @@ export function DailyBillingSheet({
 
   async function submit() {
     if (saving || submitting) return;
+
+    /**
+     * The confirmation, before anything is sent.
+     *
+     * Checked here so the crew gets the answer immediately and nothing they
+     * typed is touched — no save, no navigation, no clearing. The server
+     * refuses it too; this is the courteous half.
+     *
+     * Corrections are exempt, matching the server: a day already on the board
+     * is being re-filed, and the person correcting it was not necessarily
+     * the person who built it.
+     */
+    if (!saved?.dailyId && !qcAck) {
+      setSaveError(
+        "Confirm the QC requirements before filing. Tick the QC confirmation below the sheet.",
+      );
+      qcRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      qcRef.current?.querySelector("input")?.focus();
+      return;
+    }
 
     if (missingToSubmit.length > 0) {
       setSaveError(
@@ -827,6 +873,19 @@ export function DailyBillingSheet({
           </span>
         </div>
       ) : null}
+
+      {/* The standard, before the deadline and before the form. A crew
+          reading this sheet has usually already built the day, so what they
+          need here is the way back into the requirements and the examples —
+          and the sentence saying the day can come back if they are missed.
+
+          The same profile the project resolved, from the same function: a
+          job that is not built to Kinetic's specification gets no Kinetic
+          manual button here either. */}
+      <QcReminder
+        profile={qcProfileFor({ customerShortCode: project?.customerShortCode ?? null })}
+        onViewExamples={scrollToExamples}
+      />
 
       {/* The deadline, where the person filling the sheet in will see it.
           A rule a crew is held to has to be written where they are, at the
@@ -1629,7 +1688,13 @@ export function DailyBillingSheet({
           {/* Above the uploader, not beside it. This is what a crew needs to
               read before they leave the hole — a daily that comes back for a
               missing lid-off shot comes back after the ground has closed. */}
-          <QualityControl className="mt-4" />
+          {/* The full requirements and the approved photographs, from the
+              same source the project reads. The reminder at the top of the
+              page links down to this. */}
+          <QcFullStandard
+            profile={qcProfileFor({ customerShortCode: project?.customerShortCode ?? null })}
+            className="mt-4"
+          />
 
           {/* ── Field photos ────────────────────────────────────── */}
           {/* Outside the lock on purpose. The numbers freeze the moment a
@@ -1745,6 +1810,43 @@ export function DailyBillingSheet({
             </div>
           ) : null}
           </fieldset>
+
+          {/* The last thing on the sheet, and the last thing before filing.
+              Screen only — this is Fortitude asking a person to stand behind
+              the work, and Globe's form has no line for it. */}
+          {!locked && !saved?.dailyId ? (
+            <div ref={qcRef} className="border-t border-border px-3 py-3 print:hidden">
+              <p className="text-[10.5px] font-bold uppercase tracking-[0.09em] text-muted-foreground">
+                QC confirmation
+              </p>
+              <label
+                className={cn(
+                  "mt-1.5 flex cursor-pointer items-start gap-2.5 rounded-xl border p-3 transition-colors",
+                  qcAck
+                    ? "border-success/40 bg-success/[0.06]"
+                    : "border-warning/40 bg-warning/[0.06]",
+                )}
+              >
+                <input
+                  type="checkbox"
+                  checked={qcAck}
+                  onChange={(e) => setQcAck(e.target.checked)}
+                  className="mt-0.5 size-4 shrink-0 accent-[var(--brand)]"
+                />
+                <span className="min-w-0">
+                  <span className="block text-[12.5px] leading-relaxed text-foreground">
+                    I confirm I reviewed the QC requirements and photo examples, and the
+                    work and documentation submitted on this daily follow those
+                    requirements.
+                  </span>
+                  <span className="mt-1 block text-[11.5px] text-muted-foreground">
+                    Recorded against your name when the day is filed. Saving a draft
+                    does not need this.
+                  </span>
+                </span>
+              </label>
+            </div>
+          ) : null}
         </div>
       </div>
 

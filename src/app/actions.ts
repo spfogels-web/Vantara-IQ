@@ -1946,6 +1946,15 @@ export type SheetPayload = {
   redlineFiles?: unknown;
   /** Staff only: the crew this sheet is being typed up for. */
   filedForId?: string | null;
+  /**
+   * The crew confirming, at submit, that the work on this sheet follows the
+   * build standard.
+   *
+   * Absent on a draft, deliberately: saving is not a claim about anything,
+   * and requiring it to save would mean a crew could not put a half-finished
+   * sheet down without asserting something they cannot yet assert.
+   */
+  qcAck?: boolean;
 };
 
 const asJson = (v: unknown) => (v ?? null) as Prisma.InputJsonValue;
@@ -2044,8 +2053,11 @@ export async function saveDailySheet(input: SheetPayload) {
 export async function submitDailySheet(input: SheetPayload) {
   // saveDailySheet below checks this too. Stated again here so the guard
   // doesn't quietly depend on that call staying first.
-  if (input.projectId) await assertProjectAccess(input.projectId);
-  else await requireUser();
+  // Kept, because the acknowledgment below is recorded against whoever's
+  // session this is and never against a name arriving in the payload.
+  const filer = input.projectId
+    ? await assertProjectAccess(input.projectId)
+    : await requireUser();
 
   const saved = await saveDailySheet(input);
   const sheet = await prisma.dailySheet.findUnique({ where: { id: saved.id } });
@@ -2134,6 +2146,66 @@ export async function submitDailySheet(input: SheetPayload) {
     };
   }
 
+  /**
+   * Production cannot be filed against a route nobody documented first.
+   *
+   * Pre-construction photographs are the only record of what the ground
+   * looked like before a crew touched it. Once production is in, the
+   * opportunity has gone — a homeowner's claim about a driveway three weeks
+   * later is answered by those photographs or it is not answered at all.
+   *
+   * Deliberately scoped to production. A day with no quantities is a real
+   * day — rain, locates, no access, waiting on materials — and refusing it
+   * would leave inventing footage as the only way to file, which is the exact
+   * failure the zero-day rule above exists to prevent. So: quantities of zero
+   * pass, quantities above zero do not.
+   *
+   * Enforced here rather than only in the form, for the reason stated above:
+   * a submission is a server action and can arrive without the form ever
+   * having rendered.
+   *
+   * Days already on the board are exempt on the same grounds as the evidence
+   * gate — the ground closed months ago and blocking a correction would not
+   * put the photographs on file.
+   */
+  /**
+   * Somebody has to stand behind the build standard, by name.
+   *
+   * Most of what the standard asks for cannot be seen from here: gravel
+   * depth, ground rod height, whether the cables were labelled. Reading those
+   * off a photograph would be inventing compliance, so the honest mechanism
+   * is a person saying so and the record keeping who said it.
+   *
+   * Refused server-side because a tick a client could skip is not an
+   * acknowledgment, it is decoration. Exempt for corrections, which are
+   * re-filings of days that closed before the rule.
+   */
+  if (!sheet.dailyId && !input.qcAck) {
+    return {
+      ok: false as const,
+      error:
+        "Confirm the QC requirements before filing. Tick the QC confirmation below the sheet to say the work and documentation on this day follow the build standard.",
+      needsQcAck: true as const,
+    };
+  }
+
+  const producedSomething = lineItems.some((l) => l.quantity > 0);
+  if (!sheet.dailyId && producedSomething && sheet.projectId) {
+    const project = await prisma.project.findUnique({
+      where: { id: sheet.projectId },
+      select: { preConStatus: true },
+    });
+    if (project && project.preConStatus !== "COMPLETE") {
+      return {
+        ok: false as const,
+        error:
+          "Pre-construction documentation required. Production can't be submitted until this project's pre-construction photos and video are documented. Open the project, capture them under Project evidence, and mark pre-construction documented — then file this day. Nothing you have entered here is lost.",
+        needsPreCon: true as const,
+        projectId: sheet.projectId,
+      };
+    }
+  }
+
   const header = (sheet.header ?? {}) as Record<string, unknown>;
   const str = (k: string) => (typeof header[k] === "string" ? (header[k] as string) : "");
 
@@ -2220,7 +2292,15 @@ export async function submitDailySheet(input: SheetPayload) {
 
   await prisma.dailySheet.update({
     where: { id: sheet.id },
-    data: { status: "SUBMITTED", dailyId: daily.id },
+    data: {
+      status: "SUBMITTED",
+      dailyId: daily.id,
+      // Written here rather than on save: the acknowledgment is about the
+      // sheet being filed, and a draft is not being filed. Recorded against
+      // the person whose session this is, never a name from the form.
+      qcAckBy: filer.name || filer.email,
+      qcAckAt: new Date(),
+    },
   });
 
   revalidatePath("/dailies");

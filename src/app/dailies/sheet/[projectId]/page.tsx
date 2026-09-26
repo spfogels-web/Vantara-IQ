@@ -72,6 +72,8 @@ export default async function ProjectDailySheetPage({
           location: project.location,
           crew: project.crew,
           crewNumber,
+          // Which build standard applies. Same resolver as the project page.
+          customerShortCode: project.customerShortCode ?? null,
           mapUrl: project.mapUrl ?? null,
           markups: project.markups ?? null,
         }}

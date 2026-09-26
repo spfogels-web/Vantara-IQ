@@ -55,6 +55,8 @@ import { MessageButton } from "@/components/messages/message-button";
 import { PanelBody } from "@/components/common/panel";
 import { StatusPill } from "@/components/common/status-pill";
 import { ProjectHeaderActions, ProjectMapPanel } from "@/components/projects/project-detail-client";
+import { BuildStandards, BeforeWorkBegins } from "@/components/qc/build-standards";
+import { qcProfileFor } from "@/lib/qc-standards";
 import { ProjectMaterials } from "@/components/projects/project-materials";
 import { ProjectLocateRules } from "@/components/locates/project-locate-rules";
 import { getProjectLocateRules, getProjectLocateSummary } from "@/data/locates-ops";
@@ -169,7 +171,14 @@ export default async function ProjectDetailPage({
               variant="solid"
             />
           ) : null}
-          <ProjectHeaderActions projectId={project.id} photoUrl={project.photoUrl} />
+          {/* Staff only. Cover photo, Edit and Delete are all requireStaff on
+              the server, so a crew pressing them got a refusal — a door that
+              bounces you is worse than no door, and it reads as the product
+              being broken rather than as a permission. The server checks
+              stay exactly as they are; this only stops offering them. */}
+          {staff ? (
+            <ProjectHeaderActions projectId={project.id} photoUrl={project.photoUrl} />
+          ) : null}
         </div>
       </div>
 
@@ -293,6 +302,18 @@ export default async function ProjectDetailPage({
             </div>
           ) : null}
         </ProjectSection>
+
+        {/* QC before the map and before the evidence workflow, because this
+            is the order the work happens in: a crew opening a job reads the
+            standard, then the plans, then documents the route. The same
+            component and the same source the daily reads from, so the two
+            cannot drift.
+
+            The profile is resolved from the customer, never defaulted — a
+            job that is not built to Kinetic's specification is not shown
+            Kinetic's manual. */}
+        <BeforeWorkBegins preConStatus={project.preConStatus ?? "NOT_STARTED"} />
+        <BuildStandards profile={qcProfileFor(project)} />
 
         {/* The plan drawing. Left unmounted until opened — this is the PDF
             engine, and it was the single heaviest thing on the old page. */}
@@ -523,7 +544,11 @@ export default async function ProjectDetailPage({
               completedBy={project.preConCompletedBy ?? ""}
               completedAt={project.preConCompletedAt ?? null}
               count={preConCount}
-              canComplete={staff}
+              /* The crew that walked the route may say it is documented — the
+                 server allows it for an assigned crew and gates it on
+                 assignment, so hiding the control here would only mean
+                 nobody could do the thing the workflow now depends on. */
+              canComplete
             />
             <ProjectPhotos projectId={project.id} photos={photos} canDelete={staff} />
           </div>

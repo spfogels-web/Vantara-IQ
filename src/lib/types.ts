@@ -78,6 +78,15 @@ export interface Project {
   preConCompletedAt?: string | null;
   /** As-built redline markups (lines + dots) drawn over the map. */
   markups?: unknown;
+  /**
+   * The customer this job is built for, by short code.
+   *
+   * Read by qcProfileFor to decide whose build standard applies. The code
+   * rather than the name, because the name gets edited and the code is the
+   * business identifier — and getting this wrong means putting another
+   * carrier's specification in front of a crew.
+   */
+  customerShortCode?: string | null;
 }
 
 export interface HealthBucket {

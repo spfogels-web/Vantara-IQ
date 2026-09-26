@@ -1378,9 +1378,13 @@ export async function getProject(id: string): Promise<Project | undefined> {
 
   const r = await prisma.project.findUnique({
     where: { id },
-    include: { crews: { select: { subcontractor: { select: { company: true } } } } },
+    include: {
+      crews: { select: { subcontractor: { select: { company: true } } } },
+      // Which build standard applies. Not billing: no rate is read here.
+      customer: { select: { shortCode: true } },
+    },
   });
-  return r ? toProject(r) : undefined;
+  return r ? { ...toProject(r), customerShortCode: r.customer?.shortCode ?? null } : undefined;
 }
 
 /**

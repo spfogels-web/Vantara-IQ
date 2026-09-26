@@ -374,6 +374,7 @@ model Project {
   /// Not derived from a photograph count: see PreConStatus. This is what a
   /// readiness check will eventually read, alongside locates and materials.
   preConStatus      PreConStatus        @default(NOT_STARTED)
+  qcAcks            ProjectQcAck[]
   preConCompletedBy String              @default("")
   preConCompletedAt DateTime?
   customer          Customer?           @relation(fields: [customerId], references: [id])
@@ -452,6 +453,16 @@ model DailySheet {
   /// own capture/upload timestamp, so the record shows when it was taken and
   /// not merely when the sheet was submitted.
   photos       Json           @default("[]")
+  /// Who confirmed the build standard on this sheet, and when.
+  ///
+  /// Its own columns rather than a key in `header` above: that blob is
+  /// Globe's form, and this is Fortitude asking a person to stand behind the
+  /// work. Empty and null on every sheet filed before the rule existed, which
+  /// reads as "never asked" rather than "refused" — the same shape the submit
+  /// path already uses for the dailies that predate the evidence gate.
+  qcAckBy      String         @default("")
+  qcAckAt      DateTime?
+
   status       String         @default("DRAFT") // DRAFT | SUBMITTED
   /// The Daily this sheet produced on submit, if any.
   dailyId      String?
@@ -693,6 +704,7 @@ model Subcontractor {
   contractorLocates ContractorLocate[]
   calendarEvents    CalendarEvent[]
   createdAt         DateTime            @default(now())
+  qcAcks ProjectQcAck[]
 }
 
 /// A file a subcontractor uploads to an onboarding/compliance section. Stored as
@@ -3550,6 +3562,37 @@ model Employee {
 ///
 /// The password is set by the person themselves on the page this token opens.
 /// No administrator ever types it, sees it, or can read it back.
+/// A crew saying they have read the build standard for a job, before they
+/// mobilise on it.
+///
+/// One row per crew per job, not one per project: a job is reviewed by each
+/// company that works it, and recording only the last would lose the rest.
+/// Project.preConCompletedBy is two columns because pre-construction is done
+/// once for the route; this is a different question asked of each crew.
+///
+/// It records that somebody affirmatively said so. It is never written by
+/// opening the project or scrolling past the section — an acknowledgment
+/// nobody made is worse than none, because it reads on a report as though
+/// somebody did.
+model ProjectQcAck {
+  id String @id @default(cuid())
+
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  projectId String
+
+  subcontractor   Subcontractor @relation(fields: [subcontractorId], references: [id], onDelete: Cascade)
+  subcontractorId String
+
+  /// The person, by name or email. Their user id is not kept here: a login
+  /// can be deleted and the acknowledgment still has to say who made it.
+  acknowledgedBy String
+  acknowledgedAt DateTime @default(now())
+
+  /// Reviewing again updates this row rather than adding a second.
+  @@unique([projectId, subcontractorId])
+  @@index([projectId])
+}
+
 model EmployeeInvite {
   token String @id
 
