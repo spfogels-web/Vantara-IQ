@@ -102,6 +102,18 @@ const SUB_ALLOWED_PREFIXES = [
   "/settings",
   "/api/daily-sheet",
   "/api/project-map",
+  // The OSP quality-assurance standard and the example photographs beside it.
+  //
+  // Without this line the Quality Control panel on a daily was blank for the
+  // people it is written for. It asks for the guide with a HEAD request and
+  // renders nothing unless the reply is really a PDF — and middleware was
+  // bouncing a crew's request to /dailies, so the reply was a page. Staff saw
+  // the standard and the crews held to it did not.
+  //
+  // The .png examples already loaded: the matcher below excludes image
+  // extensions but not .pdf, which is why only the guide was refused and why
+  // this looked like a missing feature rather than a redirect.
+  "/qc",
   // Their own pay statement's remittance advice. The route checks the
   // statement belongs to the company asking before it renders anything —
   // what another crew is paid is the one figure that must never cross over.

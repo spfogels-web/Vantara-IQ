@@ -59,6 +59,24 @@ const LID_OFF = [
   "Cable secured and labeled, framing neat",
 ];
 
+/**
+ * Main line, where the footage is measured rather than counted.
+ *
+ * Tick marks are the sheet's evidence for a run: the count that says how far
+ * the cable went, and the in and out at each structure. The numbers go in the
+ * material section of this sheet, and the photograph is what lets somebody
+ * check them a month later without driving the route again.
+ */
+const TICK_MARKS = [
+  "Photograph the tick marks on the cable — the count has to be readable",
+  "The in and the out at each structure, photographed at the structure",
+  "Tick marks on every main line fibre or microfibre pull, without exception",
+  "The same counts entered on this sheet under Tick marks, In and Out",
+];
+
+/** The stamped field photograph shown as the example. Optional asset. */
+const STAMP_EXAMPLE = "/qc/stamped-photo-example.jpg";
+
 /** Windstream's own standard, if it has been dropped into public/qc. */
 const GUIDE = {
   href: "/qc/quality-assurance-guide.pdf",
@@ -157,11 +175,25 @@ export function QualityControl({ className }: { className?: string }) {
             <Shot n={3} title="The redline print" items={REDLINE} />
           </div>
 
+          {/* Main line only, and said separately because it is the one item
+              that is not about a structure. The footage on a pull is taken
+              from the cable itself, so the cable has to be photographed. */}
+          <div className="mt-3">
+            <Shot
+              n={4}
+              title="Tick marks — main line fibre and microfibre"
+              items={TICK_MARKS}
+              note="Any main line pull. Without the tick mark photograph the footage on the pull is a number nobody can check."
+            />
+          </div>
+
           <p className="mt-3 text-[12px] leading-relaxed text-muted-foreground">
             Two photographs of every ped, handhole and FDH — one of each. A grounded ped that
             nobody photographed looks exactly like one that was never grounded, and the person
             approving your sheet was not standing there.
           </p>
+
+          <StampExample />
 
           <Guide />
         </div>
@@ -170,7 +202,18 @@ export function QualityControl({ className }: { className?: string }) {
   );
 }
 
-function Shot({ n, title, items }: { n: number; title: string; items: string[] }) {
+function Shot({
+  n,
+  title,
+  items,
+  note,
+}: {
+  n: number;
+  title: string;
+  items: string[];
+  /** One line under the heading, where the rule needs a reason. */
+  note?: string;
+}) {
   return (
     <div className="rounded-lg border border-border bg-background/40 p-3">
       <p className="flex items-center gap-2 text-[12.5px] font-semibold text-foreground">
@@ -180,6 +223,9 @@ function Shot({ n, title, items }: { n: number; title: string; items: string[] }
         <Camera className="size-3.5 text-muted-foreground" />
         {title}
       </p>
+      {note ? (
+        <p className="mt-1 text-[11.5px] leading-relaxed text-warning">{note}</p>
+      ) : null}
       <ul className="mt-2 space-y-1">
         {items.map((i) => (
           <li key={i} className="flex gap-1.5 text-[12px] leading-relaxed text-muted-foreground">
@@ -294,6 +340,65 @@ function Guide() {
             </span>
           </a>
         ))}
+      </div>
+    </div>
+  );
+}
+
+/** What a stamped photograph has to carry before it can support a bill. */
+const STAMP_ITEMS = [
+  "Latitude and longitude, and the street address",
+  "The date and time the photograph was taken",
+  "The structure number and route marker in the frame — readable",
+  "Enough of the surroundings to show where it is, not just the box",
+];
+
+/**
+ * What a billable photograph actually looks like.
+ *
+ * A crew can read every list on this page and still send in a picture of an
+ * open ped against a patch of dirt, which proves the work was done somewhere
+ * by someone at some time. The stamp is what turns a photograph into
+ * evidence: where it was taken, and when.
+ *
+ * The example renders only once somebody has dropped the file in. A broken
+ * image beside the words "this is what yours should look like" is worse than
+ * no example at all — see public/qc/README.md for the path.
+ */
+function StampExample() {
+  const [there, setThere] = React.useState(true);
+  if (!there) return null;
+
+  return (
+    <div className="mt-4 rounded-lg border border-border bg-background/40 p-3">
+      <p className="flex items-center gap-2 text-[12.5px] font-semibold text-foreground">
+        <Camera className="size-3.5 text-muted-foreground" />
+        What your photographs should look like
+      </p>
+      <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
+        Every field photograph is taken with the stamp on. Same camera settings for
+        the outside shot, the lid-off shot and the tick marks.
+      </p>
+
+      <div className="mt-2.5 flex flex-col gap-3 sm:flex-row">
+        <figure className="shrink-0 overflow-hidden rounded-lg border border-border bg-black sm:w-[220px]">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={STAMP_EXAMPLE}
+            alt="A pedestal photographed with the location and time stamp showing"
+            loading="lazy"
+            onError={() => setThere(false)}
+            className="block w-full object-contain"
+          />
+        </figure>
+        <ul className="min-w-0 flex-1 space-y-1">
+          {STAMP_ITEMS.map((i) => (
+            <li key={i} className="flex gap-1.5 text-[12px] leading-relaxed text-muted-foreground">
+              <CheckCircle2 className="mt-[3px] size-3 shrink-0 text-success/70" />
+              <span>{i}</span>
+            </li>
+          ))}
+        </ul>
       </div>
     </div>
   );

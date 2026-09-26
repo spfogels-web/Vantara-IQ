@@ -53,6 +53,19 @@ import { useOrgName } from "@/components/layout/org-provider";
 
 const UNIT_COLS = 10; // "HOURLY / UNIT CODE" columns across the production grid
 const MAT_COLS = 7; // "MAT / UNIT CODE" columns in the material-only section
+
+/**
+ * The three material columns that always mean the same thing.
+ *
+ * A main line pull is measured off the cable rather than counted off the
+ * ground, so every sheet records the tick mark count and the in and out at
+ * each structure. Naming the columns rather than leaving seven identical ones
+ * is what makes those numbers comparable between crews and checkable against
+ * the photograph the Quality Control panel now asks for.
+ *
+ * The remaining four stay unnamed: they are whatever material that day needed.
+ */
+const MAT_FIXED = ["Tick marks", "In", "Out"] as const;
 const LABOR_ROWS = 16;
 const MAT_ROWS = 10;
 const CREW_SLOTS = 5;
@@ -1434,8 +1447,19 @@ export function DailyBillingSheet({
                     className="border border-border px-0.5 py-1 align-bottom text-[7px] font-semibold uppercase leading-tight tracking-[0.03em] sheet-label print:text-[5.5px]"
                   >
                     Mat / Unit Code
+                    {/* The first three carry a fixed name as well as their
+                        code. A main line pull is measured off the cable, and
+                        the count, the in and the out have to land in the same
+                        three columns on every sheet or the numbers cannot be
+                        compared between crews. The code picker stays: these
+                        are still billed against a unit code. */}
+                    {MAT_FIXED[i] ? (
+                      <span className="mt-0.5 block text-[7.5px] font-bold tracking-[0.06em] text-gold print:text-[6px] print:text-black">
+                        {MAT_FIXED[i]}
+                      </span>
+                    ) : null}
                     <CodeSelect
-                      label={`Material code ${i + 1}`}
+                      label={MAT_FIXED[i] ? `${MAT_FIXED[i]} unit code` : `Material code ${i + 1}`}
                       codes={billableCodes}
                       value={matCodes[i]}
                       onChange={(v) =>
