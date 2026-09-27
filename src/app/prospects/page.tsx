@@ -35,7 +35,7 @@ export default async function ProspectsPage() {
   }
 
   // The full records and the state/market suggestions feed the add/edit form.
-  const [rows, overview, editable, summary, owners] = await Promise.all([
+  const [rows, overview, editable, summary] = await Promise.all([
     getProspectRows(),
     getProspectOverview(),
     getProspects(),
@@ -55,8 +55,7 @@ export default async function ProspectsPage() {
     >
       <ProspectsCrm
         rows={rows}
-        overview={overview}
-        owners={owners.map((o) => ({ id: o.id, name: o.name || o.email }))}
+        overview={overview}
         canManage={staff}
         editable={editable}
         knownStates={summary.states.map((x) => x.name)}

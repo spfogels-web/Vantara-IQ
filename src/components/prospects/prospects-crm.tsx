@@ -5,21 +5,17 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
-  Building2,
   Check,
-  ChevronDown,
   Loader2,
-  MapPin,
-  Phone,
   Plus,
   Search,
-  User,
+  X,
   Users,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { formatCurrency } from "@/lib/format";
-import { Panel, PanelHeader } from "@/components/common/panel";
+import { initials } from "@/lib/format";
+import { Panel } from "@/components/common/panel";
 import type { ProspectRow } from "@/data/prospects-crm";
 import type { Prospect } from "@/lib/types";
 import { ProspectForm } from "@/components/prospects/prospect-form";
@@ -112,19 +108,15 @@ const STAGE_TONE: Record<string, string> = {
   DO_NOT_USE: "bg-critical/18 text-critical",
 };
 
-const KIND_ICON: Record<string, React.ComponentType<{ className?: string }>> = {
-  SUBCONTRACTOR: Users,
-  WORKER: User,
-  PRIME: Building2,
-};
+/** Stages that mean the pursuit is over, one way or another. */
+const CLOSED = ["WON", "LOST", "DORMANT", "DO_NOT_USE"];
 
 type Tab = "ALL" | "SUBCONTRACTOR" | "WORKER" | "PRIME";
-type Quick = "ALL" | "DUE" | "OVERDUE" | "AVAILABLE" | "READY" | "PRIME";
+type Quick = "ALL" | "PIPELINE" | "DUE" | "OVERDUE" | "AVAILABLE" | "READY" | "PRIME" | "CLOSED";
 
 export function ProspectsCrm({
   rows,
   overview,
-  owners,
   canManage,
   editable,
   knownStates,
@@ -139,7 +131,6 @@ export function ProspectsCrm({
     readyToOnboard: number;
     primeOpportunities: number;
   };
-  owners: { id: string; name: string }[];
   canManage: boolean;
   /** Full records, for the add/edit form. Staff only. */
   editable: Prospect[];
@@ -153,12 +144,12 @@ export function ProspectsCrm({
   /** null = closed. { p: null } = adding. { p } = editing that one. */
   const [form, setForm] = React.useState<{ p: Prospect | null } | null>(null);
 
-  const CLOSED = ["WON", "LOST", "DORMANT", "DO_NOT_USE"];
-
   const shown = React.useMemo(() => {
     const q = query.trim().toLowerCase();
     const kept = rows.filter((r) => {
       if (tab !== "ALL" && r.kind !== tab) return false;
+      if (quick === "PIPELINE" && CLOSED.includes(r.stage)) return false;
+      if (quick === "CLOSED" && !CLOSED.includes(r.stage)) return false;
       if (quick === "DUE" && !(r.dueToday || r.overdueDays > 0)) return false;
       if (quick === "OVERDUE" && r.overdueDays === 0) return false;
       if (quick === "AVAILABLE" && r.availability !== "AVAILABLE_NOW") return false;
@@ -183,140 +174,215 @@ export function ProspectsCrm({
     );
   }, [rows, tab, quick, query]);
 
+  // Which prospect the right-hand pane is showing. Defaults to the first in
+  // the list rather than nothing: an empty half of the screen teaches nobody
+  // anything, and the top row is the one the sort put there because it needs
+  // attention.
+  const selected = React.useMemo(
+    () => shown.find((r) => r.id === openId) ?? shown[0] ?? null,
+    [shown, openId],
+  );
+
+  const counts = React.useMemo(
+    () => ({
+      ALL: rows.length,
+      WORKER: rows.filter((r) => r.kind === "WORKER").length,
+      SUBCONTRACTOR: rows.filter((r) => r.kind === "SUBCONTRACTOR").length,
+      PRIME: rows.filter((r) => r.kind === "PRIME").length,
+    }),
+    [rows],
+  );
+
+  const notAFit = rows.filter((r) => CLOSED.includes(r.stage)).length;
+  const pct = (n: number) => (rows.length === 0 ? "—" : `${Math.round((n / rows.length) * 100)}% of total`);
+
   return (
     <div className="flex flex-col gap-3">
+      {/* Five counts, and each one narrows the list below it. A number that
+          cannot be pressed is a number somebody has to go and find. */}
       <div className="grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-5">
-        <Kpi label="Active pipeline" value={overview.pipeline} hint="not closed out" active={quick === "ALL"} onClick={() => setQuick("ALL")} />
+        <Kpi
+          label="Total prospects"
+          value={rows.length}
+          hint="All types"
+          active={quick === "ALL"}
+          onClick={() => setQuick("ALL")}
+        />
+        <Kpi
+          label="Active pipeline"
+          value={overview.pipeline}
+          hint={pct(overview.pipeline)}
+          tone="success"
+          active={quick === "PIPELINE"}
+          onClick={() => setQuick("PIPELINE")}
+        />
         <Kpi
           label="Follow-ups due"
           value={overview.followUpsDue}
-          hint={overview.overdue > 0 ? `${overview.overdue} overdue` : "none overdue"}
+          hint={overview.overdue > 0 ? `${overview.overdue} overdue` : "within 7 days"}
           tone={overview.overdue > 0 ? "critical" : "warning"}
           active={quick === "DUE"}
           onClick={() => setQuick("DUE")}
         />
-        <Kpi label="Available crews" value={overview.availableCrews} hint="can start now" tone="success" active={quick === "AVAILABLE"} onClick={() => setQuick("AVAILABLE")} />
-        <Kpi label="Ready to onboard" value={overview.readyToOnboard} hint="prequal is in" tone="success" active={quick === "READY"} onClick={() => setQuick("READY")} />
-        <Kpi label="Prime opportunities" value={overview.primeOpportunities} hint="live pursuits" active={quick === "PRIME"} onClick={() => setQuick("PRIME")} />
+        <Kpi
+          label="Ready to onboard"
+          value={overview.readyToOnboard}
+          hint="met requirements"
+          tone="success"
+          active={quick === "READY"}
+          onClick={() => setQuick("READY")}
+        />
+        <Kpi
+          label="Not a fit"
+          value={notAFit}
+          hint="closed / archived"
+          active={quick === "CLOSED"}
+          onClick={() => setQuick("CLOSED")}
+        />
       </div>
 
-      <Panel>
-        <PanelHeader title="Prospects" count={shown.length} icon={<Users className="size-3.5 text-gold" />}>
-          <label className="relative">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Company, contact, market, equipment…"
-              aria-label="Search prospects"
-              className="focus-ring h-8 w-[220px] rounded-lg bg-foreground/[0.05] pl-7 pr-2.5 text-[12px] text-foreground outline-none placeholder:text-muted-foreground/70"
-            />
-          </label>
-          {canManage ? (
-            <button
-              type="button"
-              onClick={() => setForm({ p: null })}
-              className="focus-ring inline-flex h-8 items-center gap-1.5 rounded-lg bg-brand px-3 text-[12px] font-semibold text-white transition-colors hover:bg-brand/90"
-            >
-              <Plus className="size-3.5" /> New prospect
-            </button>
-          ) : null}
-        </PanelHeader>
+      {/* The list and the one that is open, side by side. A pipeline is read
+          by comparing rows and worked one at a time, and the old layout made
+          you choose: opening a prospect pushed every other one off screen. */}
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,520px)]">
+        <Panel className="min-w-0">
+          <div className="flex flex-col gap-2.5 border-b border-border/70 p-2.5 lg:flex-row lg:items-center">
+            <div className="flex flex-1 flex-wrap items-center gap-1.5">
+              {(
+                [
+                  ["ALL", "All"],
+                  ["WORKER", "Workers"],
+                  ["SUBCONTRACTOR", "Crews"],
+                  ["PRIME", "Primes"],
+                ] as const
+              ).map(([v, label]) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setTab(v)}
+                  aria-pressed={tab === v}
+                  className={cn(
+                    "focus-ring inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[12px] font-medium transition-colors",
+                    tab === v
+                      ? "border-brand/60 bg-brand/[0.12] text-foreground"
+                      : "border-border text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {label}
+                  <span className="num text-[11.5px] text-muted-foreground">({counts[v]})</span>
+                </button>
+              ))}
+            </div>
 
-        <div className="flex flex-wrap items-center gap-1.5 border-b border-border/70 px-2.5 py-2">
-          {(
-            [
-              ["ALL", "All"],
-              ["SUBCONTRACTOR", "Crews"],
-              ["WORKER", "Workers"],
-              ["PRIME", "Primes"],
-            ] as const
-          ).map(([v, l]) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => setTab(v)}
-              className={cn(
-                "focus-ring rounded-full px-2.5 py-1 text-[12px] font-medium transition-colors",
-                tab === v ? "bg-brand text-white" : "bg-foreground/[0.04] text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {l}
-            </button>
-          ))}
-          {quick !== "ALL" || query ? (
-            <button
-              type="button"
-              onClick={() => {
-                setQuick("ALL");
-                setQuery("");
-              }}
-              className="focus-ring ml-auto rounded-full px-2.5 py-1 text-[11.5px] text-muted-foreground hover:text-foreground"
-            >
-              Clear filters
-            </button>
-          ) : null}
-        </div>
+            <label className="flex h-9 min-w-0 items-center gap-2 rounded-lg bg-foreground/[0.04] px-2.5 ring-1 ring-inset ring-foreground/[0.06] focus-within:ring-brand/40 lg:w-[260px]">
+              <Search className="size-3.5 shrink-0 text-muted-foreground" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Company, contact, market, equipment…"
+                aria-label="Search prospects"
+                className="w-full min-w-0 bg-transparent text-[12.5px] text-foreground placeholder:text-muted-foreground focus:outline-none"
+              />
+              {query ? (
+                <button
+                  type="button"
+                  onClick={() => setQuery("")}
+                  aria-label="Clear search"
+                  className="focus-ring shrink-0 rounded text-muted-foreground hover:text-foreground"
+                >
+                  <X className="size-3.5" />
+                </button>
+              ) : null}
+            </label>
 
-        {shown.length === 0 ? (
-          <div className="px-4 py-14 text-center">
-            <Users className="mx-auto size-7 text-muted-foreground/40" />
-            <p className="mt-2 text-[13px] font-medium text-foreground">
-              {rows.length === 0
-                ? "No prospects yet"
-                : quick === "OVERDUE" || quick === "DUE"
-                  ? "You're caught up."
-                  : quick === "AVAILABLE"
-                    ? "No crews are currently marked available."
-                    : "Nothing matches."}
-            </p>
-            <p className="mx-auto mt-1 max-w-sm text-[12px] text-muted-foreground">
-              {rows.length === 0
-                ? "Start building your network of crews, workers and prime contractors."
-                : "Try a different filter."}
-            </p>
-            {canManage && rows.length === 0 ? (
+            {canManage ? (
               <button
                 type="button"
                 onClick={() => setForm({ p: null })}
-                className="focus-ring mt-3 inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand px-3.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-brand/90"
+                className="focus-ring inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-brand px-3 text-[12.5px] font-semibold text-white hover:bg-brand-bright"
               >
-                <Plus className="size-4" /> Add the first prospect
+                <Plus className="size-3.5" /> New prospect
               </button>
             ) : null}
           </div>
-        ) : (
-          <ul className="flex flex-col">
-            {shown.map((r) => (
-              <li
-                key={r.id}
-                className={cn(
-                  "border-b border-border/50 last:border-0",
-                  openId === r.id && "bg-foreground/[0.02]",
-                )}
-              >
-                <RowItem
-                  row={r}
-                  open={openId === r.id}
-                  onToggle={() => setOpenId(openId === r.id ? null : r.id)}
-                />
-                {openId === r.id ? (
-                  <Expanded
-                    row={r}
-                    owners={owners}
-                    canManage={canManage}
-                    onClose={() => setOpenId(null)}
-                    onEdit={() => {
-                      const full = editable.find((e) => e.id === r.id);
-                      if (full) setForm({ p: full });
-                    }}
-                  />
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Panel>
+
+          {shown.length === 0 ? (
+            <div className="px-3 py-12 text-center">
+              <Users className="mx-auto size-5 text-muted-foreground/50" />
+              <p className="mt-2 text-[12.5px] font-medium text-foreground">
+                {rows.length === 0 ? "No prospects yet" : "No matches"}
+              </p>
+              <p className="mt-1 text-[11.5px] text-muted-foreground">
+                {rows.length === 0
+                  ? "Add a crew, a worker or a prime you are chasing."
+                  : "Nothing here matches that."}
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[640px] border-collapse">
+                <thead>
+                  <tr className="border-b border-border/70">
+                    {[
+                      ["Company / contact", ""],
+                      ["Lives in", "w-[150px]"],
+                      ["Type", "w-[92px]"],
+                      ["Status", "w-[116px]"],
+                      ["Next action", "w-[118px]"],
+                      ["Score", "w-[72px] text-right"],
+                    ].map(([label, cls]) => (
+                      <th
+                        key={label}
+                        scope="col"
+                        className={cn(
+                          "px-3 py-2.5 text-left text-[10.5px] font-bold uppercase tracking-[0.09em] text-muted-foreground",
+                          cls,
+                        )}
+                      >
+                        {label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {shown.map((r) => (
+                    <ProspectRowCells
+                      key={r.id}
+                      row={r}
+                      selected={selected?.id === r.id}
+                      onSelect={() => setOpenId(r.id)}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {shown.length > 0 ? (
+            <p className="border-t border-border/70 px-3 py-2.5 text-[12px] text-muted-foreground">
+              Showing {shown.length} of {rows.length}{" "}
+              {rows.length === 1 ? "prospect" : "prospects"}
+            </p>
+          ) : null}
+        </Panel>
+
+        {/* The one being worked. Sticky on a wide screen so it stays beside
+            the list while somebody scrolls it. */}
+        <div className="min-w-0 xl:sticky xl:top-4 xl:self-start">
+          {selected ? (
+            <Panel className="min-w-0 overflow-hidden">
+              <Expanded
+                row={selected}
+                canManage={canManage}
+                onEdit={() => {
+                  const full = editable.find((e) => e.id === selected.id);
+                  if (full) setForm({ p: full });
+                }}
+              />
+            </Panel>
+          ) : null}
+        </div>
+      </div>
 
       {form ? (
         <ProspectForm
@@ -327,6 +393,102 @@ export function ProspectsCrm({
         />
       ) : null}
     </div>
+  );
+}
+
+/**
+ * One prospect, as a row you can compare down a column.
+ *
+ * Where they live gets a column of its own. It is the fact that decides
+ * whether a job is in their back yard or a motel away, and it was previously
+ * only visible once the row was opened.
+ */
+function ProspectRowCells({
+  row: r,
+  selected,
+  onSelect,
+}: {
+  row: ProspectRow;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const scoreTone =
+    r.score >= 80
+      ? "text-success"
+      : r.score >= 55
+        ? "text-gold"
+        : r.score > 0
+          ? "text-warning"
+          : "text-muted-foreground";
+
+  return (
+    <tr
+      onClick={onSelect}
+      aria-selected={selected}
+      className={cn(
+        "cursor-pointer border-b border-border/50 transition-colors",
+        selected ? "bg-brand/[0.07]" : "hover:bg-foreground/[0.03]",
+      )}
+    >
+      <td className="px-3 py-2.5">
+        <div className="flex items-center gap-2.5">
+          <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-foreground/[0.06] text-[11px] font-semibold text-muted-foreground ring-1 ring-inset ring-foreground/[0.06]">
+            {initials(r.name)}
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate text-[13px] font-semibold text-foreground">{r.name}</span>
+            <span className="block truncate text-[11.5px] text-muted-foreground">
+              {r.contactName || "no contact named"}
+            </span>
+          </span>
+        </div>
+      </td>
+
+      <td className="px-3 py-2.5">
+        <span className="block truncate text-[12.5px] text-foreground">
+          {[r.city, r.homeState].filter(Boolean).join(", ") || "—"}
+        </span>
+        {/* Their back yard, and how far past it they will go. */}
+        {r.homeState && r.states.filter((s) => s !== r.homeState).length > 0 ? (
+          <span className="block truncate text-[11px] text-muted-foreground">
+            + {r.states.filter((s) => s !== r.homeState).join(", ")}
+          </span>
+        ) : null}
+      </td>
+
+      <td className="px-3 py-2.5">
+        <span className="inline-flex items-center rounded-md border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground">
+          {r.kind === "SUBCONTRACTOR" ? "Crew" : r.kind === "PRIME" ? "Prime" : "Worker"}
+        </span>
+      </td>
+
+      <td className="px-3 py-2.5">
+        <span
+          className={cn(
+            "inline-flex items-center rounded-md px-1.5 py-0.5 text-[10.5px] font-semibold",
+            STAGE_TONE[r.stage] ?? "bg-foreground/[0.08] text-muted-foreground",
+          )}
+        >
+          {stageLabel(r.stage)}
+        </span>
+      </td>
+
+      <td className="px-3 py-2.5">
+        {r.overdueDays > 0 ? (
+          <span className="text-[12px] font-semibold text-critical">
+            {r.overdueDays}d overdue
+          </span>
+        ) : r.nextStepDue ? (
+          <span className="num text-[12px] text-foreground">{r.nextStepDue}</span>
+        ) : (
+          <span className="text-[12px] text-muted-foreground">nothing set</span>
+        )}
+      </td>
+
+      <td className="px-3 py-2.5 text-right">
+        <span className={cn("num text-[13.5px] font-semibold", scoreTone)}>{r.score}</span>
+      </td>
+    </tr>
   );
 }
 
@@ -373,83 +535,6 @@ function Kpi({
  * The collapsed row: who deserves attention.
  * ------------------------------------------------------------------ */
 
-function RowItem({ row: r, open, onToggle }: { row: ProspectRow; open: boolean; onToggle: () => void }) {
-  const Icon = KIND_ICON[r.kind] ?? Users;
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      aria-expanded={open}
-      className={cn(
-        "focus-ring group/row flex w-full flex-wrap items-center gap-x-4 gap-y-2 px-3 py-3 text-left transition-colors",
-        open ? "gold-rail" : "hover:bg-foreground/[0.03]",
-        r.overdueDays > 0 && !open && "bg-critical/[0.03]",
-      )}
-    >
-      <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-foreground/[0.06] text-muted-foreground">
-        <Icon className="size-4" />
-      </span>
-
-      <span className="flex min-w-[190px] flex-1 flex-col gap-0.5">
-        <span className="truncate text-[14.5px] font-semibold text-foreground">{r.name}</span>
-        <span className="flex flex-wrap items-center gap-x-2 text-[12.5px] text-muted-foreground">
-          {r.contactName ? <span className="truncate text-brand">{r.contactName}</span> : null}
-          {r.city || r.homeState ? (
-            <span className="inline-flex items-center gap-1">
-              <MapPin className="size-3" />
-              {[r.city, r.homeState].filter(Boolean).join(", ")}
-            </span>
-          ) : null}
-        </span>
-      </span>
-
-      <span className="hidden w-[120px] shrink-0 flex-col sm:flex">
-        <span className={cn("w-fit rounded px-1.5 py-0.5 text-[10.5px] font-semibold", STAGE_TONE[r.stage] ?? "")}>
-          {stageLabel(r.stage)}
-        </span>
-        <span className="mt-1 text-[10.5px] text-muted-foreground">{r.stageDays}d in stage</span>
-      </span>
-
-      <span className="hidden w-[104px] shrink-0 flex-col lg:flex">
-        <span className="num text-[15px] font-semibold leading-none text-foreground">
-          {r.availableCrews || r.crewSize || "—"}
-        </span>
-        <span className="mt-1 text-[9.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
-          {r.availability === "AVAILABLE_NOW" ? "Crews free" : "Crews"}
-        </span>
-      </span>
-
-      <span className="hidden w-[110px] shrink-0 flex-col lg:flex">
-        <span className="text-[12.5px] text-foreground/85">{r.lastContact || "—"}</span>
-        <span className="mt-1 text-[10.5px] text-muted-foreground">
-          {r.daysSinceContact == null ? "never contacted" : `${r.daysSinceContact}d ago`}
-        </span>
-      </span>
-
-      <span className="flex w-[150px] shrink-0 flex-col gap-0.5">
-        {r.overdueDays > 0 ? (
-          <span className="flex items-center gap-1 text-[11.5px] font-bold uppercase tracking-[0.06em] text-critical">
-            <AlertTriangle className="size-3" /> Overdue {r.overdueDays}d
-          </span>
-        ) : r.dueToday ? (
-          <span className="text-[11.5px] font-bold uppercase tracking-[0.06em] text-warning">Due today</span>
-        ) : !r.nextStep ? (
-          <span className="text-[11.5px] text-muted-foreground/70">No next step</span>
-        ) : (
-          <span className="truncate text-[12px] text-foreground/85">{r.nextStep}</span>
-        )}
-        {r.owner ? <span className="truncate text-[10.5px] text-muted-foreground">{r.owner}</span> : null}
-      </span>
-
-      <span className="flex w-[74px] shrink-0 flex-col">
-        <span className="num gold-figure text-[15px] font-semibold leading-none">{r.score}</span>
-        <span className="mt-1 text-[9.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground">Score</span>
-      </span>
-
-      <ChevronDown className={cn("ml-auto size-4 shrink-0 text-muted-foreground transition", open && "rotate-180")} />
-    </button>
-  );
-}
 
 /* ------------------------------------------------------------------ *
  * The open row: everything before you call them.
@@ -457,15 +542,11 @@ function RowItem({ row: r, open, onToggle }: { row: ProspectRow; open: boolean; 
 
 function Expanded({
   row: r,
-  owners,
   canManage,
-  onClose,
   onEdit,
 }: {
   row: ProspectRow;
-  owners: { id: string; name: string }[];
   canManage: boolean;
-  onClose: () => void;
   onEdit: () => void;
 }) {
   const router = useRouter();
@@ -543,7 +624,34 @@ function Expanded({
 
         {/* Where and what. */}
         <div className="rounded-lg border border-border bg-foreground/[0.02] p-3">
+          {/* Where they actually live, first and on its own.
+              A crew's home town is the single most useful fact about where
+              they can work cheaply: it is the difference between a job in
+              their own back yard and one they need a motel for, and the list
+              of states they will travel to says nothing about it. */}
           <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+            Where they live
+          </p>
+          <p className="mt-2 text-[13px] font-semibold text-foreground">
+            {r.city || r.homeState ? (
+              [r.city, r.homeState].filter(Boolean).join(", ")
+            ) : (
+              <span className="font-normal text-muted-foreground">No home town on file</span>
+            )}
+          </p>
+          {r.homeState ? (
+            <p className="mt-0.5 text-[11.5px] text-muted-foreground">
+              Back yard: {r.homeState}
+              {/* Everything beyond home is travel. Derived from the states
+                  they listed minus the one they live in — not a new field
+                  and not a guess about how far they will go. */}
+              {r.states.filter((s) => s !== r.homeState).length > 0
+                ? ` · travels to ${r.states.filter((s) => s !== r.homeState).join(", ")}`
+                : " · no travel states listed"}
+            </p>
+          ) : null}
+
+          <p className="mt-3 text-[11px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
             Where they work
           </p>
           <p className="mt-2 text-[12.5px] text-foreground">
