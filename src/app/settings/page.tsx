@@ -1,5 +1,5 @@
 ﻿import Link from "next/link";
-import { Building2, Plug, Radio, Receipt, ShieldCheck, Smartphone } from "lucide-react";
+import { Building2, Plug, Radio, Receipt, ShieldCheck, Smartphone, Sparkles } from "lucide-react";
 
 import { getOrganization, getOrganizationLogo } from "@/data/queries";
 import { PageShell } from "@/components/common/page-shell";
@@ -16,6 +16,7 @@ import { alertsState } from "@/lib/alerts-switch";
 import { planBilling } from "@/lib/plan";
 import { PlanPanel } from "@/components/settings/plan-panel";
 import { AlertsSwitchPanel } from "@/components/settings/alerts-switch-panel";
+import { AssistantSwitchPanel } from "@/components/settings/assistant-switch-panel";
 import { getCurrentUser, isStaff } from "@/lib/auth";
 import { orgSettings } from "@/lib/org-settings";
 
@@ -85,7 +86,7 @@ const integrations = [
 ];
 
 export default async function SettingsPage() {
-  const { smsAllowed } = await orgSettings();
+  const { smsAllowed, assistantEnabled, isDemo } = await orgSettings();
   const [org, me, orgLogoUrl, myAlerts, alerts] = await Promise.all([
     getOrganization(),
     getCurrentUser(),
@@ -135,6 +136,25 @@ export default async function SettingsPage() {
               icon={<Radio className="size-3.5 text-gold" />}
             />
             <AlertsSwitchPanel state={alerts} />
+          </Panel>
+        ) : null}
+
+        {/* Beside the alerts switch, because they answer the same shape of
+            question: whether a category of information leaves the building.
+            That one is text messages; this one is documents going to a model
+            provider to be read. */}
+        {staff ? (
+          <Panel className="lg:col-span-2 scroll-mt-6" id="assistant">
+            <PanelHeader
+              title="Assistant"
+              description="Whether Vantara IQ may send documents to a model provider to read — scanning a material list, reading a map, importing a daily, and the locate and operations assistants."
+              icon={<Sparkles className="size-3.5 text-gold" />}
+            />
+            <AssistantSwitchPanel
+              enabled={assistantEnabled}
+              isDemo={isDemo}
+              canEdit={me?.role === "ADMIN"}
+            />
           </Panel>
         ) : null}
 
