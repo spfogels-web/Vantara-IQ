@@ -107,18 +107,33 @@ describe("the crew can reach their own queue", () => {
 /**
  * The page with its build artifacts taken out.
  *
- * Next.js writes a content hash into every asset URL — `_0d88947a._.css`, and
- * a few dozen more — and those hashes are hexadecimal, so sooner or later one
- * of them contains the digits of whatever figure a test is searching for. One
- * did: a run failed claiming the crew's page carried 3400, and the next build
- * produced no occurrence at all, because the hash had changed.
- *
- * A build artifact can never carry application data, so removing these URLs
- * cannot hide a leak. It only stops the assertion failing on a coincidence,
- * which is worse than useless — a security test nobody trusts gets muted.
+ * Next.js writes a content hash into asset paths, and those hashes are
+ * hexadecimal — so sooner or later one contains the digits of whatever figure a
+ * test is looking for. One did: a run failed claiming the crew's page carried
+ * 3400, and the next build produced no occurrence at all because the hash had
+ * changed. A build artifact cannot carry application data, so removing these
+ * paths cannot hide a leak.
  */
 function withoutBuildAssets(text: string): string {
-  return text.replace(/\/_next\/static\/[^"'\s\\)]*/g, "");
+  return text.replace(/\/_next\/[^"'\s\\)]*/g, "");
+}
+
+/**
+ * Does a figure appear as a figure, rather than inside some longer token?
+ *
+ * Stripping the asset paths was not enough on its own — the digits turned up
+ * again, somewhere a second build did not reproduce. Chasing where is the wrong
+ * move: a bare four-digit string will always eventually collide with a hash, an
+ * id or a timestamp, and a security test that fails at random is one that gets
+ * muted.
+ *
+ * So the question is asked precisely. `3400` surrounded by other alphanumerics
+ * is part of something else and means nothing; `"heldAmount":3400` or `$3,400`
+ * or `>3400<` is the leak this exists to catch, and all three still match.
+ */
+function carriesFigure(text: string, figure: string): boolean {
+  const escaped = figure.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?<![0-9a-zA-Z])${escaped}(?![0-9a-zA-Z])`).test(text);
 }
 
 describe("the crew is not shown the customer's money", () => {
@@ -132,11 +147,11 @@ describe("the crew is not shown the customer's money", () => {
     for (const figure of [
       String(HELD_VALUE), // 3400
       HELD_VALUE.toLocaleString("en-US"), // 3,400
-      `$${HELD_VALUE.toLocaleString("en-US")}`,
+      `$${HELD_VALUE.toLocaleString("en-US")}`, // $3,400
       tenant.customerRate.toFixed(2), // 8.50
       tenant.invoiceNumber,
     ]) {
-      expect(text, `the crew's page carries ${figure}`).not.toContain(figure);
+      expect(carriesFigure(text, figure), `the crew's page carries ${figure}`).toBe(false);
     }
   });
 

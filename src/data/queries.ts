@@ -1701,6 +1701,8 @@ export async function getPayApplications(): Promise<PayApplication[]> {
       tone,
       submitted: r.createdAt.toISOString(),
       fastPayEligible: r.fastPay,
+      payable: money.payable,
+      canElectFast: canElectFastPay(r.status, r.fastPay),
       state: r.status as PayApplication["state"],
       // What actually lands. The register showed gross beside a fast-pay bolt
       // and left the reader to do the subtraction.
@@ -1717,13 +1719,25 @@ export async function getPayApplications(): Promise<PayApplication[]> {
  * than guessed at each call site: a statement the crew has disputed is money
  * we are holding, and one they have accepted is approved to pay.
  */
+/**
+ * The register's word for a statement's state.
+ *
+ * DRAFT and ISSUED used to share "Pending review", which was true while the
+ * office sent a statement and then waited on the crew — both were pending
+ * somebody. They are different things now: a draft is waiting on the office,
+ * and an issued statement has been approved and is waiting on the bank. Calling
+ * the approved one "pending review" tells whoever works this screen to review
+ * something that has already been reviewed.
+ */
 function payAppStatus(status: string): { label: PayApplication["status"]; tone: Tone } {
   switch (status) {
     case "DRAFT":
-    case "ISSUED":
       return { label: "Pending review", tone: "warning" };
+    case "ISSUED":
+      return { label: "Ready to pay", tone: "info" };
     case "ACCEPTED":
-      return { label: "Approved", tone: "success" };
+      // The crew agreed it as well. Worth showing, and not a different step.
+      return { label: "Ready to pay", tone: "success" };
     case "DISPUTED":
       return { label: "Held", tone: "critical" };
     case "PAID":

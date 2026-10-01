@@ -4691,11 +4691,20 @@ export async function revealBankDetails(subcontractorId: string) {
  * ------------------------------------------------------------------ */
 
 /**
- * Send a statement to the crew for agreement.
+ * Approve a statement for payment.
  *
- * The figures freeze here. From this point the crew has seen them, so a line
- * cannot be added or removed without telling them — which is the whole point of
- * asking them to accept.
+ * The figures freeze here. From this point the crew has been told what they are
+ * owed, so a line cannot be added or removed without telling them again.
+ *
+ * This used to be "send to crew", and it gated payment behind the crew opening
+ * the statement and pressing accept. They do not — one login serves a whole
+ * company and it is a foreman using it from a truck — so the gate did not
+ * protect anybody's figures, it just held up their money. The office approves
+ * what it is going to pay, exactly as it approves the daily the statement was
+ * built from.
+ *
+ * The crew can still accept or dispute, and a dispute still stops a payment.
+ * What has gone is silence being treated as refusal.
  */
 export async function issueSubInvoice(id: string) {
   await requireStaff();
@@ -4713,17 +4722,19 @@ export async function issueSubInvoice(id: string) {
     select: { number: true, subtotal: true, subcontractorId: true },
   });
   await notifyCrew(sent.subcontractorId, {
-    title: `Pay statement ${sent.number} is ready`,
-    detail: "Check it against your sheets, then accept it or tell us what is wrong.",
+    title: `Pay statement ${sent.number} is approved for payment`,
+    // Information, not a demand. Asking them to accept before they are paid is
+    // what this change removed; telling them the figure and how to argue with
+    // it is still worth doing.
+    detail: "Check it against your sheets. Tell us straight away if anything is wrong.",
     href: "/pay",
     category: "billing",
-    tone: "warning",
-    // It needs checking and accepting before anyone gets paid, and a crew is
-    // not sitting at a desk watching for it.
+    tone: "info",
     sms: true,
   });
   revalidatePath("/subcontractors");
   revalidatePath("/pay");
+  revalidatePath("/pay-applications");
   return { ok: true as const };
 }
 
@@ -4885,11 +4896,20 @@ export async function setDailyBillingWeek(dailyId: string, fridayDate: string) {
 }
 
 /**
- * Take fast pay on a statement that has already been accepted.
+ * Move a statement onto fast pay: NET 10 by wire, less the fee.
  *
- * A crew that agreed the figures on Monday and needs the money on Wednesday is
- * a normal thing to happen. The gross does not move — what they agreed to is
- * what the work came to — so this only adds the fee and shortens the terms.
+ * Every crew is on NET 21 and nothing comes off it. This is the exception, and
+ * it costs them money — so who elected it is written down, not inferred.
+ *
+ * Two people can do it. The crew, on their own statement, as before. And the
+ * office, because a crew asking for their money sooner does it by ringing up,
+ * not by logging in — the same reason their acceptance stopped gating payment.
+ * When the office does it the record says so, by name, so "who put the fee on
+ * this" is answerable a month later instead of being argued about.
+ *
+ * The gross does not move. What the work came to is what the work came to; this
+ * adds the fee and shortens the terms, and the fee comes off after retainage —
+ * see statementMoney.
  *
  * One way, deliberately. Once this is elected the office may already have the
  * wire queued, and letting it be taken back would mean a payment run that no
@@ -4900,10 +4920,18 @@ export async function electFastPay(id: string) {
 
   const inv = await prisma.subInvoice.findUnique({
     where: { id },
-    select: { subcontractorId: true, status: true, number: true, fastPay: true, subtotal: true },
+    select: {
+      subcontractorId: true, status: true, number: true, fastPay: true,
+      // Retainage too: the fee comes off what is actually going out, not off
+      // the gross, so a log line computed without it would record a figure the
+      // crew is never charged.
+      subtotal: true, retainagePct: true, retainageHeld: true,
+    },
   });
   if (!inv) return { ok: false as const, error: "Statement not found." };
-  if (user.subcontractorId !== inv.subcontractorId) {
+
+  const byOffice = isStaff(user.role);
+  if (!byOffice && user.subcontractorId !== inv.subcontractorId) {
     return { ok: false as const, error: "Only the crew this statement belongs to can do that." };
   }
   if (inv.fastPay) {
@@ -4920,14 +4948,26 @@ export async function electFastPay(id: string) {
   }
 
   const at = new Date();
-  const quote = fastPayQuote(inv.subtotal, FAST_PAY_FEE_PCT, FAST_PAY_DAYS);
+  // Through statementMoney, so what is written down is what is charged.
+  const quote = statementMoney({
+    subtotal: inv.subtotal,
+    retainagePct: inv.retainagePct,
+    retainageHeld: inv.retainageHeld,
+    fastPay: true,
+    fastPayFeePct: FAST_PAY_FEE_PCT,
+    termsDays: FAST_PAY_DAYS,
+  });
   await prisma.subInvoice.update({
     where: { id },
     data: {
       fastPay: true,
       fastPayFeePct: FAST_PAY_FEE_PCT,
       fastPayElectedAt: at,
-      fastPayElectedBy: user.name || user.email,
+      // Who actually pressed it. An office election says so on the face of it,
+      // because the crew will read this line when they query the fee.
+      fastPayElectedBy: byOffice
+        ? `${user.name || user.email} (office, at the crew's request)`
+        : user.name || user.email,
       termsDays: FAST_PAY_DAYS,
       payMethod: FAST_PAY_METHOD,
     },
@@ -4940,15 +4980,16 @@ export async function electFastPay(id: string) {
         actorUserId: user.id,
         actorEmail: user.email,
         subjectId: id,
-        detail: `Fast pay on ${inv.number}: ${quote.feePct}% fee ($${quote.fee.toFixed(
+        detail: `Fast pay on ${inv.number}${byOffice ? " by the office, at the crew's request" : ""}: ${quote.feePct}% fee (${quote.fee.toFixed(
           2,
-        )}), net $${quote.net.toFixed(2)}, NET ${quote.days} by wire`,
+        )}), net ${quote.net.toFixed(2)}, NET ${quote.days} by wire`,
       },
     })
     .catch(() => undefined);
 
   revalidatePath("/pay");
   revalidatePath("/subcontractors");
+  revalidatePath("/pay-applications");
   return { ok: true as const, electedAt: at.toISOString(), fee: quote.fee, net: quote.net };
 }
 
@@ -5053,8 +5094,22 @@ export async function recordSubPayment(input: {
     },
   });
   if (!inv) return { ok: false as const, error: "Statement not found." };
-  if (inv.status !== "ACCEPTED" && inv.status !== "PAID") {
-    return { ok: false as const, error: "Wait for the crew to accept it before paying it." };
+  /**
+   * Approved by the office is enough to pay. A crew's acceptance is welcome and
+   * recorded, and it is no longer a precondition — see issueSubInvoice.
+   *
+   * A dispute still stops it. That is the protection worth keeping: a crew who
+   * has actively said the figures are wrong should not be paid those figures
+   * while the argument is open.
+   */
+  if (inv.status === "DRAFT") {
+    return { ok: false as const, error: "Approve this statement for payment first." };
+  }
+  if (inv.status === "DISPUTED") {
+    return { ok: false as const, error: "This one is disputed — settle it before paying it." };
+  }
+  if (inv.status === "VOID") {
+    return { ok: false as const, error: "This statement is void." };
   }
   if (!Number.isFinite(input.amount) || input.amount <= 0) {
     return { ok: false as const, error: "Enter the amount that was sent." };

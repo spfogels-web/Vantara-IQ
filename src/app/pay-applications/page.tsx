@@ -21,9 +21,11 @@ export default async function PayApplicationsPage() {
 
   const pending = payApps.filter((p) => p.status === "Pending review");
   const pendingTotal = pending.reduce((s, p) => s + p.amount, 0);
-  const approvedTotal = payApps
-    .filter((p) => p.status === "Approved" || p.status === "Scheduled")
-    .reduce((s, p) => s + p.amount, 0);
+  // What is approved and waiting on the bank. It read $0 on every screen
+  // because it looked for labels nothing produced — "Approved" and "Scheduled"
+  // were never returned by payAppStatus.
+  const readyToPay = payApps.filter((p) => p.status === "Ready to pay");
+  const readyTotal = readyToPay.reduce((s, p) => s + p.net, 0);
   const retainageHeld = payApps.reduce((s, p) => s + p.retainage, 0);
 
   return (
@@ -43,8 +45,13 @@ export default async function PayApplicationsPage() {
       <div className="flex flex-col gap-3">
         <StatStrip
           stats={[
-            { label: "Pending review", value: formatCompactCurrency(pendingTotal), hint: `${pending.length} pay apps`, tone: "text-warning" },
-            { label: "Approved / scheduled", value: formatCompactCurrency(approvedTotal), tone: "text-success" },
+            { label: "Pending review", value: formatCompactCurrency(pendingTotal), hint: `${pending.length} to approve`, tone: "text-warning" },
+            {
+              label: "Ready to pay",
+              value: formatCompactCurrency(readyTotal),
+              hint: `${readyToPay.length} waiting on the bank`,
+              tone: "text-success",
+            },
             { label: "Retainage held", value: formatCompactCurrency(retainageHeld) },
             {
               label: "Paid",
@@ -108,8 +115,10 @@ export default async function PayApplicationsPage() {
                         id={p.id}
                         state={p.state}
                         net={p.net}
+                        payable={p.payable}
                         paid={p.paid}
                         fastPay={p.fastPayEligible}
+                        canElectFast={p.canElectFast}
                       />
                     </td>
                   </tr>

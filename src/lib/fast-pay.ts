@@ -22,7 +22,7 @@ export const STANDARD_TERMS_DAYS = 21;
  * SubInvoice.fastPayFeePct — so moving this number changes what is offered
  * from here on and restates nothing behind it.
  */
-export const FAST_PAY_FEE_PCT = 3.5;
+export const FAST_PAY_FEE_PCT = 3;
 export const FAST_PAY_DAYS = 10;
 
 /** How fast pay is settled. Not a choice — see the note above. */
@@ -119,14 +119,24 @@ export function dueDateFromCutoff(cutoff: string | null, days: number): string {
 /**
  * Whether fast pay can still be elected.
  *
- * A statement that is already paid or void is settled, and one that is still a
- * draft has not been issued for anybody to agree to. Everything in between is
- * fair game — a crew that accepted on standard terms and then needs the money
- * sooner is a normal thing to happen, not an error.
+ * A statement that is already paid or void is settled. Everything before that
+ * is fair game — a crew on standard terms who then needs the money sooner is a
+ * normal thing to happen, not an error.
+ *
+ * A draft counts now, where it did not before. The old rule reasoned that a
+ * draft had not been issued for anybody to agree to, which held while only the
+ * crew could elect. The office elects on their behalf today, on a crew ringing
+ * up and asking for it, and that call does not wait for the statement to be
+ * sent.
  */
 export function canElectFastPay(status: string, alreadyElected: boolean): boolean {
   if (alreadyElected) return false;
-  return status === "ISSUED" || status === "DISPUTED" || status === "ACCEPTED";
+  return (
+    status === "DRAFT" ||
+    status === "ISSUED" ||
+    status === "DISPUTED" ||
+    status === "ACCEPTED"
+  );
 }
 
 /** One line the crew reads before committing. */

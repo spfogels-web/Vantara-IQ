@@ -6,7 +6,7 @@ import {
   Check,
   Download,
   Loader2,
-  Send,
+
   ShieldCheck,
   TriangleAlert,
   Wallet,
@@ -149,11 +149,14 @@ export function SubPayPanel({
                       onClick={() => void run(inv.id, () => issueSubInvoice(inv.id))}
                       className="focus-ring inline-flex h-7 items-center gap-1 rounded border border-border px-2 text-[11.5px] font-medium text-foreground hover:bg-foreground/[0.05] disabled:opacity-40"
                     >
-                      <Send className="size-3" /> Send to crew
+                      <Check className="size-3" /> Approve for payment
                     </button>
                   ) : null}
 
-                  {inv.status === "ACCEPTED" ? (
+                  {/* Approved by the office is enough — a crew's acceptance is
+                      recorded but no longer gates their money. See
+                      issueSubInvoice. A dispute still stops it. */}
+                  {inv.status === "ISSUED" || inv.status === "ACCEPTED" ? (
                     <button
                       type="button"
                       disabled={Boolean(busy)}
@@ -164,10 +167,11 @@ export function SubPayPanel({
                     </button>
                   ) : null}
 
-                  {/* The remittance to send with the transfer. Offered from the
-                      moment the crew agrees the figures, because it is often
-                      produced before the ACH is keyed rather than after. */}
-                  {inv.status === "ACCEPTED" || inv.status === "PAID" ? (
+                  {/* The remittance to send with the transfer, offered from the
+                      moment the statement is approved — it is usually produced
+                      before the transfer is keyed rather than after, and the
+                      office emails it. */}
+                  {inv.status !== "DRAFT" && inv.status !== "VOID" ? (
                     <a
                       href={`/api/remittance/${inv.id}`}
                       className="focus-ring inline-flex h-7 items-center gap-1 rounded border border-border px-2 text-[11.5px] font-medium text-foreground hover:border-brand/60"
@@ -237,7 +241,6 @@ export function SubPayPanel({
     </Panel>
   );
 }
-
 
 /**
  * The detail of a payment, keyed as it is sent.

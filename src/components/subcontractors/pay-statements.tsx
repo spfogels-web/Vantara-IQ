@@ -36,12 +36,18 @@ import { useOrgName } from "@/components/layout/org-provider";
  * rather than taken on trust. Nothing here mentions what the work was billed
  * for — that is the other side of the same job and none of their business.
  *
- * Accepting records who and exactly when. That timestamp is the point of the
- * whole screen: it is the difference between "we sent it" and "they agreed".
+ * Accepting records who and exactly when, and that timestamp is still worth
+ * having — it is the difference between "we sent it" and "they agreed".
+ *
+ * It is no longer what releases the money. It used to be, and in practice a
+ * statement sat unaccepted for weeks because one login serves a whole company
+ * and it is a foreman using it from a truck. So the office approves what it
+ * pays and pays it. Raising a query still stops a payment; saying nothing no
+ * longer does, and this screen must not imply otherwise.
  */
 
 const STATUS: Record<string, { label: string; cls: string }> = {
-  ISSUED: { label: "Waiting on you", cls: "bg-warning/12 text-warning" },
+  ISSUED: { label: "Approved for payment", cls: "bg-info/12 text-info" },
   ACCEPTED: { label: "Accepted", cls: "bg-success/12 text-success" },
   DISPUTED: { label: "You raised a query", cls: "bg-critical/12 text-critical" },
   PAID: { label: "Paid", cls: "bg-success/12 text-success" },
@@ -71,8 +77,8 @@ export function PayStatements({ invoices }: { invoices: SubInvoiceRow[] }) {
       {waiting.length > 0 ? (
         <Panel>
           <PanelHeader
-            title="Waiting on you"
-            description="Check each line against your sheets, then accept or tell us what's wrong"
+            title="To check"
+            description="Approved for payment. Check each line against your sheets and tell us straight away if anything is wrong"
             count={waiting.length}
             icon={<TriangleAlert className="size-3.5 text-warning" />}
           />

@@ -469,10 +469,12 @@ export interface Invoice {
 }
 
 export type PayAppStatus =
+  /** Built from approved dailies, and the office has not approved it yet. */
   | "Pending review"
-  | "Approved"
-  | "Scheduled"
+  /** Approved by the office. Waiting on the transfer, not on the crew. */
+  | "Ready to pay"
   | "Paid"
+  /** Disputed or void — something has to be settled before it moves. */
   | "Held";
 
 export interface PayApplication {
@@ -496,6 +498,10 @@ export interface PayApplication {
   state: "DRAFT" | "ISSUED" | "ACCEPTED" | "DISPUTED" | "PAID" | "VOID";
   /** What actually lands, after any fast-pay fee. */
   net: number;
+  /** Gross less retainage — what a fast-pay fee would be taken from. */
+  payable: number;
+  /** Whether fast pay can still be elected on this one. */
+  canElectFast: boolean;
   /** Whether a payment has been recorded against it. */
   paid: boolean;
 }
