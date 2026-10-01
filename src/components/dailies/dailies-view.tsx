@@ -922,6 +922,8 @@ function DailyDetail({
   const [weekDate, setWeekDate] = React.useState("");
   /** Armed only after the server has said what the delete would take. */
   const [confirmDelete, setConfirmDelete] = React.useState(false);
+  /** Set when an approval was refused for having no field photographs. */
+  const [needsPhotoOverride, setNeedsPhotoOverride] = React.useState(false);
 
   const decided = d.status === "Approved" || d.status === "Denied";
 
@@ -1018,7 +1020,7 @@ function DailyDetail({
     } else setError(res.error);
   }
 
-  async function decide(decision: "APPROVED" | "DENIED") {
+  async function decide(decision: "APPROVED" | "DENIED", overrideNoPhotos = false) {
     if (busy) return;
     setBusy(true);
     setError(null);
@@ -1027,8 +1029,12 @@ function DailyDetail({
       decision,
       note,
       reviewedBy: reviewerName ?? "",
+      overrideNoPhotos,
     });
     setBusy(false);
+    // The server says whether the photo gate is what stopped it, rather than
+    // the interface matching on the wording of an error message.
+    setNeedsPhotoOverride(!res.ok && "needsPhotoOverride" in res && res.needsPhotoOverride === true);
     if (res.ok) {
       onSetStatus(d.id, decision === "APPROVED" ? "Approved" : "Denied", decision === "APPROVED" ? "success" : "critical");
       router.refresh();
@@ -1363,6 +1369,41 @@ function DailyDetail({
                 className="w-full resize-y rounded-lg border border-foreground/[0.1] bg-foreground/[0.03] px-3 py-2 text-[12.5px] text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-brand/40"
               />
               {error ? <p className="text-[12px] text-critical">{error}</p> : null}
+
+              {/* Offered only once the gate has actually refused, so it is not
+                  standing beside Approve every day inviting itself to be used.
+                  Days from before photographs were asked for are the reason it
+                  exists; it costs a reason and it is written down. */}
+              {needsPhotoOverride ? (
+                <div className="flex flex-col gap-2 rounded-lg border border-warning/35 bg-warning/[0.06] px-2.5 py-2">
+                  <p className="text-[12px] leading-relaxed text-foreground">
+                    {t("If this day predates the photo requirement, approve it anyway — say so below and it goes on the record.")}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setNote(t("Filed before field photographs were required."))}
+                      className="focus-ring rounded-lg border border-border px-2 py-1 text-[11.5px] text-muted-foreground hover:text-foreground"
+                    >
+                      {t("Use that reason")}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy || !note.trim()}
+                      onClick={() => void decide("APPROVED", true)}
+                      className="focus-ring inline-flex h-8 items-center gap-1.5 rounded-lg bg-warning px-3 text-[12px] font-semibold text-black disabled:opacity-40"
+                    >
+                      <Check className="size-3.5" />
+                      {t("Approve without photos")}
+                    </button>
+                    {!note.trim() ? (
+                      <span className="text-[11px] text-muted-foreground">
+                        {t("A reason is required.")}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
 
               {/* Moving the billing week is an override, so it sits behind a
                   press rather than beside Approve — the rule should be what

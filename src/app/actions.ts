@@ -51,7 +51,7 @@ import {
   FAST_PAY_FEE_PCT,
   FAST_PAY_METHOD,
   canElectFastPay,
-  fastPayQuote,
+
   statementMoney,
 } from "@/lib/fast-pay";
 import { balanceOf, billingWeekForFiling } from "@/lib/billing";
@@ -1316,7 +1316,6 @@ export async function saveProjectMarkups(projectId: string, markups: unknown) {
 
 /* ---- Dailies (linked to a project by number + name) ----------------------- */
 
-
 /* ---- Rate-document extraction (AI extracts, human approves) --------------- */
 
 const IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
@@ -2321,8 +2320,22 @@ export async function reviewDaily(input: {
   decision: "APPROVED" | "DENIED";
   note: string;
   reviewedBy: string;
+  /**
+   * Approve a daily that has no field photographs on it.
+   *
+   * Not a way round the rule for ordinary work — see the gate below. It exists
+   * because the rule arrived after the work did: there are days on file from
+   * before photographs were asked for, and they are real days that were never
+   * going to acquire evidence retrospectively. Refusing them for ever would
+   * leave the crew unpaid for work everybody agrees they did.
+   *
+   * It costs a reason and it is written down, because in a year the difference
+   * between "this predates the requirement" and "nobody bothered" is not
+   * something anybody will remember.
+   */
+  overrideNoPhotos?: boolean;
 }) {
-  await requireStaff();
+  const reviewer = await requireStaff();
   const note = input.note.trim();
   if (input.decision === "DENIED" && !note) {
     return { ok: false as const, error: "Say why it's being denied — the crew needs to know what to fix." };
@@ -2346,25 +2359,54 @@ export async function reviewDaily(input: {
       select: { photos: true },
     });
     const count = Array.isArray(sheet?.photos) ? (sheet.photos as unknown[]).length : 0;
-    if (count === 0) {
+    if (count === 0 && !input.overrideNoPhotos) {
       return {
         ok: false as const,
+        // needsPhotoOverride is what the interface reads to offer the override.
+        // Matching on the wording of an error message is how a button stops
+        // working the day somebody rewrites a sentence.
+        needsPhotoOverride: true as const,
         error:
           "No field photos on this daily. Ask the crew to add them — the sheet stays open for photos after it's filed — then approve it.",
       };
     }
+    if (count === 0 && input.overrideNoPhotos && !note) {
+      return {
+        ok: false as const,
+        error: "Say why this one is being approved with no photographs. It goes on the record.",
+      };
+    }
   }
+
+  const waived = input.decision === "APPROVED" && input.overrideNoPhotos === true;
 
   const daily = await prisma.daily.update({
     where: { id: input.dailyId },
     data: {
       status: input.decision === "APPROVED" ? "Approved" : "Denied",
       tone: input.decision === "APPROVED" ? "success" : "critical",
-      reviewNote: note,
+      // The note says what was waived, on the daily itself. Somebody reading
+      // this row later should not have to find the audit log to learn that it
+      // was approved without evidence.
+      reviewNote: waived ? `Approved without field photographs — ${note}` : note,
       reviewedBy: input.reviewedBy,
       reviewedAt: new Date().toISOString(),
     },
   });
+
+  if (waived) {
+    await prisma.accessLog
+      .create({
+        data: {
+          action: "daily.approved_without_photos",
+          actorUserId: reviewer.id,
+          actorEmail: reviewer.email,
+          subjectId: input.dailyId,
+          detail: `${daily.projectName} ${daily.workDate} (${daily.totalFt} ft) approved with no field photographs — ${note}`,
+        },
+      })
+      .catch(() => undefined);
+  }
 
   /**
    * Approval is the moment work becomes billable, so it is the moment it
@@ -4417,7 +4459,6 @@ export async function deleteCrewBadge(id: string, inviteToken?: string) {
 export async function listCrewBadges(subcontractorId: string) {
   return getCrewBadges(subcontractorId);
 }
-
 
 /* ------------------------------------------------------------------ *
  * ACH authorisation — where a crew's money goes.
@@ -7477,7 +7518,6 @@ export async function setProjectComplete(projectId: string, complete: boolean) {
   revalidatePath("/");
   return { ok: true as const, complete };
 }
-
 
 /**
  * Turn an approved daily's production into material movements.
