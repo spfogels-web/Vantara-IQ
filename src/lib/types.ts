@@ -1,3 +1,4 @@
+import type { BillingStatus } from "@/lib/billing-status";
 import type { IconKey } from "@/lib/icons";
 
 /** Semantic tone drives every status colour in the app. */
@@ -561,4 +562,118 @@ export interface Prospect {
   createdAt: string;
   updatedAt: string;
   activities: ProspectActivity[];
+}
+
+/* ------------------------------------------------------------------ *
+ * Billing readiness — production that is finished but not yet billable.
+ *
+ * Two shapes, for two audiences, and the difference between them is the
+ * point. The office row carries the customer's rate and what the held
+ * footage is worth; the crew row carries neither, because handing a
+ * subcontractor the customer figure hands them our margin on their own
+ * work. They are separate types rather than one type with optional money
+ * so that omitting it is the default and including it takes a decision.
+ * ------------------------------------------------------------------ */
+
+/** One unit code on one daily, and where it stands with the customer's bill. */
+export interface BillingReadinessRow {
+  dailyId: string;
+  sheetNumber: string;
+  workDate: string;
+  /** The Friday this bills to. */
+  billingWeekEnd: string;
+  projectId: string;
+  projectName: string;
+  projectNumber: string;
+  customer: string;
+  market: string;
+  subcontractor: string;
+
+  code: string;
+  description: string;
+  unit: string;
+  /** What the crew reported. Never reduced by a hold. */
+  produced: number;
+  /** Already on an invoice, draft or sent. */
+  billed: number;
+  /** Held back from billing. */
+  held: number;
+  /** produced − billed − held. */
+  billable: number;
+
+  status: BillingStatus;
+  requirement: string;
+  missing: string[];
+  overrideReason: string;
+  /** What the office said when it was sent back, or waived. */
+  resolutionNote: string;
+  /** What the crew said when they answered. */
+  responseNote: string;
+  raisedBy: string;
+  raisedAt: string;
+  respondedBy: string;
+  respondedAt: string;
+  resolvedBy: string;
+  /** Days since the request went out. Null when nothing is held. */
+  ageDays: number | null;
+  holdId: string | null;
+  invoices: { number: string; status: string; quantity: number }[];
+
+  /** The customer's rate on the work date. Null when the card has none. */
+  rate: number | null;
+  /** What the billable quantity is worth at that rate. */
+  billableAmount: number;
+  /** What the held quantity is worth — the cash this documentation is blocking. */
+  heldAmount: number;
+}
+
+/**
+ * One thing a crew is being asked for.
+ *
+ * No rate, no amount, no invoice number and no customer total. A crew needs to
+ * know which day, which code, how much of it, and what to send.
+ */
+export interface DocumentationRequest {
+  holdId: string;
+  dailyId: string;
+  projectId: string;
+  projectName: string;
+  workDate: string;
+  code: string;
+  quantity: number;
+  unit: string;
+  status: "NEEDS_DOCUMENTATION" | "CREW_RESPONDED";
+  /** The rule, in one phrase. */
+  requirement: string;
+  /** The individual items still outstanding. */
+  missing: string[];
+  /** What the office added when they asked, or when they sent it back. */
+  note: string;
+  raisedAt: string;
+  /** Days this has been waiting on the crew. */
+  ageDays: number;
+  respondedAt: string;
+  responseNote: string;
+  /** Photographs already tagged to this request. */
+  evidence: { url: string; caption: string }[];
+}
+
+/**
+ * Where one code on one daily stands with the bill, for a chip on the sheet.
+ *
+ * No money in it, because both audiences see this one — the office reviewing a
+ * daily and the crew who filed it. The office's money lives on the readiness
+ * queue, behind a staff gate.
+ */
+export interface DailyCodeStatus {
+  code: string;
+  status: BillingStatus;
+  produced: number;
+  held: number;
+  billable: number;
+  requirement: string;
+  missing: string[];
+  overrideReason: string;
+  holdId: string | null;
+  invoices: { number: string; status: string }[];
 }

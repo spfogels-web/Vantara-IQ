@@ -3,7 +3,9 @@ import { FileText } from "lucide-react";
 
 import {
   getDailies,
+  getDailyCodeStatuses,
   getDailyThumbnails,
+  getMyDocumentationRequests,
   getProjectCovers,
   getProjects,
   getSheetIndexByDaily,
@@ -13,6 +15,7 @@ import { getCurrentUser, isStaff } from "@/lib/auth";
 import { getT } from "@/lib/i18n-server";
 import { PageShell } from "@/components/common/page-shell";
 import { DailiesView } from "@/components/dailies/dailies-view";
+import { CrewDocumentationRequests } from "@/components/billing/crew-requests";
 import { ImportDaily } from "@/components/dailies/import-daily";
 import { orgName } from "@/lib/org-settings";
 
@@ -47,6 +50,19 @@ export default async function DailiesPage({
 
   /** The job's own cover, so a row is recognisable before it is read. */
   const covers = await getProjectCovers(dailies.map((d) => d.projectId));
+
+  /**
+   * Where each daily's codes stand with the bill, and — for a crew — what the
+   * office is waiting on.
+   *
+   * One query for the page rather than one per daily. Neither carries a rate or
+   * an amount: a crew reads their own daily here, and the customer figure is
+   * the one number they must not be handed on the screen they open every day.
+   */
+  const [codeStatuses, myRequests] = await Promise.all([
+    getDailyCodeStatuses(dailies.map((d) => d.id)),
+    staff ? Promise.resolve([]) : getMyDocumentationRequests(),
+  ]);
 
   // Only fetched for the importer, which is staff-only — a crew has no use for
   // the full job list or the roster of other companies.
@@ -101,6 +117,16 @@ export default async function DailiesPage({
         </div>
       ) : null}
 
+      {/* Approved work the office cannot invoice yet, at the top of the page a
+          crew actually opens. A nav entry alone was not enough: this is work
+          they have already done, and the cost of not noticing it is somebody
+          else's invoice. Renders nothing when there is nothing outstanding. */}
+      {!staff && myRequests.length > 0 ? (
+        <div className="mb-4">
+          <CrewDocumentationRequests requests={myRequests} compact />
+        </div>
+      ) : null}
+
       <DailiesView
         dailies={dailies}
         initialId={sp.sheet}
@@ -109,6 +135,7 @@ export default async function DailiesPage({
         covers={covers}
         reviewerName={me?.name}
         canReview={staff}
+        codeStatuses={codeStatuses}
       />
     </PageShell>
   );

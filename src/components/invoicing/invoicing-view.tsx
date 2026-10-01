@@ -291,8 +291,16 @@ function InvoiceTable({
                         {openId === inv.id ? "Hide details" : "Review, edit & see margin"}
                       </button>
                     </td>
-                    <td className="max-w-[180px] truncate px-3 py-2.5 text-[12px] text-muted-foreground">
+                    <td className="max-w-[200px] truncate px-3 py-2.5 text-[12px] text-muted-foreground">
                       {inv.project || "—"}
+                      {/* The customer's own job number. Their accounts system is
+                          keyed on it, so it belongs beside the name wherever an
+                          invoice is identified. */}
+                      {inv.projectNumber ? (
+                        <span className="num ml-1.5 text-[11px] text-muted-foreground/70">
+                          {inv.projectNumber}
+                        </span>
+                      ) : null}
                     </td>
                     <td className="num px-3 py-2.5 text-[11.5px] text-muted-foreground">
                       {inv.periodStart} – {inv.periodEnd}

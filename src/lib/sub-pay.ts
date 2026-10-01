@@ -2,6 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/prisma";
 import { priceQuantities } from "@/lib/pricing";
+import { spansOf } from "@/lib/daily-lines";
 import { billingWeekFor } from "@/lib/billing";
 
 /**
@@ -15,6 +16,39 @@ import { billingWeekFor } from "@/lib/billing";
  * Priced at the crew's own signed card, at the rate in force on the work date —
  * so a card renegotiated in March cannot restate what they earned in January.
  */
+
+/**
+ * A daily's statement lines that are the old shape, or null when there are none.
+ *
+ * Found here, removed by the caller once the replacement has priced — deleting
+ * first would wipe a crew's draft for good if their card had moved on since it
+ * was built.
+ *
+ * The customer-side twin is in auto-invoice.ts and the reasoning is the same,
+ * with one difference that matters more here: a statement the crew has already
+ * been sent is never reshaped. They have seen that figure and may have accepted
+ * it, and changing the document underneath them is how a crew stops trusting
+ * the number at all — which costs far more than an unreadable line.
+ */
+async function staleDraftLines(
+  dailyId: string,
+  spans: { location: string }[],
+): Promise<{ ids: string[]; invoiceIds: string[] } | null> {
+  if (!spans.some((s) => s.location)) return null;
+
+  const lines = await prisma.subInvoiceLine.findMany({
+    where: { dailyId },
+    select: { id: true, location: true, invoice: { select: { id: true, status: true } } },
+  });
+  if (lines.length === 0) return null;
+  if (lines.some((l) => l.invoice.status !== "DRAFT")) return null;
+  if (lines.every((l) => l.location)) return null;
+
+  return {
+    ids: lines.map((l) => l.id),
+    invoiceIds: [...new Set(lines.map((l) => l.invoice.id))],
+  };
+}
 
 /** Total a draft from its own lines. */
 export async function recalcSubInvoice(invoiceId: string): Promise<void> {
@@ -75,14 +109,31 @@ export async function fileApprovedDailyForSub(dailyId: string): Promise<SubFileR
   const company = daily.subcontractor?.trim();
   if (!company) return { ok: false, reason: "No company on this daily, so nobody to pay." };
 
+  // Found, not yet removed. Nothing goes until the replacement has priced.
+  const stale = await staleDraftLines(daily.id, spansOf(daily.lineItems));
+
   const already = await prisma.subInvoiceLine.findFirst({
     where: { dailyId: daily.id },
     select: { invoice: { select: { number: true } } },
   });
-  if (already) return { ok: false, reason: `Already on ${already.invoice.number}.` };
+  if (already && stale === null) {
+    return { ok: false, reason: `Already on ${already.invoice.number}.` };
+  }
 
   const week = billingWeekFor(daily);
   if (!week) return { ok: false, reason: "No work date, so no pay period." };
+
+  // The job number, copied onto the statement beside the name. A crew quotes
+  // the number back when they ring about a payment, and it is the same number
+  // on their daily — so a statement without it is one more thing to look up.
+  const projectNumber = daily.projectId
+    ? ((
+        await prisma.project.findUnique({
+          where: { id: daily.projectId },
+          select: { number: true },
+        })
+      )?.number ?? "")
+    : "";
 
   const crew = await prisma.subcontractor.findFirst({
     where: { company },
@@ -102,25 +153,26 @@ export async function fileApprovedDailyForSub(dailyId: string): Promise<SubFileR
     return { ok: false, reason: `No signed rate card for ${company}, so their work cannot be priced.` };
   }
 
-  // Roll the daily's own items up by code first.
-  const byCode = new Map<string, number>();
-  const items = Array.isArray(daily.lineItems) ? (daily.lineItems as unknown[]) : [];
-  for (const raw of items) {
-    const li = raw as { code?: unknown; quantity?: unknown };
-    if (typeof li?.code !== "string" || !li.code.trim()) continue;
-    const qty = typeof li.quantity === "number" ? li.quantity : 0;
-    byCode.set(li.code.trim(), (byCode.get(li.code.trim()) ?? 0) + qty);
-  }
+  /**
+   * One statement line per line of the daily, in the order the crew wrote them.
+   *
+   * The crew's statement is the one document they check against their own
+   * sheet, and it used to arrive rolled up by code — six spans of placed fibre
+   * became a single figure, and "which span was I paid for" had no answer
+   * short of adding the day up by hand.
+   *
+   * Note what is NOT applied here. A billing hold stops Fortitude invoicing the
+   * customer; it has nothing to do with what the crew earned. A missing
+   * photograph must never reduce somebody's pay for work they actually did, so
+   * this reads the daily's spans and nothing else — no billableQuantities, no
+   * allocation, no hold.
+   */
+  const spans = spansOf(daily.lineItems);
 
   // Their bore method decides which of two same-coded rates applies. Asked once
   // on the crew rather than guessed per invoice, because the card cannot know
   // which machine turned up.
-  const priced = priceQuantities(
-    [...byCode.entries()].map(([code, quantity]) => ({ code, quantity })),
-    crew.rates,
-    daily.workDate,
-    crew.boreMethod,
-  );
+  const priced = priceQuantities(spans, crew.rates, daily.workDate, crew.boreMethod);
   const unpriced = priced.unpriced.map((u) => u.code);
 
   if (priced.lines.length === 0) {
@@ -162,6 +214,7 @@ export async function fileApprovedDailyForSub(dailyId: string): Promise<SubFileR
             subcontractorId: crew.id,
             projectId: daily.projectId,
             projectName: daily.projectName,
+            projectNumber: projectNumber,
             periodStart: week.start,
             periodEnd: week.end,
             status: "DRAFT",
@@ -175,11 +228,49 @@ export async function fileApprovedDailyForSub(dailyId: string): Promise<SubFileR
     if (!invoice) return { ok: false, reason: "Could not open a pay statement for that week." };
   }
 
+  // Priced, so the old shape can go — both halves in one transaction, so a
+  // statement is never observed with neither set of lines on it.
+  if (stale) {
+    await prisma.$transaction(async (tx) => {
+      await tx.subInvoiceLine.deleteMany({ where: { id: { in: stale.ids } } });
+      await tx.subInvoiceLine.createMany({
+        data: priced.lines.map((l, i) => ({
+          invoiceId: invoice!.id,
+          dailyId: daily.id,
+          workDate: daily.workDate,
+          location: l.location,
+          seq: i + 1,
+          code: l.code,
+          description: l.description,
+          unit: l.unit,
+          quantity: l.quantity,
+          rate: l.rate,
+          amount: Math.round(l.amount * 100) / 100,
+          derived: l.derived,
+          sourceCard: l.source,
+        })),
+      });
+    });
+    for (const id of stale.invoiceIds) await recalcSubInvoice(id);
+    await recalcSubInvoice(invoice.id);
+
+    return {
+      ok: true,
+      invoiceNumber: invoice.number,
+      lines: priced.lines.length,
+      amount: Math.round(priced.lines.reduce((s, l) => s + l.amount, 0) * 100) / 100,
+      unpriced,
+    };
+  }
+
   await prisma.subInvoiceLine.createMany({
-    data: priced.lines.map((l) => ({
+    data: priced.lines.map((l, i) => ({
       invoiceId: invoice.id,
       dailyId: daily.id,
       workDate: daily.workDate,
+      location: l.location,
+      // See the customer side: the statement reads in the daily's own order.
+      seq: i + 1,
       code: l.code,
       description: l.description,
       unit: l.unit,

@@ -30,3 +30,34 @@ export function safe(text: string): string {
     // loses a character; keeping it loses the document.
     .replace(/[^\x20-\x7E\u00A0-\u00FF]/g, "");
 }
+
+/** The subset of a pdf-lib font this module needs, so it imports no types. */
+type Measurable = { widthOfTextAtSize: (text: string, size: number) => number };
+
+/**
+ * Shorten a string until it actually fits the column it is drawn in.
+ *
+ * Clipping by character count is the obvious thing and it is wrong: these are
+ * proportional fonts, so seventeen narrow digits and seventeen capital Ws are
+ * not the same width, and a count chosen for one overflows for the other. The
+ * first version of the invoice location column was clipped at 17 characters
+ * and ran into the unit code at 246pt in a 166pt column.
+ *
+ * Measured against the real font instead, so a column holds whatever its width
+ * allows and no more. The ellipsis is counted too.
+ */
+export function clip(text: string, maxWidth: number, font: Measurable, size: number): string {
+  const s = safe(text);
+  if (!s) return s;
+  if (font.widthOfTextAtSize(s, size) <= maxWidth) return s;
+
+  // "..." rather than a single glyph: safe() maps the ellipsis to three dots
+  // anyway, so measuring it any other way would measure the wrong string.
+  const tail = "...";
+  const room = maxWidth - font.widthOfTextAtSize(tail, size);
+  if (room <= 0) return "";
+
+  let cut = s.length;
+  while (cut > 0 && font.widthOfTextAtSize(s.slice(0, cut), size) > room) cut--;
+  return cut === 0 ? "" : s.slice(0, cut) + tail;
+}

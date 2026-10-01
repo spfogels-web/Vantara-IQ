@@ -44,6 +44,15 @@ export interface QuantityRow {
   quantity: number;
   description?: string;
   unit?: string;
+  /**
+   * Where on the route this quantity was placed — "153/@1-153/@3".
+   *
+   * Carried through pricing untouched so an invoice line can say which span it
+   * came off. It is never read when matching a rate: a rate card is keyed on
+   * the code, and a location that could change which rate applied would be a
+   * way to bill the same work two different ways.
+   */
+  location?: string;
 }
 
 export interface PricedLine {
@@ -53,6 +62,8 @@ export interface PricedLine {
   quantity: number;
   rate: number;
   amount: number;
+  /** The span this came off, when the caller priced per span. Empty otherwise. */
+  location: string;
   /** The card the matched rate came from, so a figure can be traced back. */
   source: string;
   /**
@@ -178,6 +189,10 @@ export function priceQuantities(
       rate: match.rate,
       amount: q.quantity * match.rate,
       source: match.source ?? "",
+      // The adder is worked out across the whole list, so it belongs to no one
+      // span and says so rather than borrowing the location of whichever row
+      // happened to be last.
+      location: q.derived ? "" : (q.location ?? ""),
       derived: q.derived ?? false,
     });
   }

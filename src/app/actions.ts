@@ -2966,6 +2966,8 @@ export type InvoiceLineRow = {
   id: string;
   dailyId: string;
   workDate: string;
+  /** The span of route this came off, as the crew wrote it on the daily. */
+  location: string;
   code: string;
   description: string;
   unit: string;
@@ -2993,7 +2995,7 @@ export async function getInvoiceLines(invoiceId: string): Promise<{
     where: { id: invoiceId },
     select: {
       status: true,
-      lines: { orderBy: [{ workDate: "asc" }, { code: "asc" }] },
+      lines: { orderBy: [{ workDate: "asc" }, { seq: "asc" }, { code: "asc" }] },
     },
   });
   if (!inv) return { status: "", editable: false, lines: [] };
@@ -3006,6 +3008,7 @@ export async function getInvoiceLines(invoiceId: string): Promise<{
       id: l.id,
       dailyId: l.dailyId,
       workDate: l.workDate,
+      location: l.location,
       code: l.code,
       description: l.description,
       unit: l.unit,

@@ -1,4 +1,6 @@
 import "server-only";
+import { billableQuantities } from "@/lib/billing-readiness";
+import { allocateSpans, producedByCode, spansOf, type DailySpan } from "@/lib/daily-lines";
 
 import { prisma } from "@/lib/prisma";
 import { priceQuantities } from "@/lib/pricing";
@@ -46,6 +48,51 @@ export async function recalcInvoice(invoiceId: string): Promise<void> {
   });
 }
 
+/**
+ * A daily's lines on a DRAFT that are the old shape, or null when there are
+ * none to replace.
+ *
+ * Finds them; removing them is the caller's job, and only once the replacement
+ * has actually priced. Invoices written before this change carry one line per
+ * code for the whole day, and leaving them that way would mean two shapes of
+ * invoice in the same drawer — with the one the office is looking at today
+ * being the old one.
+ *
+ * Three conditions, all of them refusals:
+ *
+ *   - Nothing unless the daily actually has spans to split by. A sheet written
+ *     without locations has nothing better to become.
+ *   - Nothing if any of the lines sits on an invoice that has been sent. The
+ *     customer has that figure; reshaping it would make our copy disagree with
+ *     theirs, which is the one thing a billing record must never do. That
+ *     invoice keeps its rolled-up lines for good, and that is correct.
+ *   - Nothing if the lines already carry spans.
+ *
+ * What is replaced is rebuilt from the same daily, at the same rates, for the
+ * same work date, so the invoice total does not move. A test holds that,
+ * because "it only changes the shape" is exactly the kind of claim that is
+ * true until it isn't.
+ */
+async function staleDraftLines(
+  dailyId: string,
+  spans: DailySpan[],
+): Promise<{ ids: string[]; invoiceIds: string[] } | null> {
+  if (!spans.some((s) => s.location)) return null;
+
+  const lines = await prisma.invoiceLine.findMany({
+    where: { dailyId },
+    select: { id: true, location: true, invoice: { select: { id: true, status: true } } },
+  });
+  if (lines.length === 0) return null;
+  if (lines.some((l) => l.invoice.status !== "DRAFT")) return null;
+  if (lines.every((l) => l.location)) return null;
+
+  return {
+    ids: lines.map((l) => l.id),
+    invoiceIds: [...new Set(lines.map((l) => l.invoice.id))],
+  };
+}
+
 export interface FileResult {
   ok: boolean;
   /** Why nothing happened, when nothing happened. */
@@ -77,18 +124,47 @@ export async function fileApprovedDaily(dailyId: string): Promise<FileResult> {
   if (daily.status !== "Approved") return { ok: false, reason: "Only approved work is billed." };
   if (!daily.projectId) return { ok: false, reason: "This daily isn't attached to a project." };
 
+  /**
+   * What is left to bill on this daily, rather than whether it has been
+   * touched at all.
+   *
+   * This was "any invoice line for this daily means skip it", which was right
+   * while a daily billed once and entirely. It stops being right the moment a
+   * quantity can be held back for missing documentation: six hundred of a
+   * thousand feet would bill, and the four hundred released a week later
+   * would find the daily already filed and never bill at all.
+   *
+   * So the question is arithmetic now — produced, minus what is already on an
+   * invoice, minus what is held. With no holds on a daily the two rules give
+   * the same answer: the first filing bills everything, and the second finds
+   * nothing left. Behaviour on a job with no documentation requirements is
+   * therefore unchanged, which is the point.
+   *
+   * InvoiceLine is still the only record of what has been billed. Nothing
+   * here writes a second one.
+   */
+  const spans = spansOf(daily.lineItems);
+
+  /**
+   * Lines to be replaced, found but not yet removed.
+   *
+   * Nothing is deleted until the replacement has priced. Deleting first and
+   * pricing after would empty a draft for good if the rate card had moved on
+   * since it was built — the lines would be gone and nothing would go back.
+   */
+  const stale = await staleDraftLines(daily.id, spans);
+
   const already = await prisma.invoiceLine.findFirst({
     where: { dailyId: daily.id },
     select: { invoice: { select: { number: true } } },
   });
-  if (already) return { ok: false, reason: `Already on ${already.invoice.number}.` };
 
   const week = billingWeekFor(daily);
   if (!week) return { ok: false, reason: "No work date, so no billing period." };
 
   const project = await prisma.project.findUnique({
     where: { id: daily.projectId },
-    select: { id: true, name: true, client: true, customerId: true },
+    select: { id: true, number: true, name: true, client: true, customerId: true },
   });
   if (!project) return { ok: false, reason: "Project not found." };
 
@@ -113,20 +189,34 @@ export async function fileApprovedDaily(dailyId: string): Promise<FileResult> {
     return { ok: false, reason: "No rate card on the customer, so nothing can be priced." };
   }
 
-  // Roll the daily's own items up by code first, so one sheet reporting a code
-  // twice bills as one line at one rate.
-  const byCode = new Map<string, number>();
-  const items = Array.isArray(daily.lineItems) ? (daily.lineItems as unknown[]) : [];
-  for (const raw of items) {
-    const li = raw as { code?: unknown; quantity?: unknown };
-    if (typeof li?.code !== "string" || !li.code.trim()) continue;
-    const qty = typeof li.quantity === "number" ? li.quantity : 0;
-    byCode.set(li.code.trim(), (byCode.get(li.code.trim()) ?? 0) + qty);
+  /**
+   * One invoice line per line of the daily, in the order the crew wrote them.
+   *
+   * This used to roll the day up by code, which gave a correct total and an
+   * unreadable bill: six spans of BFO48 arrived as "BFO48 4,519", and checking
+   * that against the daily meant adding six numbers up by hand. Nobody did.
+   *
+   * The money is identical either way — same codes, same rates, same work date.
+   * Only the shape changes. `spans` was read above, before the re-split.
+   */
+  const byCode = producedByCode(daily.lineItems);
+
+  // Held quantities come out here, before pricing. A foot that cannot be billed
+  // should never acquire a rate, an amount or a line. The allowance is per code
+  // because that is what a hold is; allocateSpans turns it back into spans.
+  const billable = await billableQuantities(daily.id, byCode, stale !== null);
+  if (billable.size === 0) {
+    return {
+      ok: false,
+      reason: already && stale === null
+        ? `Already on ${already.invoice.number}.`
+        : "Every quantity on this daily is held for documentation.",
+    };
   }
 
   // Priced at the card in force on the work date, not today's card.
   const priced = priceQuantities(
-    [...byCode.entries()].map(([code, quantity]) => ({ code, quantity })),
+    allocateSpans(spans, billable),
     customer.rates,
     daily.workDate,
   );
@@ -164,6 +254,9 @@ export async function fileApprovedDaily(dailyId: string): Promise<FileResult> {
             customerId: customer.id,
             projectId: project.id,
             projectName: project.name,
+            // The customer pays against their own job number, so it rides on
+            // the invoice rather than being looked up from the project later.
+            projectNumber: project.number,
             periodStart: week.start,
             periodEnd: week.end,
             status: "DRAFT",
@@ -180,11 +273,49 @@ export async function fileApprovedDaily(dailyId: string): Promise<FileResult> {
     if (!invoice) return { ok: false, reason: "Could not open an invoice for that week." };
   }
 
+  // The replacement has priced, so the old shape can go. Both halves in one
+  // transaction: a draft must never be observed with neither set of lines on it.
+  if (stale) {
+    await prisma.$transaction(async (tx) => {
+      await tx.invoiceLine.deleteMany({ where: { id: { in: stale.ids } } });
+      await tx.invoiceLine.createMany({
+        data: priced.lines.map((l, i) => ({
+          invoiceId: invoice!.id,
+          dailyId: daily.id,
+          workDate: daily.workDate,
+          location: l.location,
+          seq: i + 1,
+          code: l.code,
+          description: l.description,
+          unit: l.unit,
+          quantity: l.quantity,
+          rate: l.rate,
+          amount: Math.round(l.amount * 100) / 100,
+          derived: l.derived,
+        })),
+      });
+    });
+    for (const id of stale.invoiceIds) await recalcInvoice(id);
+    await recalcInvoice(invoice.id);
+
+    return {
+      ok: true,
+      invoiceNumber: invoice.number,
+      lines: priced.lines.length,
+      amount: Math.round(priced.lines.reduce((s, l) => s + l.amount, 0) * 100) / 100,
+      unpriced,
+    };
+  }
+
   await prisma.invoiceLine.createMany({
-    data: priced.lines.map((l) => ({
+    data: priced.lines.map((l, i) => ({
       invoiceId: invoice.id,
       dailyId: daily.id,
       workDate: daily.workDate,
+      location: l.location,
+      // Where it sat on the daily, so the bill reads in the same order as the
+      // sheet. Counted from one; zero is reserved for lines billed before this.
+      seq: i + 1,
       code: l.code,
       description: l.description,
       unit: l.unit,

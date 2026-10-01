@@ -31,6 +31,11 @@ export const navSections: NavSection[] = [
     title: "Financials",
     items: [
       { label: "Invoicing", href: "/invoicing", icon: "billing", badge: 4 },
+      // Between approval and the invoice. Its own entry rather than a tab on
+      // Invoicing, because the work it lists is exactly the work that is *not*
+      // on an invoice — looking for it under Invoicing means looking in the one
+      // place it is guaranteed not to be.
+      { label: "Billing readiness", href: "/billing-readiness", icon: "alert" },
       { label: "Pay applications", href: "/pay-applications", icon: "payapps" },
       { label: "Rate import", href: "/rate-import", icon: "scan" },
     ],
@@ -74,6 +79,11 @@ export const subNavSections: NavSection[] = [
     title: "My work",
     items: [
       { label: "Dailies", href: "/dailies", icon: "clipboard", shortcut: "D" },
+      // What the office is waiting on. High in the rail on purpose: this is work
+      // they have already done and had approved, sitting unbillable behind a
+      // photograph, and it is the only screen here where doing nothing costs
+      // somebody money.
+      { label: "Action required", href: "/billing-readiness", icon: "alert" },
       { label: "My projects", href: "/projects", icon: "projects", shortcut: "P" },
       // Their own tickets only. The query scopes it to work filed to their
       // company, so two crews on one job never read each other.

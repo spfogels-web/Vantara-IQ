@@ -758,6 +758,14 @@ model SubInvoice {
   subcontractorId String
   project         Project?         @relation(fields: [projectId], references: [id], onDelete: SetNull)
   projectId       String?
+  /// The customer's own job number, denormalised beside the name.
+  ///
+  /// Their accounts system is keyed on this, not on what we call the job, so an
+  /// invoice carrying only the name has to be looked up before it can be paid.
+  /// Copied rather than joined for the same reason projectName is: an invoice
+  /// is a historical document, and renaming or deleting a project must not
+  /// change what a bill already sent says.
+  projectNumber   String           @default("")
   projectName     String           @default("")
   periodStart     String           @default("")
   periodEnd       String           @default("")
@@ -820,6 +828,22 @@ model SubInvoiceLine {
   invoiceId   String
   /// The daily this came from. A plain id — deleting a daily must not silently
   /// remove a line from a statement a crew has accepted.
+  /// The span of route this came off, as the crew wrote it on the daily —
+  /// "153/@1-153/@3".
+  ///
+  /// An invoice line is one line of the daily it came from, not a code summed
+  /// across the day. The sum was correct and unreadable: a crew looking at
+  /// "BFO48 4,519" on a bill cannot check it against the six spans they
+  /// actually placed, and neither can the office. Empty on a derived line and
+  /// on anything billed before this existed.
+  location    String     @default("")
+  /// Where this line sat on the daily it came from, counting from one.
+  ///
+  /// Ordering an invoice by code would reorder the spans, and a bill whose rows
+  /// are in a different order from the sheet it came off is a bill somebody has
+  /// to sort before they can check it. Zero on anything billed before this
+  /// existed, which sorts those lines first and together.
+  seq         Int     @default(0)
   dailyId     String     @default("")
   workDate    String     @default("")
   code        String     @default("")
@@ -1170,6 +1194,7 @@ model Daily {
   reviewNote      String   @default("")
   reviewedBy      String   @default("")
   reviewedAt      String   @default("")
+  billingHolds    BillingHold[]
   createdAt       DateTime @default(now())
 
   /// The highest-volume table in the system and, until now, the only one with
@@ -1209,6 +1234,14 @@ model Invoice {
   projectId     String?
   /// Denormalised so the invoice still reads if the project is renamed.
   projectName   String        @default("")
+  /// The customer's own job number, denormalised beside the name.
+  ///
+  /// Their accounts system is keyed on this, not on what we call the job, so an
+  /// invoice carrying only the name has to be looked up before it can be paid.
+  /// Copied rather than joined for the same reason projectName is: an invoice
+  /// is a historical document, and renaming or deleting a project must not
+  /// change what a bill already sent says.
+  projectNumber String        @default("")
   /// Inclusive weekly cutoff this batch covers, as YYYY-MM-DD.
   periodStart   String        @default("")
   periodEnd     String        @default("")
@@ -1248,6 +1281,22 @@ model InvoiceLine {
   invoiceId   String
   /// The daily this production was reported on. Kept as a plain id — deleting
   /// a daily must not quietly delete a line off a sent invoice.
+  /// The span of route this came off, as the crew wrote it on the daily —
+  /// "153/@1-153/@3".
+  ///
+  /// An invoice line is one line of the daily it came from, not a code summed
+  /// across the day. The sum was correct and unreadable: a crew looking at
+  /// "BFO48 4,519" on a bill cannot check it against the six spans they
+  /// actually placed, and neither can the office. Empty on a derived line and
+  /// on anything billed before this existed.
+  location    String  @default("")
+  /// Where this line sat on the daily it came from, counting from one.
+  ///
+  /// Ordering an invoice by code would reorder the spans, and a bill whose rows
+  /// are in a different order from the sheet it came off is a bill somebody has
+  /// to sort before they can check it. Zero on anything billed before this
+  /// existed, which sorts those lines first and together.
+  seq         Int  @default(0)
   dailyId     String  @default("")
   workDate    String  @default("")
   code        String  @default("")
@@ -1439,6 +1488,12 @@ model ProjectPhoto {
   dailySheetId    String?
   dailyId         String?
   subcontractorId String?
+  /// The documentation request this was uploaded to answer, when it was.
+  ///
+  /// One evidence store. A photograph supporting a held quantity is the same
+  /// row the project gallery shows, tagged — not a second copy in a parallel
+  /// table that can drift from it.
+  billingHoldId   String?
 
   /// Who uploaded it, as an account rather than a name that may change.
   uploadedByUserId String?
@@ -3539,29 +3594,96 @@ model Employee {
   @@index([status, name])
 }
 
-/// An unused link that lets one person set their own password, once.
+/// Why a quantity of production is not being billed to the customer yet.
 ///
-/// Deliberately its own table rather than a reuse of SubUserInvite. That one
-/// is bound to a Subcontractor by a required foreign key — a company we
-/// engage — and an employee is somebody we employ. The two look alike and are
-/// not the same thing, and forcing an employee through it would mean
-/// inventing a subcontractor to hang them off.
+/// Production is never altered by this. The daily keeps every foot the crew
+/// reported; this records that some of it cannot go on an invoice until the
+/// documentation behind it is in hand. A crew that built 1,000 feet built
+/// 1,000 feet whether or not anybody photographed the tick marks.
 ///
-/// It is also not a column on Employee. Authentication state does not belong
-/// on the roster model, and a separate row can be replaced wholesale when a
-/// link is reissued, which leaves no stale token working.
+/// WHAT IS AND IS NOT A SOURCE OF TRUTH HERE
 ///
-/// WHAT THIS IS FOR, AND WHAT IT IS NOT
+/// This table is the source of truth for what is HELD. It is deliberately not
+/// a record of what has been billed: InvoiceLine already carries that, keyed
+/// by dailyId and code, and a second ledger of billed quantities is exactly
+/// how two systems come to disagree about whether something was invoiced.
 ///
-/// Vantara sends no email — there is no mail library in the application. Staff
-/// mint this, copy the link, and hand it over. So the token is the entire
-/// authority, exactly as it is for a subcontractor invite: it names one
-/// employee, fixed before the link was sent, and nothing typed on the page can
-/// move it to another. It is not a password reset — there is no such flow —
-/// and it is not a session.
+/// So the arithmetic is:
 ///
-/// The password is set by the person themselves on the page this token opens.
-/// No administrator ever types it, sees it, or can read it back.
+///   billable = produced - already-on-an-invoice - held
+///
+/// Staged and Billed are read off the invoice the line sits on rather than
+/// stored here, for the same reason.
+///
+/// PARTIAL
+///
+/// quantity is how much of the code is held, not the whole entry. Six hundred
+/// of a thousand feet can bill while four hundred waits, and releasing the
+/// four hundred later bills only that.
+///
+/// CUSTOMER BILLING, NOT CREW PAY
+///
+/// Nothing here touches SubInvoice. A hold says Fortitude cannot invoice the
+/// customer yet; it says nothing about what the crew is owed, and the two must
+/// not be confused.
+/// Where a held quantity has got to.
+///
+/// ACCEPTED and OVERRIDDEN both release the quantity for billing and are
+/// deliberately distinct: one means the documentation arrived, the other
+/// means somebody decided to bill without it and put their name to that.
+enum BillingHoldStatus {
+  NEEDS_DOCUMENTATION
+  CREW_RESPONDED
+  ACCEPTED
+  OVERRIDDEN
+  NOT_BILLABLE
+}
+
+model BillingHold {
+  id String @id @default(cuid())
+
+  daily   Daily  @relation(fields: [dailyId], references: [id], onDelete: Cascade)
+  dailyId String
+
+  /// The unit code this holds. One hold per code per daily.
+  code String
+  /// How much of that code is held back.
+  quantity Float @default(0)
+
+  status BillingHoldStatus @default(NEEDS_DOCUMENTATION)
+
+  /// Which rule put this here, named so it can be quoted back.
+  requirement String @default("")
+  /// What is outstanding, in the words the crew is shown.
+  missing String[] @default([])
+
+  /// Who asked, and when.
+  raisedBy String   @default("")
+  raisedAt DateTime @default(now())
+
+  /// The crew saying they have supplied it. Evidence lands on ProjectPhoto
+  /// and is tied back by holdId there rather than copied.
+  respondedBy String    @default("")
+  respondedAt DateTime?
+  responseNote String   @default("")
+
+  /// The office accepting or refusing it.
+  resolvedBy   String    @default("")
+  resolvedAt   DateTime?
+  resolutionNote String  @default("")
+
+  /// An override records what was NOT received, so the audit trail never
+  /// pretends the documentation arrived.
+  overrideReason String @default("")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([dailyId, code])
+  @@index([status])
+  @@index([dailyId])
+}
+
 /// A crew saying they have read the build standard for a job, before they
 /// mobilise on it.
 ///
@@ -3593,6 +3715,29 @@ model ProjectQcAck {
   @@index([projectId])
 }
 
+/// An unused link that lets one person set their own password, once.
+///
+/// Deliberately its own table rather than a reuse of SubUserInvite. That one
+/// is bound to a Subcontractor by a required foreign key — a company we
+/// engage — and an employee is somebody we employ. The two look alike and are
+/// not the same thing, and forcing an employee through it would mean
+/// inventing a subcontractor to hang them off.
+///
+/// It is also not a column on Employee. Authentication state does not belong
+/// on the roster model, and a separate row can be replaced wholesale when a
+/// link is reissued, which leaves no stale token working.
+///
+/// WHAT THIS IS FOR, AND WHAT IT IS NOT
+///
+/// Vantara sends no email — there is no mail library in the application. Staff
+/// mint this, copy the link, and hand it over. So the token is the entire
+/// authority, exactly as it is for a subcontractor invite: it names one
+/// employee, fixed before the link was sent, and nothing typed on the page can
+/// move it to another. It is not a password reset — there is no such flow —
+/// and it is not a session.
+///
+/// The password is set by the person themselves on the page this token opens.
+/// No administrator ever types it, sees it, or can read it back.
 model EmployeeInvite {
   token String @id
 

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   AlertTriangle,
+  ArrowUpRight,
   Camera,
   CheckCircle2,
   Coins,
@@ -23,13 +24,14 @@ import {
 
 import { cn } from "@/lib/utils";
 import { toneStyles } from "@/lib/tone";
-import type { DailyReport, DailyStatus } from "@/lib/types";
+import type { DailyCodeStatus, DailyReport, DailyStatus } from "@/lib/types";
 import { formatCurrency, formatFeet, formatNumber, formatWhen, todayET } from "@/lib/format";
 import { addDays } from "@/lib/billing";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { useT } from "@/components/layout/language-provider";
 import { useOrgName } from "@/components/layout/org-provider";
 import { StatusPill } from "@/components/common/status-pill";
+import { BillingStatusChip } from "@/components/billing/status-chip";
 import { ProjectThumb } from "@/components/common/project-thumb";
 import { Button } from "@/components/ui/button";
 import {
@@ -172,6 +174,7 @@ export function DailiesView({
   covers,
   reviewerName,
   canReview = false,
+  codeStatuses,
 }: {
   dailies: DailyReport[];
   initialId?: string;
@@ -196,6 +199,15 @@ export function DailiesView({
    * on the server, which is what a button they cannot use amounts to.
    */
   canReview?: boolean;
+  /**
+   * dailyId -> where each of its unit codes stands with the customer's bill.
+   *
+   * Fetched once for the page, like the thumbnails. Carries no rate and no
+   * amount, because a crew reads their own daily on this screen and is owed the
+   * plain fact that a quantity is held without being shown what it bills at.
+   * Absent for a daily nobody has held anything on, which reads as ready.
+   */
+  codeStatuses?: Record<string, DailyCodeStatus[]>;
 }) {
   const t = useT();
   /**
@@ -596,6 +608,7 @@ export function DailiesView({
                         shot={thumbs?.[sheetByDaily?.[d.id]?.sheetId ?? ""]}
                         onClose={() => setSelectedId(null)}
                         onSetStatus={setStatus}
+                        codeStatuses={codeStatuses?.[d.id]}
                       />
                     ) : null}
                   </li>
@@ -846,6 +859,7 @@ export function DailiesView({
                                 shot={shot}
                                 onClose={() => setSelectedId(null)}
                                 onSetStatus={setStatus}
+                                codeStatuses={codeStatuses?.[d.id]}
                               />
                             </td>
                           </tr>
@@ -884,12 +898,14 @@ function DailyDetail({
   sheet,
   reviewerName,
   canReview,
+  codeStatuses,
 }: {
   daily: DailyReport;
   onSetStatus: (id: string, status: DailyStatus, tone: DailyReport["tone"]) => void;
   sheet?: { sheetId: string; projectId: string };
   reviewerName?: string;
   canReview: boolean;
+  codeStatuses?: DailyCodeStatus[];
 }) {
   const router = useRouter();
   const t = useT();
@@ -908,6 +924,20 @@ function DailyDetail({
   const [confirmDelete, setConfirmDelete] = React.useState(false);
 
   const decided = d.status === "Approved" || d.status === "Denied";
+
+  /**
+   * Billing status by code, for the chips in the line-item table.
+   *
+   * A code with no entry here is a code nothing has been held on, which reads
+   * as ready — so the table does not go blank on a daily that predates any of
+   * this, and it does not claim anything about a day nobody has decided yet.
+   */
+  const byCode = React.useMemo(
+    () => new Map((codeStatuses ?? []).map((c) => [c.code, c])),
+    [codeStatuses],
+  );
+  const heldCodes = (codeStatuses ?? []).filter((c) => c.held > 0);
+  const heldCount = heldCodes.length;
 
   /**
    * The four checks below, as data, so the heading can count them.
@@ -1162,13 +1192,40 @@ function DailyDetail({
       {/* Line items — the digital daily */}
       <Panel>
         <PanelHeader title={t("Line items")} count={d.lineItems.length} icon={<MapPin className="size-3.5 text-gold" />} />
+
+        {/* Production is not the thing in question. Said here, above the
+            numbers, because the alternative is a crew reading a red chip on
+            their own footage and concluding the office has cut it. */}
+        {heldCount > 0 ? (
+          <div className="flex items-start gap-2.5 border-b border-border/60 bg-critical/[0.06] px-4 py-2.5 sm:px-5">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-critical" />
+            <div className="min-w-0">
+              <p className="text-[12.5px] font-semibold text-foreground">
+                {t("Approved, and held from billing pending documentation.")}
+              </p>
+              <p className="mt-0.5 text-[12px] leading-relaxed text-muted-foreground">
+                {canReview
+                  ? t("The quantities below stand. Only the invoice is waiting.")
+                  : t("Your footage and your pay are unchanged. Send what is listed and the office takes it from there.")}
+              </p>
+              <Link
+                href="/billing-readiness"
+                className="mt-1 inline-flex items-center gap-1 text-[12px] font-semibold text-brand-bright hover:underline"
+              >
+                {canReview ? t("Open billing readiness") : t("See what is needed")}
+                <ArrowUpRight className="size-3" />
+              </Link>
+            </div>
+          </div>
+        ) : null}
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
               <tr className="border-b border-border/70 text-[10.5px] uppercase tracking-wider text-muted-foreground">
                 <th className="px-4 py-2 font-medium sm:px-5">{t("Location")}</th>
                 <th className="px-4 py-2 font-medium">{t("Unit code")}</th>
-                <th className="px-4 py-2 text-right font-medium sm:px-5">{t("Quantity")}</th>
+                <th className="px-4 py-2 text-right font-medium">{t("Quantity")}</th>
+                <th className="px-4 py-2 font-medium sm:px-5">{t("Billing")}</th>
               </tr>
             </thead>
             <tbody>
@@ -1180,8 +1237,16 @@ function DailyDetail({
                       {li.code}
                     </span>
                   </td>
-                  <td className="num px-4 py-2.5 text-right text-[12.5px] font-medium text-foreground sm:px-5">
+                  <td className="num px-4 py-2.5 text-right text-[12.5px] font-medium text-foreground">
                     {formatNumber(li.quantity)} {li.unit}
+                  </td>
+                  {/* Where this code stands with the customer's bill.
+                      Deliberately beside the quantity rather than replacing it:
+                      the crew reported what they reported, and a cell showing
+                      600 because 400 is held would make the sheet disagree with
+                      the person who filled it in. */}
+                  <td className="px-4 py-2.5 sm:px-5">
+                    <CodeBilling status={byCode.get(li.code.trim())} canReview={canReview} />
                   </td>
                 </tr>
               ))}
@@ -1191,8 +1256,15 @@ function DailyDetail({
                 <td className="px-4 py-2.5 text-[12px] font-medium text-muted-foreground sm:px-5" colSpan={2}>
                   Total footage
                 </td>
-                <td className="num px-4 py-2.5 text-right text-[13px] font-semibold text-foreground sm:px-5">
+                <td className="num px-4 py-2.5 text-right text-[13px] font-semibold text-foreground">
                   {formatFeet(d.totalFt)}
+                </td>
+                <td className="px-4 py-2.5 sm:px-5">
+                  {heldCount > 0 ? (
+                    <span className="text-[11.5px] font-semibold text-critical">
+                      {heldCount} code{heldCount === 1 ? "" : "s"} held from billing
+                    </span>
+                  ) : null}
                 </td>
               </tr>
             </tfoot>
@@ -1390,6 +1462,59 @@ function DailyDetail({
  * cross with nothing beside it sends the reviewer into the daily to find out
  * what is wrong, which is the trip this panel exists to save.
  */
+/**
+ * Where one unit code stands with the customer's bill, in a table cell.
+ *
+ * Compact on purpose. The cell answers "can this be invoiced", and anything
+ * more than that belongs on the readiness queue, where there is room for the
+ * requirement, the history and the actions. A cell that tried to hold all of
+ * it made the line-item table unreadable at the width a laptop actually has.
+ *
+ * A code with no status behind it renders nothing rather than a guess. Most
+ * codes have no documentation requirement at all, and stamping every one of
+ * them "Ready" turns the column into noise and hides the two that are not.
+ */
+function CodeBilling({
+  status,
+  canReview,
+}: {
+  status?: DailyCodeStatus;
+  canReview: boolean;
+}) {
+  if (!status) return <span className="text-[11.5px] text-muted-foreground/40">—</span>;
+
+  // Nothing held, nothing invoiced, no requirement: there is nothing to say.
+  const quiet =
+    status.status === "READY_TO_BILL" && status.held === 0 && status.invoices.length === 0;
+  if (quiet) return <span className="text-[11.5px] text-muted-foreground/40">—</span>;
+
+  return (
+    <div className="flex flex-col items-start gap-0.5">
+      <BillingStatusChip status={status.status} short />
+      {status.held > 0 ? (
+        <span className="num text-[11px] font-medium text-critical">
+          {formatNumber(status.held)} held
+        </span>
+      ) : null}
+      {status.held > 0 && status.missing.length ? (
+        <span className="max-w-[190px] truncate text-[11px] text-muted-foreground" title={status.missing.join(", ")}>
+          {status.missing[0]}
+        </span>
+      ) : null}
+      {status.overrideReason ? (
+        <span className="max-w-[190px] truncate text-[11px] text-gold" title={status.overrideReason}>
+          {status.overrideReason}
+        </span>
+      ) : null}
+      {canReview && status.invoices.length ? (
+        <span className="num text-[11px] text-muted-foreground">
+          {status.invoices.map((i) => i.number).join(", ")}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 function AiCheck({ ok, label, fail }: { ok: boolean; label: string; fail: string }) {
   return (
     <li
@@ -1626,6 +1751,7 @@ function DailyWorkspace({
   shot,
   onClose,
   onSetStatus,
+  codeStatuses,
 }: {
   d: DailyReport;
   t: (s: string) => string;
@@ -1635,6 +1761,8 @@ function DailyWorkspace({
   shot?: { urls: string[]; total: number };
   onClose: () => void;
   onSetStatus: (id: string, status: DailyStatus, tone: DailyReport["tone"]) => void;
+  /** This daily's codes and where each stands with the bill. */
+  codeStatuses?: DailyCodeStatus[];
 }) {
   const [section, setSection] = React.useState<(typeof SECTIONS)[number]["id"]>("overview");
   const why = attentionReasons(d);
@@ -1788,6 +1916,7 @@ function DailyWorkspace({
                 sheet={sheet}
                 reviewerName={reviewerName}
                 canReview={canReview}
+                codeStatuses={codeStatuses}
               />
             </>
           ) : section === "photos" ? (

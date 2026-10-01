@@ -88,6 +88,11 @@ const PUBLIC_PREFIXES = [
  */
 const SUB_ALLOWED_PREFIXES = [
   "/dailies",
+  // What the office is waiting on from them. The route serves a crew an
+  // entirely different component and an entirely different query — no rate, no
+  // amount, no invoice — and the office accessor calls requireStaff(), so this
+  // line opens the page and not the figures on it.
+  "/billing-readiness",
   // Their own locate tickets, and only those. The query filters to tickets
   // filed to their company — not to every ticket on a job they happen to
   // share — so two crews on one build never read each other's work.

@@ -3,7 +3,7 @@ import "server-only";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import type { Prisma } from "@prisma/client";
 
-import { safe } from "@/lib/pdf-text";
+import { clip, safe } from "@/lib/pdf-text";
 import { embedOrgLogo, logoBox } from "@/lib/pdf-logo";
 
 export type InvoiceWith = Prisma.InvoiceGetPayload<{
@@ -93,9 +93,20 @@ export async function buildInvoicePdf(
   if (invoice.customer?.billingEmail) {
     text(invoice.customer.billingEmail, M, 9, body, muted);
   }
-  page.drawText(safe(`Project: ${invoice.projectName || "-"}`), {
-    x: colR, y, size: 9, font: body, color: muted,
-  });
+  /**
+   * The job number alongside the name.
+   *
+   * The number is what the customer files and pays against — their system is
+   * keyed on it, not on what we call the job — so an invoice carrying only the
+   * name makes somebody look the job up before they can process it.
+   */
+  page.drawText(
+    safe(
+      `Project: ${invoice.projectName || "-"}` +
+        (invoice.projectNumber ? ` (${invoice.projectNumber})` : ""),
+    ),
+    { x: colR, y, size: 9, font: body, color: muted },
+  );
   y -= 13;
   page.drawText(
     safe(
@@ -106,11 +117,32 @@ export async function buildInvoicePdf(
   );
   y -= 22;
 
-  // --- Lines ----------------------------------------------------------------
-  const cols = { date: M, code: M + 74, desc: M + 148, qty: 400, unit: 415, rate: 470, amt: PAGE.w - M };
+  /**
+   * --- Lines ----------------------------------------------------------------
+   *
+   * LOCATION sits second, right after the date, because it is what the reader
+   * matches against the daily in their other hand. The bill used to carry one
+   * row per code for the whole day — correct, and uncheckable without adding
+   * the sheet up by hand — so the span is the column that earns its width here.
+   *
+   * DESCRIPTION gives up room for it. The code already says what the work is,
+   * and the description repeats that in words; the span is the only thing on
+   * the row that says *where*.
+   */
+  const cols = {
+    date: M,
+    loc: M + 62,
+    code: M + 166,
+    desc: M + 224,
+    qty: 400,
+    unit: 415,
+    rate: 470,
+    amt: PAGE.w - M,
+  };
 
   const header = () => {
     text("DATE", cols.date, 7.5, bold, muted);
+    text("LOCATION", cols.loc, 7.5, bold, muted);
     text("CODE", cols.code, 7.5, bold, muted);
     text("DESCRIPTION", cols.desc, 7.5, bold, muted);
     right("QTY", cols.qty, 7.5, bold, muted);
@@ -123,18 +155,28 @@ export async function buildInvoicePdf(
   };
   header();
 
+  /** Repeat a date only when it changes — 18 copies of it is noise. */
+  let lastDate = "";
+
   for (const l of invoice.lines) {
     if (y < M + 130) {
       page = pdf.addPage([PAGE.w, PAGE.h]);
       y = PAGE.h - M;
       header();
+      lastDate = "";
     }
-    text(l.workDate || "—", cols.date, 8.5);
+    const date = l.workDate || "—";
+    if (date !== lastDate) {
+      text(date, cols.date, 8.5);
+      lastDate = date;
+    }
+    // Clipped to the column rather than wrapped: one row per unit keeps the
+    // column of amounts scannable, which is what this page is read for. Clipped
+    // by width and not by character count — these are proportional fonts, and a
+    // count that fits digits overflows on capitals.
+    text(clip(l.location, cols.code - cols.loc - 4, body, 8.5), cols.loc, 8.5, body, muted);
     text(l.code, cols.code, 8.5, bold);
-    // Clipped rather than wrapped: one line per unit keeps the column of
-    // amounts scannable, which is what this page is read for.
-    const desc = l.description.length > 46 ? `${l.description.slice(0, 45)}…` : l.description;
-    text(desc, cols.desc, 8.5, body, muted);
+    text(clip(l.description, cols.qty - cols.desc - 6, body, 8.5), cols.desc, 8.5, body, muted);
     right(String(l.quantity), cols.qty, 8.5);
     text(l.unit, cols.unit, 8.5, body, muted);
     right(l.rate.toFixed(2), cols.rate, 8.5);

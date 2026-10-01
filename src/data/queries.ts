@@ -19,6 +19,7 @@ import {
 import { statementMoney } from "@/lib/fast-pay";
 import { packetStatus } from "@/lib/vendor-packet";
 import { badgeReadiness } from "@/lib/badge";
+import { readinessForDailies } from "@/lib/billing-readiness";
 import { isStaff } from "@/lib/auth";
 import { getUnreadMessageCount } from "@/data/messages";
 import { CUTOFF_LABEL, addDays, balanceOf, billingWeekFor, easternDate, isPastDue, weekOf } from "@/lib/billing";
@@ -63,13 +64,16 @@ import {
 import { invoices, materials, reportDefinitions } from "@/data/mock";
 import type {
   AppNotification,
+  BillingReadinessRow,
   BriefItem,
   Customer,
   CustomerContact,
+  DailyCodeStatus,
   DailyFlag,
   DailyLineItem,
   DailyReport,
   Deadline,
+  DocumentationRequest,
   HealthSummary,
   Invoice,
   Kpi,
@@ -2888,6 +2892,8 @@ export interface InvoiceRow {
   customer: string;
   customerId: string;
   project: string;
+  /** The customer's own job number — what their accounts system is keyed on. */
+  projectNumber: string;
   periodStart: string;
   periodEnd: string;
   status: string;
@@ -2913,7 +2919,7 @@ export async function getInvoiceRows(): Promise<InvoiceRow[]> {
   const rows = await prisma.invoice.findMany({
     orderBy: [{ periodEnd: "desc" }, { number: "desc" }],
     select: {
-      id: true, number: true, projectName: true, customerId: true,
+      id: true, number: true, projectName: true, projectNumber: true, customerId: true,
       periodStart: true, periodEnd: true, status: true,
       subtotal: true, retainageHeld: true, amountDue: true,
       issuedAt: true, dueAt: true,
@@ -2938,6 +2944,7 @@ export async function getInvoiceRows(): Promise<InvoiceRow[]> {
       customer: r.customer.name,
       customerId: r.customerId,
       project: r.projectName,
+      projectNumber: r.projectNumber,
       periodStart: r.periodStart,
       periodEnd: r.periodEnd,
       status: r.status,
@@ -3935,6 +3942,8 @@ export interface SubInvoiceRow {
   periodEnd: string;
   status: string;
   subtotal: number;
+  /** The job number, as it reads on their own daily. */
+  projectNumber: string;
   issuedAt: string | null;
   acceptedAt: string | null;
   acceptedBy: string;
@@ -3969,6 +3978,8 @@ export interface SubInvoiceRow {
     id: string;
     dailyId: string;
     workDate: string;
+    /** The span of route this came off, as written on the daily. */
+    location: string;
     code: string;
     description: string;
     unit: string;
@@ -3980,6 +3991,7 @@ export interface SubInvoiceRow {
 
 function toSubInvoiceRow(r: {
   id: string; number: string; subcontractorId: string; projectName: string;
+  projectNumber: string;
   periodStart: string; periodEnd: string; status: string; subtotal: number;
   issuedAt: Date | null; acceptedAt: Date | null; acceptedBy: string;
   termsDays: number; fastPay: boolean; fastPayFeePct: number;
@@ -3989,7 +4001,7 @@ function toSubInvoiceRow(r: {
   resolutionNote: string;
   subcontractor: { company: string };
   lines: {
-    id: string; dailyId: string; workDate: string; code: string;
+    id: string; dailyId: string; workDate: string; location: string; code: string;
     description: string; unit: string; quantity: number; rate: number; amount: number;
   }[];
 }): SubInvoiceRow {
@@ -4006,6 +4018,7 @@ function toSubInvoiceRow(r: {
     periodEnd: r.periodEnd,
     status: r.status,
     subtotal: r.subtotal,
+    projectNumber: r.projectNumber,
     // Minute precision on the acceptance: the date alone is not much of a
     // record, and the second is noise.
     issuedAt: r.issuedAt?.toISOString().slice(0, 10) ?? null,
@@ -4035,7 +4048,7 @@ function toSubInvoiceRow(r: {
 }
 
 const SUB_INVOICE_SELECT = {
-  id: true, number: true, subcontractorId: true, projectName: true,
+  id: true, number: true, subcontractorId: true, projectName: true, projectNumber: true,
   periodStart: true, periodEnd: true, status: true, subtotal: true,
   issuedAt: true, acceptedAt: true, acceptedBy: true,
   termsDays: true, fastPay: true, fastPayFeePct: true,
@@ -4044,9 +4057,13 @@ const SUB_INVOICE_SELECT = {
   disputeNote: true, disputedAt: true, disputedBy: true, resolutionNote: true,
   subcontractor: { select: { company: true } },
   lines: {
-    orderBy: [{ workDate: "asc" as const }, { code: "asc" as const }],
+    orderBy: [
+      { workDate: "asc" as const },
+      { seq: "asc" as const },
+      { code: "asc" as const },
+    ],
     select: {
-      id: true, dailyId: true, workDate: true, code: true,
+      id: true, dailyId: true, workDate: true, location: true, code: true,
       description: true, unit: true, quantity: true, rate: true, amount: true,
     },
   },
@@ -5467,4 +5484,301 @@ export async function getMyTimesheets(): Promise<TimesheetRow[]> {
   const me = await employeeForSession();
   if (!me) return [];
   return getTimesheets({ employeeId: me.employeeId });
+}
+
+/* ------------------------------------------------------------------ *
+ * Billing readiness.
+ *
+ * Two accessors, and the split between them is a security boundary rather
+ * than a convenience. The office one is staff-gated and carries the
+ * customer's rate; the crew one is assignment-scoped and carries no money
+ * at all. Neither can be reached from the other's screen.
+ * ------------------------------------------------------------------ */
+
+/**
+ * How far back the office queue reaches by default.
+ *
+ * Roughly a quarter — long enough to cover a customer's slowest pay cycle and
+ * every billing week somebody might still be arguing about, short enough that
+ * the page is not shipping a year of settled invoices to a browser.
+ */
+const WINDOW_DAYS = 120;
+
+/** Whole days between an ISO instant and now. Never negative. */
+function daysSince(iso: string | null): number | null {
+  if (!iso) return null;
+  const then = Date.parse(iso);
+  if (Number.isNaN(then)) return null;
+  return Math.max(0, Math.floor((Date.now() - then) / 86_400_000));
+}
+
+/**
+ * Every unit code of approved production, and whether it can be invoiced.
+ *
+ * Staff only, and gated rather than filtered: the rows carry the customer's
+ * rate and what the held footage is worth, which is exactly the figure a
+ * subcontractor must never see on their own work. `requireStaff()` throws, so
+ * there is no shape of this data a crew can receive.
+ *
+ * Scoped to approved dailies. A submitted daily nobody has decided on is not
+ * "held from billing" — it is not billable yet for an ordinary reason, and
+ * putting it in this queue would bury the days that genuinely are stuck.
+ */
+export async function getBillingReadiness(): Promise<BillingReadinessRow[]> {
+  await requireStaff();
+
+  /**
+   * A recent window, plus anything held however old it is.
+   *
+   * Every approved daily ever filed is the honest answer to "what is billable",
+   * and it is also a payload that grows without limit on a page somebody opens
+   * all day. So the window bounds the ordinary case and the second clause makes
+   * sure it cannot bound away the thing this page exists for: a quantity stuck
+   * behind a photograph for four months is precisely the row that must not fall
+   * off the end of a date filter.
+   */
+  const since = addDays(todayET(), -WINDOW_DAYS);
+
+  const dailies = await prisma.daily.findMany({
+    where: {
+      status: "Approved",
+      OR: [{ workDate: { gte: since } }, { billingHolds: { some: {} } }],
+    },
+    orderBy: { workDate: "desc" },
+    select: {
+      id: true,
+      sheetNumber: true,
+      workDate: true,
+      billingWeekEnd: true,
+      projectId: true,
+      projectName: true,
+      customer: true,
+      subcontractor: true,
+      lineItems: true,
+      project: {
+        select: {
+          id: true,
+          name: true,
+          number: true,
+          market: true,
+          client: true,
+          customer: { select: { name: true, shortCode: true } },
+        },
+      },
+    },
+  });
+  if (dailies.length === 0) return [];
+
+  const readiness = await readinessForDailies(dailies.map((d) => d.id));
+
+  /**
+   * Rate cards, once.
+   *
+   * Priced per customer rather than globally, because two of these markets
+   * share a prime and carry different cards — pricing a code off whichever
+   * card happened to be loaded first would put the wrong dollar figure beside
+   * the right footage.
+   */
+  const cards = new Map<string, Awaited<ReturnType<typeof prisma.customerRate.findMany>>>();
+  const customerIds = [
+    ...new Set(
+      dailies.map((d) => d.project?.customer?.name ?? d.customer).filter((n): n is string => !!n),
+    ),
+  ];
+  const customers = await prisma.customer.findMany({
+    where: { name: { in: customerIds } },
+    select: {
+      name: true,
+      rates: {
+        select: {
+          code: true,
+          description: true,
+          unit: true,
+          rate: true,
+          effectiveDate: true,
+          expirationDate: true,
+        },
+      },
+    },
+  });
+  for (const c of customers) cards.set(c.name, c.rates as never);
+
+  const rows: BillingReadinessRow[] = [];
+  for (const d of dailies) {
+    const codes = readiness.get(d.id) ?? [];
+    if (codes.length === 0) continue;
+
+    const customerName = d.project?.customer?.name ?? d.customer ?? "";
+    const card = (cards.get(customerName) ?? []) as never[];
+
+    for (const c of codes) {
+      const rate = findRate(c.code, card, d.workDate);
+      rows.push({
+        dailyId: d.id,
+        sheetNumber: d.sheetNumber,
+        workDate: d.workDate,
+        billingWeekEnd: d.billingWeekEnd || billingWeekFor(d)?.end || "",
+        projectId: d.project?.id ?? d.projectId ?? "",
+        projectName: d.project?.name ?? d.projectName,
+        projectNumber: d.project?.number ?? "",
+        customer: customerName,
+        market: d.project?.market ?? "",
+        subcontractor: d.subcontractor,
+
+        code: c.code,
+        description: rate?.description ?? "",
+        unit: rate?.unit ?? "",
+        produced: c.produced,
+        billed: c.billed,
+        held: c.held,
+        billable: c.billable,
+
+        status: c.status,
+        requirement: c.requirement,
+        missing: c.missing,
+        overrideReason: c.overrideReason,
+        resolutionNote: c.resolutionNote,
+        responseNote: c.responseNote,
+        raisedBy: c.raisedBy,
+        raisedAt: c.raisedAt ?? "",
+        respondedBy: c.respondedBy,
+        respondedAt: c.respondedAt ?? "",
+        resolvedBy: c.resolvedBy,
+        ageDays: daysSince(c.raisedAt),
+        holdId: c.holdId,
+        invoices: c.invoices,
+
+        rate: rate?.rate ?? null,
+        billableAmount: rate ? Math.round(c.billable * rate.rate * 100) / 100 : 0,
+        heldAmount: rate ? Math.round(c.held * rate.rate * 100) / 100 : 0,
+      });
+    }
+  }
+  return rows;
+}
+
+/**
+ * What this crew is being asked for, across their own jobs.
+ *
+ * Scoped to their assignments through the project relation rather than by a
+ * name on the daily, so renaming a company cannot widen it. Carries no rate,
+ * no amount, no invoice number and no customer — a crew needs to know which
+ * day, which code, how much, and what to send.
+ *
+ * Returns nothing for staff. The office has its own queue with the money on
+ * it, and serving them this one would only be a second, worse copy.
+ */
+export async function getMyDocumentationRequests(): Promise<DocumentationRequest[]> {
+  const me = await viewer();
+  if (!me) return [];
+  if (isStaff(me.role)) return [];
+  if (!me.subcontractorId) return [];
+
+  const holds = await prisma.billingHold.findMany({
+    where: {
+      status: { in: ["NEEDS_DOCUMENTATION", "CREW_RESPONDED"] },
+      daily: {
+        status: "Approved",
+        project: { crews: { some: { subcontractorId: me.subcontractorId } } },
+      },
+    },
+    select: {
+      id: true,
+      code: true,
+      quantity: true,
+      status: true,
+      requirement: true,
+      missing: true,
+      resolutionNote: true,
+      raisedAt: true,
+      respondedAt: true,
+      responseNote: true,
+      daily: { select: { id: true, workDate: true, projectName: true, projectId: true } },
+    },
+    orderBy: { raisedAt: "asc" },
+  });
+  if (holds.length === 0) return [];
+
+  // What they have already sent for each request, so the screen shows work
+  // done rather than asking twice for the same photograph.
+  const shots = await prisma.projectPhoto.findMany({
+    where: { billingHoldId: { in: holds.map((h) => h.id) } },
+    select: { billingHoldId: true, url: true, caption: true },
+    orderBy: { createdAt: "asc" },
+  });
+  const byHold = new Map<string, { url: string; caption: string }[]>();
+  for (const s of shots) {
+    if (!s.billingHoldId) continue;
+    const bucket = byHold.get(s.billingHoldId);
+    if (bucket) bucket.push({ url: s.url, caption: s.caption });
+    else byHold.set(s.billingHoldId, [{ url: s.url, caption: s.caption }]);
+  }
+
+  return holds.map((h) => ({
+    holdId: h.id,
+    dailyId: h.daily.id,
+    projectId: h.daily.projectId ?? "",
+    projectName: h.daily.projectName,
+    workDate: h.daily.workDate,
+    code: h.code,
+    quantity: h.quantity,
+    // The unit comes off the code's own profile, never off a rate card — a card
+    // lookup here would be the crack the customer's rate leaks through.
+    unit: isLinearFootageCode(h.code) ? "FT" : "EA",
+    status: h.status as DocumentationRequest["status"],
+    requirement: h.requirement,
+    missing: h.missing,
+    note: h.resolutionNote,
+    raisedAt: h.raisedAt.toISOString(),
+    ageDays: daysSince(h.raisedAt.toISOString()) ?? 0,
+    respondedAt: h.respondedAt?.toISOString() ?? "",
+    responseNote: h.responseNote,
+    evidence: byHold.get(h.id) ?? [],
+  }));
+}
+
+/**
+ * Billing status per code, for the dailies a screen is about to render.
+ *
+ * Carries no rate and no amount, because a crew sees this too — they are
+ * looking at their own daily and they are owed the plain fact that a quantity
+ * is held, without being shown what the customer pays for it.
+ *
+ * Scoped to dailies the viewer may read. The ids come off a list that was
+ * already filtered, but filtering twice is cheap and a caller passing an id
+ * from somewhere else is exactly the mistake worth being immune to.
+ */
+export async function getDailyCodeStatuses(
+  dailyIds: string[],
+): Promise<Record<string, DailyCodeStatus[]>> {
+  const me = await viewer();
+  if (!me || dailyIds.length === 0) return {};
+
+  const allowed = await visibleProjectIds(me);
+  const readable = await prisma.daily.findMany({
+    where: {
+      id: { in: dailyIds },
+      ...(allowed === null ? {} : { projectId: { in: allowed } }),
+    },
+    select: { id: true },
+  });
+  if (readable.length === 0) return {};
+
+  const readiness = await readinessForDailies(readable.map((d) => d.id));
+  const out: Record<string, DailyCodeStatus[]> = {};
+  for (const [dailyId, codes] of readiness) {
+    out[dailyId] = codes.map((c) => ({
+      code: c.code,
+      status: c.status,
+      produced: c.produced,
+      held: c.held,
+      billable: c.billable,
+      requirement: c.requirement,
+      missing: c.missing,
+      overrideReason: c.overrideReason,
+      holdId: c.holdId,
+      invoices: c.invoices.map((i) => ({ number: i.number, status: i.status })),
+    }));
+  }
+  return out;
 }

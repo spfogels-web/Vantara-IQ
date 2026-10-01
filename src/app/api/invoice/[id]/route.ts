@@ -35,7 +35,7 @@ export async function GET(
     where: { id },
     include: {
       customer: { select: { name: true, billingEmail: true, paymentTerms: true } },
-      lines: { orderBy: [{ workDate: "asc" }, { code: "asc" }] },
+      lines: { orderBy: [{ workDate: "asc" }, { seq: "asc" }, { code: "asc" }] },
       payments: { orderBy: { receivedOn: "asc" } },
     },
   });

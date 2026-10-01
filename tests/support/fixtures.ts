@@ -160,6 +160,7 @@ async function buildTenant(db: PrismaClient, s: Spec): Promise<Tenant> {
   const project2 = await db.project.create({
     data: {
       name: s.project2,
+      number: `${s.shortCode2}-4402`,
       client: s.customer2,
       location: "Invented County",
       status: "Active",
@@ -225,6 +226,7 @@ async function buildTenant(db: PrismaClient, s: Spec): Promise<Tenant> {
   const project = await db.project.create({
     data: {
       name: s.project,
+      number: `${s.shortCode}-4401`,
       client: s.customer,
       location: "Invented County",
       status: "Active",

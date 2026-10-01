@@ -199,7 +199,9 @@ function StatementRow({ invoice: inv, actionable }: { invoice: SubInvoiceRow; ac
         </button>
         <span className={cn("rounded px-1.5 py-0.5 text-[10px] font-semibold", st.cls)}>{st.label}</span>
         <span className="text-[12px] text-muted-foreground">
-          {inv.project || "—"} · {inv.periodStart} to {inv.periodEnd}
+          {inv.project || "—"}
+          {inv.projectNumber ? <span className="num"> {inv.projectNumber}</span> : null} ·{" "}
+          {inv.periodStart} to {inv.periodEnd}
         </span>
         <span className="num ml-auto text-[15px] font-semibold text-foreground">
           {formatCurrency(inv.subtotal)}
@@ -321,10 +323,14 @@ function StatementRow({ invoice: inv, actionable }: { invoice: SubInvoiceRow; ac
 
       {open ? (
         <div className="mt-2.5 overflow-x-auto rounded-lg border border-border/60">
-          <table className="w-full min-w-[560px] text-left">
+          <table className="w-full min-w-[660px] text-left">
             <thead>
               <tr className="border-b border-border/60 bg-foreground/[0.02] text-[10.5px] uppercase tracking-wider text-muted-foreground">
                 <th className="px-3 py-2 font-medium">Day</th>
+                {/* The span, so a crew can read this statement straight down
+                    beside the daily they filed. It used to arrive rolled up by
+                    code, and "which span was I paid for" had no answer. */}
+                <th className="px-3 py-2 font-medium">Location</th>
                 <th className="px-3 py-2 font-medium">Code</th>
                 <th className="px-3 py-2 font-medium">Work</th>
                 <th className="px-3 py-2 text-right font-medium">Quantity</th>
@@ -338,6 +344,9 @@ function StatementRow({ invoice: inv, actionable }: { invoice: SubInvoiceRow; ac
                   <tr key={l.id} className="border-b border-border/30 last:border-0">
                     <td className="num px-3 py-1.5 text-[11.5px] text-muted-foreground">
                       {i === 0 ? day : ""}
+                    </td>
+                    <td className="num px-3 py-1.5 text-[11.5px] text-foreground">
+                      {l.location || "—"}
                     </td>
                     <td className="num px-3 py-1.5 text-[12px] font-semibold uppercase text-brand-bright">
                       {l.code}
@@ -360,7 +369,7 @@ function StatementRow({ invoice: inv, actionable }: { invoice: SubInvoiceRow; ac
             </tbody>
             <tfoot>
               <tr className="border-t border-border/60 bg-foreground/[0.02]">
-                <td colSpan={5} className="px-3 py-2 text-right text-[12px] font-medium text-muted-foreground">
+                <td colSpan={6} className="px-3 py-2 text-right text-[12px] font-medium text-muted-foreground">
                   {inv.fastPay ? "Work total" : "Total owed to you"}
                 </td>
                 <td className="num px-3 py-2 text-right text-[14px] font-semibold text-foreground">
@@ -373,7 +382,7 @@ function StatementRow({ invoice: inv, actionable }: { invoice: SubInvoiceRow; ac
               {inv.fastPay ? (
                 <>
                   <tr className="bg-foreground/[0.02]">
-                    <td colSpan={5} className="px-3 py-1.5 text-right text-[12px] text-muted-foreground">
+                    <td colSpan={6} className="px-3 py-1.5 text-right text-[12px] text-muted-foreground">
                       Fast pay fee ({inv.fastPayFeePct}%)
                     </td>
                     <td className="num px-3 py-1.5 text-right text-[12.5px] text-muted-foreground">
@@ -381,7 +390,7 @@ function StatementRow({ invoice: inv, actionable }: { invoice: SubInvoiceRow; ac
                     </td>
                   </tr>
                   <tr className="border-t border-border/60 bg-brand/[0.05]">
-                    <td colSpan={5} className="px-3 py-2 text-right text-[12px] font-medium text-brand">
+                    <td colSpan={6} className="px-3 py-2 text-right text-[12px] font-medium text-brand">
                       You receive · NET {inv.termsDays} by wire
                     </td>
                     <td className="num px-3 py-2 text-right text-[14px] font-semibold text-foreground">

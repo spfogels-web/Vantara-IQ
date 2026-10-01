@@ -3,7 +3,7 @@ import "server-only";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import type { Prisma } from "@prisma/client";
 
-import { safe } from "@/lib/pdf-text";
+import { clip, safe } from "@/lib/pdf-text";
 import { addDays } from "@/lib/billing";
 import { statementMoney } from "@/lib/fast-pay";
 import { embedOrgLogo, logoBox } from "@/lib/pdf-logo";
@@ -159,13 +159,16 @@ export async function buildRemittancePdf(
   y -= 12;
 
   if (inv.subcontractor.lead) text(inv.subcontractor.lead, M, 9, body, muted);
-  page.drawText(safe(inv.projectName ? `Job ${inv.projectName}` : ""), {
-    x: colR,
-    y,
-    size: 9,
-    font: body,
-    color: muted,
-  });
+  // The job number beside the name — the same number on their daily, and the
+  // one they quote when they ring about a payment.
+  page.drawText(
+    safe(
+      inv.projectName
+        ? `Job ${inv.projectName}${inv.projectNumber ? ` (${inv.projectNumber})` : ""}`
+        : "",
+    ),
+    { x: colR, y, size: 9, font: body, color: muted },
+  );
   y -= 12;
   if (inv.subcontractor.email) text(inv.subcontractor.email, M, 9, body, muted);
   y -= 22;
@@ -176,8 +179,12 @@ export async function buildRemittancePdf(
   line();
   y -= 12;
 
-  const cols = { date: M, code: M + 78, qty: M + 250, rate: M + 330, amount: R };
+  // LOCATION sits between the date and the code: this is the page a crew holds
+  // beside their own daily, and the span is what makes the two line up. A
+  // statement rolled up by code gave them no way to ask about a single span.
+  const cols = { date: M, loc: M + 72, code: M + 180, qty: M + 250, rate: M + 330, amount: R };
   text("WORK DATE", cols.date, 7.5, bold, muted);
+  text("LOCATION", cols.loc, 7.5, bold, muted);
   text("UNIT CODE", cols.code, 7.5, bold, muted);
   page.drawText("QUANTITY", { x: cols.qty, y, size: 7.5, font: bold, color: muted });
   page.drawText("RATE", { x: cols.rate, y, size: 7.5, font: bold, color: muted });
@@ -189,6 +196,8 @@ export async function buildRemittancePdf(
   for (const l of inv.lines) {
     room(30);
     text(l.workDate || "—", cols.date, 9);
+    // Clipped to the column by width, not by character count — see pdf-text.
+    text(clip(l.location ?? "", cols.code - cols.loc - 4, body, 9) || "—", cols.loc, 9, body, muted);
     text(l.code || "—", cols.code, 9);
     page.drawText(safe(`${l.quantity.toLocaleString("en-US")} ${l.unit || ""}`.trim()), {
       x: cols.qty,
