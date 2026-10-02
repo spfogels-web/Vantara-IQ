@@ -138,3 +138,26 @@ export function paceRatio(actual: number, required: number): number | null {
   const ratio = actual / required;
   return Number.isFinite(ratio) ? ratio : null;
 }
+
+/**
+ * How far actual production sits above or below the day's plan, as a percent.
+ *
+ * Returns null when there is no plan to compare against, and that is the whole
+ * point of it. `target` is the sum of every active project's required daily
+ * pace, so it is legitimately zero on a day when nothing has a pace set — and
+ * the old expression divided by it, which put a red `NaN%` badge on the
+ * dashboard beside a perfectly correct "0 ft".
+ *
+ * Zero would be the wrong answer rather than a safe one: 0% reads as "exactly
+ * on plan", which is a statement about a plan that does not exist. The absence
+ * of a comparison has to stay absent.
+ *
+ * Also returns null for a non-finite result, so an infinity can never reach a
+ * badge by another route.
+ */
+export function percentAgainstPlan(actual: number, plan: number): number | null {
+  if (!Number.isFinite(actual) || !Number.isFinite(plan)) return null;
+  if (plan <= 0) return null;
+  const pct = ((actual - plan) / plan) * 100;
+  return Number.isFinite(pct) ? pct : null;
+}

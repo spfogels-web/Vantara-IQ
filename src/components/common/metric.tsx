@@ -87,7 +87,11 @@ export function Meter({
       <div
         className={cn("h-full rounded-full", toneStyles[tone].dot)}
         style={{
-          width: `${Math.max(0, Math.min(1, width)) * 100}%`,
+          // Clamping does not catch NaN — Math.min(1, NaN) is NaN, and so is
+          // everything after it, which reaches the DOM as width: NaN%. Every
+          // caller here passes a ratio with a count in the denominator, and a
+          // portfolio with nothing in it makes that denominator zero.
+          width: `${Number.isFinite(width) ? Math.max(0, Math.min(1, width)) * 100 : 0}%`,
           transition: "width 1000ms cubic-bezier(0.16, 1, 0.3, 1)",
         }}
       />

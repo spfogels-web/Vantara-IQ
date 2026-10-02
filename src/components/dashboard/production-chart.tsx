@@ -15,7 +15,7 @@ import { Activity } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { toneStyles } from "@/lib/tone";
-import { formatFeet, formatNumber, formatSigned } from "@/lib/format";
+import { formatFeet, formatNumber, formatSigned, percentAgainstPlan } from "@/lib/format";
 import type { ProductionSummary } from "@/lib/types";
 import { Panel, PanelBody, PanelHeader } from "@/components/common/panel";
 import { TrendBadge } from "@/components/common/trend-badge";
@@ -73,7 +73,9 @@ function ChartTooltip({
 export function ProductionChart({ summary }: { summary: ProductionSummary }) {
   const [range, setRange] = React.useState<Range>("7d");
   const maxCrew = Math.max(...summary.byCrew.map((c) => c.ft));
-  const vsTarget = ((summary.today - summary.target) / summary.target) * 100;
+  // Null when nothing has a daily pace set, which is a real state rather than
+  // a zero. See percentAgainstPlan.
+  const vsTarget = percentAgainstPlan(summary.today, summary.target);
 
   return (
     <Panel>
@@ -111,7 +113,14 @@ export function ProductionChart({ summary }: { summary: ProductionSummary }) {
                 {formatNumber(summary.today)}
               </span>
               <span className="text-[12px] text-muted-foreground">ft</span>
-              <TrendBadge value={vsTarget} trend={vsTarget >= 0 ? "up" : "down"} />
+              {vsTarget === null ? (
+                // Said rather than left blank: an empty space beside a figure
+                // reads as something that failed to render, and the reason it
+                // is missing is the useful part.
+                <span className="text-[11px] text-muted-foreground">no plan set</span>
+              ) : (
+                <TrendBadge value={vsTarget} trend={vsTarget >= 0 ? "up" : "down"} />
+              )}
             </div>
           </div>
           <div>
@@ -213,7 +222,10 @@ export function ProductionChart({ summary }: { summary: ProductionSummary }) {
                   <div
                     className={cn("h-full rounded-full", toneStyles[row.tone].dot)}
                     style={{
-                      width: `${(row.ft / maxCrew) * 100}%`,
+                      // maxCrew is a Math.max over the crews' footage: it is 0
+                      // when nobody has installed anything today, and -Infinity
+                      // when there are no crews at all.
+                      width: `${maxCrew > 0 ? Math.min(100, (row.ft / maxCrew) * 100) : 0}%`,
                       transition: "width 900ms cubic-bezier(0.16,1,0.3,1)",
                     }}
                   />

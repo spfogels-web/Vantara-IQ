@@ -72,6 +72,7 @@ import type {
   DailyFlag,
   DailyLineItem,
   DailyReport,
+  DailyStatus,
   Deadline,
   DocumentationRequest,
   HealthSummary,
@@ -5747,4 +5748,84 @@ export async function getDailyCodeStatuses(
     }));
   }
   return out;
+}
+
+/**
+ * How many dailies sit in each state, for the dashboard.
+ *
+ * Counted in the database rather than by pulling every daily and filtering in
+ * memory: this runs on the page everybody opens first, and the list it would
+ * otherwise load is the whole history.
+ *
+ * Scoped the same way the dailies list is — a crew sees their own company's
+ * days, staff see the lot — so the figure on the dashboard and the figure on
+ * /dailies cannot disagree.
+ */
+export async function getDailyStatusCounts(): Promise<{
+  submitted: number;
+  inReview: number;
+  flagged: number;
+  approved: number;
+  denied: number;
+  draft: number;
+  stale: number;
+}> {
+  const user = await viewer();
+  const empty = {
+    submitted: 0,
+    inReview: 0,
+    flagged: 0,
+    approved: 0,
+    denied: 0,
+    draft: 0,
+    stale: 0,
+  };
+  if (!user) return empty;
+
+  const allowed = await visibleProjectIds(user);
+  const scope =
+    allowed === null
+      ? {}
+      : {
+          AND: [
+            { projectId: { in: allowed } },
+            user.subcontractorName ? { subcontractor: user.subcontractorName } : { id: "" },
+          ],
+        };
+
+  // Three days back, as a work date — the same string form the column holds.
+  const cutoff = addDays(todayET(), -3);
+
+  const [grouped, stale] = await Promise.all([
+    prisma.daily.groupBy({ by: ["status"], where: scope, _count: { _all: true } }),
+    prisma.daily.count({
+      where: { ...scope, status: "Submitted", workDate: { lt: cutoff } },
+    }),
+  ]);
+
+  const of = (status: DailyStatus) =>
+    grouped.find((g) => g.status === status)?._count._all ?? 0;
+
+  /**
+   * Every status the column actually stores, Draft and Flagged included.
+   *
+   * The dailies list makes the same point in its own words: a daily sitting in
+   * one of those is still a daily somebody has to deal with, and leaving it out
+   * of the count is how it gets forgotten. Dropping them here would also have
+   * quietly understated the ring, because its denominator is the sum of what it
+   * was given — the shares would have looked perfectly consistent and been
+   * computed over the wrong whole.
+   *
+   * Typed as DailyStatus so a seventh status added to the union fails the build
+   * here rather than disappearing from the dashboard.
+   */
+  return {
+    submitted: of("Submitted"),
+    inReview: of("In review"),
+    flagged: of("Flagged"),
+    approved: of("Approved"),
+    denied: of("Denied"),
+    draft: of("Draft"),
+    stale,
+  };
 }

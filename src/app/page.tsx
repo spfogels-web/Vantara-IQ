@@ -11,6 +11,8 @@ import {
   getProductionSplit,
   getPortfolioSummary,
   getProjectsRequiringAttention,
+  getDailyStatusCounts,
+  getLocateSummary,
   getRevenueSummary,
   getTasks,
 } from "@/data/queries";
@@ -35,6 +37,7 @@ import { UpcomingDeadlines } from "@/components/dashboard/upcoming-deadlines";
 import { MissingDocuments } from "@/components/dashboard/missing-documents";
 import { NotificationsPanel } from "@/components/dashboard/notifications-panel";
 import { StatusBar } from "@/components/dashboard/status-bar";
+import { DailiesDonut, LocatesDonut } from "@/components/dashboard/ops-donuts";
 import {
   AiBriefSkeleton,
   KpiRowSkeleton,
@@ -79,6 +82,16 @@ async function ProductionSplitSection() {
 async function ProductionSection() {
   const summary = await getProductionSummary();
   return <ProductionChart summary={summary} />;
+}
+
+async function DailiesDonutSection() {
+  const counts = await getDailyStatusCounts();
+  return <DailiesDonut counts={counts} />;
+}
+
+async function LocatesDonutSection() {
+  const summary = await getLocateSummary();
+  return <LocatesDonut summary={summary} />;
 }
 
 async function HealthSection() {
@@ -236,6 +249,22 @@ export default async function OperationsCenterPage() {
         <div className="xl:col-span-4">
           <Suspense fallback={<ProjectHealthSkeleton />}>
             <HealthSection />
+          </Suspense>
+        </div>
+
+        {/* What is waiting on a person, and whether the ground is legal to
+            open. Both are counts of things in one of a few states, which is
+            what a ring is for — and both are the kind of thing that is only
+            noticed when somebody goes looking, which is the argument for
+            putting them on the page everybody opens first. */}
+        <div className="xl:col-span-6">
+          <Suspense fallback={<ListPanelSkeleton rows={4} />}>
+            <DailiesDonutSection />
+          </Suspense>
+        </div>
+        <div className="xl:col-span-6">
+          <Suspense fallback={<ListPanelSkeleton rows={4} />}>
+            <LocatesDonutSection />
           </Suspense>
         </div>
 
