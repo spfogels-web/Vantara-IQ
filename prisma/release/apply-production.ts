@@ -26,20 +26,54 @@
 import "dotenv/config";
 
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+
+import { formatReport, reportFor, sha256Of } from "./production-diff";
 
 const FORTITUDE_MARK = "damp-mouse";
 
-/** The only files this is allowed to run. */
-const REVIEWED: Record<string, string> = {
-  "003": "prisma/pending/003-project-evidence.sql",
-  "004": "prisma/pending/004-fortitude-configuration.sql",
+/**
+ * The only files this is allowed to run, and the exact bytes of each.
+ *
+ * The hash is not ceremony. A reviewed migration is reviewed as a specific
+ * sequence of statements; a file that has been edited since — by a rebase, a
+ * merge, a well-meant tidy — is a different migration wearing a reviewed name.
+ * Nothing else here would notice.
+ */
+export const REVIEWED: Record<string, { file: string; sha256: string }> = {
+  "003": {
+    file: "prisma/pending/003-project-evidence.sql",
+    sha256: "5dda598099517453ae1895175e0aeadab1c36c67ac2798a361b32361e359ae10",
+  },
+  "004": {
+    file: "prisma/pending/004-fortitude-configuration.sql",
+    sha256: "b7131bd24c3ce6e59c613265e30a7a6d4c368fc4911dc6e14be51f4bea489d86",
+  },
+  "012": {
+    file: "prisma/pending/012-incidents.sql",
+    sha256: "762ab58196f1130bb0d24a6f6bdb13e31e7d04a871982704e9e2060f6731fcd2",
+  },
 };
 
 function main() {
   const key = process.argv[2];
-  const file = REVIEWED[key ?? ""];
-  if (!file) {
+  const entry = REVIEWED[key ?? ""];
+  if (!entry) {
     throw new Error(`Name a reviewed migration: ${Object.keys(REVIEWED).join(", ")}`);
+  }
+  const file = entry.file;
+
+  // The bytes, before the target is even resolved.
+  if (entry.sha256) {
+    const actual = sha256Of(file);
+    if (actual !== entry.sha256) {
+      throw new Error(
+        `${file} is not the file that was reviewed.\n` +
+          `  reviewed  ${entry.sha256}\n` +
+          `  on disk   ${actual}\n` +
+          `Re-review it, then update the hash here. Refusing.`,
+      );
+    }
   }
 
   const url = process.env.DATABASE_URL_UNPOOLED;
@@ -59,6 +93,41 @@ function main() {
 
   console.log(`applying ${file}`);
   console.log(`  target   ${endpoint} (Fortitude production, direct endpoint)`);
+  if (entry.sha256) console.log(`  sha256   ${entry.sha256.slice(0, 16)}… verified`);
+
+  /**
+   * What production actually looks like, before anything is written to it.
+   *
+   * The reason this is here rather than in a checklist: a stray edit once put
+   * `subcontractorName` on the `User` model as well as the one it was aimed at,
+   * and no migration created it. Every test passed — the test database is built
+   * from `schema.prisma`, so it agreed with the mistake. The first sign would
+   * have been sign-in failing in production.
+   *
+   * So the schema is compared against the database it is about to meet, and the
+   * only differences allowed are the ones this migration creates. Anything else
+   * is drift, and this refuses rather than reporting it and carrying on.
+   */
+  console.log("\n  checking production against the committed schema…");
+  const report = reportFor(url, readFileSync(file, "utf8"));
+  console.log(formatReport(report));
+
+  if (report.unexpected.length > 0) {
+    throw new Error(
+      `Production differs from the schema in ${report.unexpected.length} way(s) this migration does not explain.\n` +
+        `Resolve the drift before applying. Refusing.`,
+    );
+  }
+  if (report.destructive.length > 0) {
+    throw new Error(
+      `${report.destructive.length} destructive statement(s) would be needed to reconcile production.\n` +
+        `Nothing in a reviewed migration should remove or rewrite. Refusing.`,
+    );
+  }
+  if (report.expected.length === 0) {
+    throw new Error("Production already matches the schema. There is nothing for this to do. Refusing.");
+  }
+  console.log("");
 
   // Prisma CLI as plain JS: npx.cmd needs a shell on Windows and a shell
   // splits the connection string on its & characters.
@@ -72,8 +141,20 @@ function main() {
   console.log("  applied.");
 }
 
+/**
+ * Only when this file is the thing being run.
+ *
+ * The reviewed set is exported so the gate can assert against it, and importing
+ * a module runs its top level — without this, a test that merely reads the
+ * allowlist would attempt a production migration.
+ */
+const invokedDirectly = (() => {
+  const entry = process.argv[1] ?? "";
+  return /apply-production\.[tj]s$/.test(entry);
+})();
+
 try {
-  main();
+  if (invokedDirectly) main();
 } catch (e) {
   const err = e as { stderr?: Buffer; stdout?: Buffer; message?: string };
   const detail = String(err.stderr ?? err.stdout ?? err.message ?? e).trim();
