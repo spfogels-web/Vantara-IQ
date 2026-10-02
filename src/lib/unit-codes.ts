@@ -71,6 +71,10 @@ export const MAIN_BILLABLE_CODES = [
   "BM60(1)(1 1/4)P",
   "BM60(1)(1 1/4)PFF",
   "BM60(2)(1 1/4)PF",
+  // The same 1 1/4 duct at 24in. On Trawick's card at $4.83 and real work, and
+  // the only member of this group that was missing — the list carried the P,
+  // the PFF and the two-way, so it read as complete.
+  "BM60(1)(1 1/4)24IN",
   // Resi-bore crossing. Priced on the card and not offered until now.
   "BM60(12.7)(2W)24IN",
   // Cable placement — pulling new cable into the ground.

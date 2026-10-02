@@ -17,6 +17,8 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 
+import { MAIN_BILLABLE_CODES, isMainBillableCode, normalizeCode } from "@/lib/unit-codes";
+
 const ROUTE = readFileSync("src/app/api/rate-sheet/project/[projectId]/route.ts", "utf8");
 const PDF = readFileSync("src/lib/rate-sheet-pdf.ts", "utf8");
 const QUERIES = readFileSync("src/data/queries.ts", "utf8");
@@ -167,5 +169,34 @@ describe("a card with thousands of codes on it", () => {
     // A truncated list that does not admit it is a list somebody trusts for a
     // code that is not on it.
     expect(PANEL).toMatch(/search to narrow/);
+  });
+});
+
+describe("the list of codes that matter", () => {
+  it("carries the 1 1/4 duct at 24in, under either spelling", () => {
+    /**
+     * Real work on Trawick's card at $4.83/ft, and the only member of its group
+     * that was missing — the list had the P, the PFF and the two-way, so it
+     * read as complete. It surfaced only because the rates panel started
+     * bounding itself by this list and one Trawick code fell outside it.
+     *
+     * Both spellings, because the paperwork writes it both ways and
+     * normalizeCode strips the space.
+     */
+    expect(isMainBillableCode("BM60(1)(11/4)24IN")).toBe(true);
+    expect(isMainBillableCode("BM60(1)(1 1/4)24IN")).toBe(true);
+  });
+
+  it("has no code on it twice under two spellings", () => {
+    // Two spellings of one code is two rows on a sheet at two prices, and a
+    // crew reading both will not pick ours.
+    const seen = new Set<string>();
+    const twice: string[] = [];
+    for (const code of MAIN_BILLABLE_CODES) {
+      const k = normalizeCode(code);
+      if (seen.has(k)) twice.push(k);
+      seen.add(k);
+    }
+    expect(twice, `listed twice: ${twice.join(", ")}`).toEqual([]);
   });
 });
