@@ -468,6 +468,20 @@ export interface Invoice {
   backupReady: boolean;
 }
 
+export interface Invoice {
+  id: string;
+  number: string;
+  customer: string;
+  project: string;
+  amount: number;
+  status: InvoiceStatus;
+  tone: Tone;
+  issued: string;
+  due: string;
+  daysOut: number;
+  backupReady: boolean;
+}
+
 export type PayAppStatus =
   /** Built from approved dailies, and the office has not approved it yet. */
   | "Pending review"

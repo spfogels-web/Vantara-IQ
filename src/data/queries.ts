@@ -80,7 +80,6 @@ import type {
   Material,
   MissingDocument,
   Organization,
-  PayApplication,
   ProductionSummary,
   Project,
   RateSheetItem,
@@ -1636,123 +1635,6 @@ export async function getInvoices(): Promise<Invoice[]> {
   return invoices;
 }
 
-/**
- * What Fortitude owes its crews, from the real pay statements.
- *
- * This returned five fixtures — ABC Utilities, Carolina Bore, Summit
- * Underground, jobs called Duke Energy Upgrade and Piedmont Water Main —
- * none of which exist. It read as a working register showing $84.2K pending
- * against companies nobody has ever worked with, which is worse than an
- * empty page: an empty page tells you to go and make a pay statement.
- */
-export async function getPayApplications(): Promise<PayApplication[]> {
-  await requireStaff();
-
-  const rows = await prisma.subInvoice.findMany({
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      number: true,
-      projectName: true,
-      periodStart: true,
-      periodEnd: true,
-      status: true,
-      fastPay: true,
-      fastPayFeePct: true,
-      subtotal: true,
-      retainagePct: true,
-      retainageHeld: true,
-      termsDays: true,
-      createdAt: true,
-      subcontractor: { select: { company: true } },
-      lines: { select: { amount: true } },
-      payments: { select: { id: true } },
-      project: { select: { customer: { select: { retainagePct: true } } } },
-    },
-  });
-
-  return rows.map((r) => {
-    const amount = Number(r.lines.reduce((sum, l) => sum + l.amount, 0).toFixed(2));
-    // Every figure from the one place that knows the order they come off in:
-    // retainage first, then any fast-pay fee on what is left.
-    const money = statementMoney({
-      subtotal: amount,
-      retainagePct: r.retainagePct || (r.project?.customer?.retainagePct ?? 0),
-      retainageHeld: r.retainageHeld,
-      fastPay: r.fastPay,
-      fastPayFeePct: r.fastPayFeePct,
-      termsDays: r.termsDays,
-    });
-    const retainage = money.retainage;
-
-    const { label, tone } = payAppStatus(r.status);
-    return {
-      id: r.id,
-      number: r.number,
-      subcontractor: r.subcontractor.company.trim(),
-      project: r.projectName || "—",
-      period:
-        r.periodStart && r.periodEnd
-          ? `${shortDay(r.periodStart)}–${shortDay(r.periodEnd)}`
-          : "—",
-      amount,
-      retainage,
-      status: label,
-      tone,
-      submitted: r.createdAt.toISOString(),
-      fastPayEligible: r.fastPay,
-      payable: money.payable,
-      canElectFast: canElectFastPay(r.status, r.fastPay),
-      state: r.status as PayApplication["state"],
-      // What actually lands. The register showed gross beside a fast-pay bolt
-      // and left the reader to do the subtraction.
-      net: money.net,
-      paid: r.payments.length > 0,
-    };
-  });
-}
-
-/**
- * A pay statement's state, in the register's vocabulary.
- *
- * The two do not line up one to one, so the mapping is written down rather
- * than guessed at each call site: a statement the crew has disputed is money
- * we are holding, and one they have accepted is approved to pay.
- */
-/**
- * The register's word for a statement's state.
- *
- * DRAFT and ISSUED used to share "Pending review", which was true while the
- * office sent a statement and then waited on the crew — both were pending
- * somebody. They are different things now: a draft is waiting on the office,
- * and an issued statement has been approved and is waiting on the bank. Calling
- * the approved one "pending review" tells whoever works this screen to review
- * something that has already been reviewed.
- */
-function payAppStatus(status: string): { label: PayApplication["status"]; tone: Tone } {
-  switch (status) {
-    case "DRAFT":
-      return { label: "Pending review", tone: "warning" };
-    case "ISSUED":
-      return { label: "Ready to pay", tone: "info" };
-    case "ACCEPTED":
-      // The crew agreed it as well. Worth showing, and not a different step.
-      return { label: "Ready to pay", tone: "success" };
-    case "DISPUTED":
-      return { label: "Held", tone: "critical" };
-    case "PAID":
-      return { label: "Paid", tone: "neutral" };
-    default:
-      return { label: "Held", tone: "neutral" };
-  }
-}
-
-/** "2026-08-14" -> "Aug 14". Empty stays empty. */
-function shortDay(iso: string): string {
-  const d = new Date(`${iso}T00:00:00Z`);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
-}
 
 export async function getReportDefinitions(): Promise<ReportDefinition[]> {
   return reportDefinitions;

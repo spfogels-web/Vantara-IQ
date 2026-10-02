@@ -1,38 +1,31 @@
-﻿import { Check, Receipt, Zap } from "lucide-react";
-
-import { getPayApplications } from "@/data/queries";
-import { cn } from "@/lib/utils";
-import { toneStyles } from "@/lib/tone";
-import { formatCompactCurrency, formatCurrency } from "@/lib/format";
-import { PageShell, StatStrip } from "@/components/common/page-shell";
-import { Panel, PanelHeader } from "@/components/common/panel";
-import { StatusPill } from "@/components/common/status-pill";
-import { PayAppActions } from "@/components/financials/pay-app-actions";
+import { getSubInvoices } from "@/data/queries";
+import { PageShell } from "@/components/common/page-shell";
+import { PayApplicationsView } from "@/components/financials/pay-applications-view";
 import { requireStaffPage } from "@/lib/authz";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Pay applications · Vantara IQ" };
 
+/**
+ * The pay register.
+ *
+ * Reads the statements themselves rather than the flattened register row it
+ * used to: the figures are the same, and the lines come along, so opening one
+ * can answer "what is this made of" without a second round trip. getSubInvoices
+ * is staff-gated at the accessor — this page is the office's, and a crew's view
+ * of their own pay is /pay, built from a different query.
+ */
 export default async function PayApplicationsPage() {
   // Authoritative: the current database role, not the token's claim.
   await requireStaffPage();
 
-  const payApps = await getPayApplications();
-
-  const pending = payApps.filter((p) => p.status === "Pending review");
-  const pendingTotal = pending.reduce((s, p) => s + p.amount, 0);
-  // What is approved and waiting on the bank. It read $0 on every screen
-  // because it looked for labels nothing produced — "Approved" and "Scheduled"
-  // were never returned by payAppStatus.
-  const readyToPay = payApps.filter((p) => p.status === "Ready to pay");
-  const readyTotal = readyToPay.reduce((s, p) => s + p.net, 0);
-  const retainageHeld = payApps.reduce((s, p) => s + p.retainage, 0);
+  const statements = await getSubInvoices();
 
   return (
     <PageShell
       eyebrow="Financials"
       title="Pay applications"
-      description="Subcontractor pay, driven by approved dailies. Retainage, Fast Pay and ACH export handled in one register with a full audit trail."
+      description="Subcontractor pay, driven by approved dailies. Retainage, fast pay and the remittance handled in one register with a full audit trail."
       actions={
         <span className="text-[11.5px] text-muted-foreground">
           {/* There was an "Export ACH batch" button here wired to nothing. On a
@@ -42,92 +35,7 @@ export default async function PayApplicationsPage() {
         </span>
       }
     >
-      <div className="flex flex-col gap-3">
-        <StatStrip
-          stats={[
-            { label: "Pending review", value: formatCompactCurrency(pendingTotal), hint: `${pending.length} to approve`, tone: "text-warning" },
-            {
-              label: "Ready to pay",
-              value: formatCompactCurrency(readyTotal),
-              hint: `${readyToPay.length} waiting on the bank`,
-              tone: "text-success",
-            },
-            { label: "Retainage held", value: formatCompactCurrency(retainageHeld) },
-            {
-              label: "Paid",
-              value: formatCompactCurrency(
-                payApps.filter((p) => p.paid).reduce((s, p) => s + p.net, 0),
-              ),
-              hint: `${payApps.filter((p) => p.paid).length} settled`,
-            },
-          ]}
-        />
-
-        <Panel>
-          <PanelHeader title="Pay application register" count={payApps.length} icon={<Receipt className="size-3.5" />} />
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[820px] text-left">
-              <thead>
-                <tr className="border-b border-border/70 text-[10.5px] uppercase tracking-wider text-muted-foreground">
-                  <th className="px-4 py-2.5 font-medium sm:px-5">Pay app</th>
-                  <th className="px-3 py-2.5 font-medium">Subcontractor</th>
-                  <th className="px-3 py-2.5 font-medium">Project</th>
-                  <th className="px-3 py-2.5 font-medium">Period</th>
-                  <th className="px-3 py-2.5 text-right font-medium">Retainage</th>
-                  <th className="px-3 py-2.5 text-right font-medium">Amount</th>
-                  <th className="px-3 py-2.5 text-right font-medium">Net</th>
-                  <th className="px-3 py-2.5 font-medium">Status</th>
-                  <th className="px-4 py-2.5 text-right font-medium sm:px-5">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {payApps.map((p) => (
-                  <tr key={p.id} className="border-b border-border/40 last:border-0 hover:bg-foreground/[0.02]">
-                    <td className="px-4 py-3 sm:px-5">
-                      <span className="num flex items-center gap-1.5 text-[12.5px] font-medium text-foreground">
-                        {p.number}
-                        {p.fastPayEligible ? (
-                          <span title="Fast Pay eligible">
-                            <Zap className="size-3 text-warning" />
-                          </span>
-                        ) : null}
-                      </span>
-                      <span className="text-[10.5px] text-muted-foreground">{p.submitted}</span>
-                    </td>
-                    <td className="px-3 py-3 text-[12.5px] text-foreground">{p.subcontractor}</td>
-                    <td className="px-3 py-3 text-[12px] text-muted-foreground">{p.project}</td>
-                    <td className="px-3 py-3 text-[12px] text-muted-foreground">{p.period}</td>
-                    <td className="num px-3 py-3 text-right text-[12px] text-muted-foreground">{formatCurrency(p.retainage)}</td>
-                    <td className={cn("num px-3 py-3 text-right text-[12.5px] font-medium", toneStyles[p.tone].text)}>
-                      {formatCurrency(p.amount)}
-                    </td>
-                    {/* What actually lands. The register showed gross beside a
-                        fast-pay bolt and left the reader to subtract 3.5% in
-                        their head to know what to key into the bank. */}
-                    <td className="num gold-figure px-3 py-3 text-right text-[12.5px] font-semibold">
-                      {formatCurrency(p.net)}
-                    </td>
-                    <td className="px-3 py-3">
-                      <StatusPill label={p.status} tone={p.tone} dot={false} className="text-[10px]" />
-                    </td>
-                    <td className="px-4 py-3 text-right sm:px-5">
-                      <PayAppActions
-                        id={p.id}
-                        state={p.state}
-                        net={p.net}
-                        payable={p.payable}
-                        paid={p.paid}
-                        fastPay={p.fastPayEligible}
-                        canElectFast={p.canElectFast}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Panel>
-      </div>
+      <PayApplicationsView statements={statements} />
     </PageShell>
   );
 }
