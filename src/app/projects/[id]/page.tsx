@@ -33,6 +33,7 @@ import {
 
 import {
   getCustomers,
+  getIncidents,
   getDailies,
   getProject,
   getProjectMaterialImports,
@@ -60,6 +61,8 @@ import { qcProfileFor } from "@/lib/qc-standards";
 import { ProjectMaterials } from "@/components/projects/project-materials";
 import { ProjectLocateRules } from "@/components/locates/project-locate-rules";
 import { getProjectLocateRules, getProjectLocateSummary } from "@/data/locates-ops";
+import { ProjectIncidents } from "@/components/incidents/project-incidents";
+import { isOpenStatus } from "@/lib/incidents";
 import { PreConstruction } from "@/components/projects/pre-construction";
 import { ProjectPhotos } from "@/components/projects/project-photos";
 import { ProjectSection, Summary } from "@/components/projects/project-section";
@@ -92,6 +95,10 @@ export default async function ProjectDetailPage({
   const customers = staff ? await getCustomers() : [];
 
   // The valuation is staff-only and throws for a crew by design, so don't ask.
+  // This job's incidents, scoped by the same query the global page uses.
+  const incidents = await getIncidents({ projectId: id, limit: 100 });
+  const openIncidents = incidents.filter((i) => isOpenStatus(i.status)).length;
+
   const [locateRules, locateSummary] = await Promise.all([
     getProjectLocateRules(project.id),
     getProjectLocateSummary(project.id),
@@ -554,29 +561,34 @@ export default async function ProjectDetailPage({
           </div>
         </ProjectSection>
 
-        {/* A sibling of Dailies, never a child of one. The module does not
-            exist yet and this does not pretend otherwise — no counts, no
-            zero dressed up as a clean bill of health. */}
+        {/* A sibling of Dailies, never a child of one — the same authoritative
+            records the global Incidents page manages, scoped to this job. */}
         <ProjectSection
           icon={<AlertTriangle className="size-4" />}
           title="Damage reports / incidents"
           accent="red"
           description="Utility strikes, property damage, safety incidents and claims"
-          summary={<span className="text-muted-foreground/70">Not yet available</span>}
+          summary={
+            openIncidents > 0 ? (
+              <span className="text-critical">
+                {openIncidents} open
+                {incidents.length > openIncidents ? ` · ${incidents.length} total` : ""}
+              </span>
+            ) : incidents.length > 0 ? (
+              <span className="text-muted-foreground">{incidents.length} on record, none open</span>
+            ) : (
+              <span className="text-muted-foreground/70">None recorded</span>
+            )
+          }
         >
-          <PanelBody className="py-8 text-center">
-            <AlertTriangle className="mx-auto size-6 text-muted-foreground/40" />
-            <p className="mx-auto mt-2 max-w-md text-[12.5px] leading-relaxed text-muted-foreground">
-              Incidents will be recorded here as their own project record — an incident number,
-              time and place, the utility struck, the 811 ticket, who was notified and what it
-              took to repair. A crew will be able to open one straight from their phone without
-              starting a daily first.
-            </p>
-            <p className="mt-2 text-[11.5px] text-muted-foreground/70">
-              Until then, photograph damage through Project evidence and mark it existing damage
-              where it was already there.
-            </p>
-          </PanelBody>
+          <ProjectIncidents
+            projectId={project.id}
+            incidents={incidents}
+            /* The server gates reporting on assignment, so a crew that can
+               reach this page can file — hiding the button would only mean
+               nobody could do the thing the placeholder promised. */
+            canReport
+          />
         </ProjectSection>
 
         {staff ? (

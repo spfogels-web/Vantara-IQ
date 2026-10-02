@@ -320,7 +320,10 @@ export interface SubScorecard {
   avgApprovalDays: number;
   avgDailyFt: number;
   docAccuracy: number;
-  safetyIncidents: number;
+  /// Null until there are incident records to count. Rendered as "—", never as
+  /// a green zero: a company with no history and a company with a clean record
+  /// look identical in a number and are not the same claim.
+  safetyIncidents: number | null;
   disputes: number;
   avgProductionPct: number;
 }

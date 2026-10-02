@@ -983,7 +983,14 @@ function SubDetail({
             <Score label="Avg approval time" value={`${sc.avgApprovalDays} days`} />
             <Score label="Avg daily production" value={`${formatNumber(sc.avgDailyFt)} ft`} />
             <Score label="Doc accuracy" value={formatPercent(sc.docAccuracy)} tone={sc.docAccuracy >= 0.98 ? "text-success" : "text-warning"} />
-            <Score label="Safety incidents" value={String(sc.safetyIncidents)} tone={sc.safetyIncidents === 0 ? "text-success" : "text-critical"} />
+            {/* No history is not a clean record. Until incidents are being counted
+                for this crew, this says so rather than showing a green zero. */}
+            <Score
+              label="Safety incidents"
+              value={sc.safetyIncidents === null ? "—" : String(sc.safetyIncidents)}
+              hint={sc.safetyIncidents === null ? "no incident history" : undefined}
+              tone={sc.safetyIncidents === null ? "text-muted-foreground" : sc.safetyIncidents === 0 ? "text-success" : "text-critical"}
+            />
             <Score label="Disputes" value={String(sc.disputes)} tone={sc.disputes === 0 ? "text-success" : "text-warning"} />
             <Score label="Avg production" value={formatPercent(sc.avgProductionPct)} tone={sc.avgProductionPct >= 1 ? "text-success" : "text-warning"} />
             <Score label="Rating" value={`${sc.rating}.0 / 5`} tone="text-warning" />
@@ -1002,11 +1009,12 @@ function SubDetail({
   );
 }
 
-function Score({ label, value, tone }: { label: string; value: string; tone?: string }) {
+function Score({ label, value, tone, hint }: { label: string; value: string; tone?: string; hint?: string }) {
   return (
     <div className="rounded-lg border border-border/60 bg-foreground/[0.02] px-3.5 py-3">
       <p className="eyebrow">{label}</p>
       <p className={cn("num mt-1 text-[17px] font-semibold tracking-[-0.02em] text-foreground", tone)}>{value}</p>
+      {hint ? <p className="mt-0.5 text-[10.5px] text-muted-foreground">{hint}</p> : null}
     </div>
   );
 }

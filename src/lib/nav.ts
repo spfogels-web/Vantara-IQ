@@ -7,6 +7,8 @@ export const navSections: NavSection[] = [
       { label: "Operations Center", href: "/", icon: "dashboard", shortcut: "O" },
       { label: "Projects", href: "/projects", icon: "projects", badge: 2, shortcut: "P" },
       { label: "Dailies", href: "/dailies", icon: "clipboard", badge: 12, shortcut: "D" },
+      // A sibling of Dailies, and sitting next to it for that reason.
+      { label: "Incidents", href: "/incidents", icon: "alert" },
       // Staff only, and deliberately absent from subNavSections below: a crew
       // has no business seeing when another company mobilises, what a
       // customer owes, or when the office is meeting. The page redirects too
@@ -88,6 +90,7 @@ export const subNavSections: NavSection[] = [
       // Their own tickets only. The query scopes it to work filed to their
       // company, so two crews on one job never read each other.
       { label: "My locates", href: "/locates", icon: "alert" },
+      { label: "Incidents", href: "/incidents", icon: "alert" },
       { label: "Company profile", href: "/company", icon: "users" },
       { label: "Yard badges", href: "/badges", icon: "idCard" },
       { label: "Tasks", href: "/tasks", icon: "clipboard" },
@@ -128,6 +131,7 @@ export const employeeNavSections: NavSection[] = [
     items: [
       { label: "Time Clock", href: "/time-clock", icon: "clock", shortcut: "T" },
       { label: "My timesheets", href: "/my-timesheets", icon: "clipboard" },
+      { label: "Report an incident", href: "/incidents", icon: "alert" },
     ],
   },
 ];

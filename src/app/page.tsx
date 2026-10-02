@@ -12,6 +12,7 @@ import {
   getPortfolioSummary,
   getProjectsRequiringAttention,
   getDailyStatusCounts,
+  getSafetyStreak,
   getLocateSummary,
   getRevenueSummary,
   getTasks,
@@ -82,6 +83,11 @@ async function ProductionSplitSection() {
 async function ProductionSection() {
   const summary = await getProductionSummary();
   return <ProductionChart summary={summary} />;
+}
+
+async function StatusBarSection() {
+  const safety = await getSafetyStreak();
+  return <StatusBar safety={safety} />;
 }
 
 async function DailiesDonutSection() {
@@ -296,7 +302,9 @@ export default async function OperationsCenterPage() {
         </div>
       </div>
 
-      <StatusBar />
+      <Suspense fallback={null}>
+        <StatusBarSection />
+      </Suspense>
     </div>
   );
 }

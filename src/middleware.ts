@@ -97,6 +97,7 @@ const SUB_ALLOWED_PREFIXES = [
   // filed to their company — not to every ticket on a job they happen to
   // share — so two crews on one build never read each other's work.
   "/locates",
+  "/incidents",
   "/projects",
   "/company",
   "/badges",
@@ -145,6 +146,22 @@ const SUB_ALLOWED_PREFIXES = [
 const EMPLOYEE_ALLOWED_PREFIXES = [
   "/time-clock",
   "/my-timesheets",
+  // Reporting an incident, and reading the ones they reported.
+  //
+  // This is a deliberate widening of a boundary this file warns about, and the
+  // reason is that the person who has just been hurt is the person holding the
+  // phone. Making an injured employee wait for a supervisor to open the record
+  // is how the record ends up written from memory a day later, or not at all.
+  //
+  // The line above is right that nothing else re-checks this list. What narrows
+  // the data behind this route is `incidentScope` in src/data/queries.ts, which
+  // gives a non-staff, non-crew account only the incidents it reported itself —
+  // not the project, not the crew's, not the company's. The gate on reporting
+  // is `assertProjectAccess`, so an employee can only file against a job they
+  // are actually assigned to. Both are covered by tests in
+  // tests/isolation/incident-safety.test.ts; if this line is ever widened to a
+  // bare "/projects", those tests are what should stop it.
+  "/incidents",
   "/settings",
   "/support",
 ];

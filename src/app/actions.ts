@@ -609,7 +609,7 @@ export async function createSubcontractorDraft(input: {
     ];
     const scorecard = {
       rating: 0, projectsCompleted: 0, avgApprovalDays: 0, avgDailyFt: 0,
-      docAccuracy: 0, safetyIncidents: 0, disputes: 0, avgProductionPct: 0,
+      docAccuracy: 0, safetyIncidents: null, disputes: 0, avgProductionPct: 0,
     };
     const sub = await prisma.subcontractor.create({
       data: {

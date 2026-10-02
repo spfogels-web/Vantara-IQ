@@ -20,7 +20,16 @@ import { statementMoney } from "@/lib/fast-pay";
 import { packetStatus } from "@/lib/vendor-packet";
 import { badgeReadiness } from "@/lib/badge";
 import { readinessForDailies } from "@/lib/billing-readiness";
-import { isStaff } from "@/lib/auth";
+import { isStaff, type CurrentUser } from "@/lib/auth";
+import {
+  OPEN_INCIDENT_STATUSES,
+  SAFETY_INCIDENT_TYPES,
+  safetyStreak,
+  type IncidentSeverityValue,
+  type IncidentStatusValue,
+  type IncidentTypeValue,
+  type SafetyStreak,
+} from "@/lib/incidents";
 import { getUnreadMessageCount } from "@/data/messages";
 import { CUTOFF_LABEL, addDays, balanceOf, billingWeekFor, easternDate, isPastDue, weekOf } from "@/lib/billing";
 import { todayET } from "@/lib/format";
@@ -378,7 +387,7 @@ const emptyScorecard: SubScorecard = {
   avgApprovalDays: 0,
   avgDailyFt: 0,
   docAccuracy: 0,
-  safetyIncidents: 0,
+  safetyIncidents: null,
   disputes: 0,
   avgProductionPct: 0,
 };
@@ -5828,4 +5837,446 @@ export async function getDailyStatusCounts(): Promise<{
     draft: of("Draft"),
     stale,
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Incidents
+//
+// Scoped the same way everything else here is: staff see the organisation, a
+// crew sees its own company's incidents on jobs it is assigned to, and an
+// employee sees the ones they filed. The scope is built once, in
+// `incidentScope`, so the list, the counts and the safety figure cannot
+// disagree with one another about who can see what.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type IncidentRow = {
+  id: string;
+  number: string;
+  projectId: string;
+  projectName: string;
+  projectNumber: string;
+  type: IncidentTypeValue;
+  severity: IncidentSeverityValue;
+  status: IncidentStatusValue;
+  occurredAt: Date;
+  reportedAt: Date;
+  summary: string;
+  injury: boolean;
+  workStopped: boolean;
+  utilityOwner: string;
+  crew: string;
+  reportedByName: string;
+  photoCount: number;
+  ageDays: number;
+};
+
+export type IncidentTimelineRow = {
+  id: string;
+  type: string;
+  at: Date;
+  actorName: string;
+  actorRole: string;
+  detail: string;
+  field: string;
+  fromValue: string;
+  toValue: string;
+};
+
+export type IncidentNotificationRow = {
+  id: string;
+  party: string;
+  method: string;
+  partyName: string;
+  contact: string;
+  notifiedAt: Date;
+  reference: string;
+  note: string;
+  recordedByName: string;
+};
+
+export type IncidentDetail = IncidentRow & {
+  description: string;
+  locationText: string;
+  lat: number | null;
+  lng: number | null;
+  accuracyM: number | null;
+  injuryCount: number;
+  utilityType: string;
+  repairStartedAt: Date | null;
+  repairCompletedAt: Date | null;
+  repairNote: string;
+  resolvedAt: Date | null;
+  resolutionNote: string;
+  closedAt: Date | null;
+  /** The live ticket, or null if it has since been removed. */
+  locate: { id: string; number: string; revision: string; status: string } | null;
+  /** What the ticket said when the incident was filed. */
+  locateSnapshot: { number: string; revision: string; at: Date } | null;
+  timeline: IncidentTimelineRow[];
+  notifications: IncidentNotificationRow[];
+  photos: { id: string; url: string; kind: string; caption: string; capturedAt: Date | null }[];
+};
+
+/**
+ * Who may see which incidents.
+ *
+ * Returns null when the viewer may see none, which callers must treat as "no
+ * rows" rather than "no filter" — the difference between an employee seeing
+ * their own reports and an employee seeing the company's.
+ */
+async function incidentScope(user: CurrentUser): Promise<Prisma.IncidentWhereInput | null> {
+  if (isStaff(user.role)) return {};
+
+  const allowed = await visibleProjectIds(user);
+
+  if (user.role === "SUBCONTRACTOR") {
+    if (!user.subcontractorId) return null;
+    return {
+      subcontractorId: user.subcontractorId,
+      ...(allowed === null ? {} : { projectId: { in: allowed } }),
+    };
+  }
+
+  // EMPLOYEE, and anything else that is not staff: only what they filed
+  // themselves. Reporting an incident must not become a way to read the job.
+  return { reportedByUserId: user.id };
+}
+
+function ageInDays(from: Date): number {
+  const ms = Date.now() - from.getTime();
+  return ms > 0 ? Math.floor(ms / 86_400_000) : 0;
+}
+
+export async function getIncidents(filter?: {
+  status?: IncidentStatusValue[];
+  type?: IncidentTypeValue[];
+  projectId?: string;
+  openOnly?: boolean;
+  injuryOnly?: boolean;
+  limit?: number;
+}): Promise<IncidentRow[]> {
+  const user = await viewer();
+  if (!user) return [];
+
+  const scope = await incidentScope(user);
+  if (scope === null) return [];
+
+  const where: Prisma.IncidentWhereInput = {
+    ...scope,
+    ...(filter?.projectId ? { projectId: filter.projectId } : null),
+    ...(filter?.status?.length ? { status: { in: filter.status } } : null),
+    ...(filter?.type?.length ? { type: { in: filter.type } } : null),
+    ...(filter?.openOnly ? { status: { in: OPEN_INCIDENT_STATUSES } } : null),
+    ...(filter?.injuryOnly ? { injury: true } : null),
+  };
+
+  const rows = await prisma.incident.findMany({
+    where,
+    orderBy: [{ occurredAt: "desc" }, { seq: "desc" }],
+    take: Math.min(filter?.limit ?? 200, 500),
+    select: {
+      id: true,
+      number: true,
+      projectId: true,
+      type: true,
+      severity: true,
+      status: true,
+      occurredAt: true,
+      reportedAt: true,
+      summary: true,
+      injury: true,
+      workStopped: true,
+      utilityOwner: true,
+      reportedByName: true,
+      project: { select: { name: true, number: true } },
+      subcontractorName: true,
+      _count: { select: { photos: true } },
+    },
+  });
+
+  return rows.map((r) => ({
+    id: r.id,
+    number: r.number,
+    projectId: r.projectId,
+    projectName: r.project?.name ?? "",
+    projectNumber: r.project?.number ?? "",
+    type: r.type as IncidentTypeValue,
+    severity: r.severity as IncidentSeverityValue,
+    status: r.status as IncidentStatusValue,
+    occurredAt: r.occurredAt,
+    reportedAt: r.reportedAt,
+    summary: r.summary,
+    injury: r.injury,
+    workStopped: r.workStopped,
+    utilityOwner: r.utilityOwner,
+    crew: r.subcontractorName,
+    reportedByName: r.reportedByName,
+    photoCount: r._count.photos,
+    ageDays: ageInDays(r.occurredAt),
+  }));
+}
+
+export async function getIncident(id: string): Promise<IncidentDetail | null> {
+  const user = await viewer();
+  if (!user) return null;
+
+  const scope = await incidentScope(user);
+  if (scope === null) return null;
+
+  // The scope is part of the lookup rather than a check afterwards, so an id
+  // typed into the URL by somebody it does not belong to comes back as a 404
+  // and not as a refusal that confirms the incident exists.
+  const r = await prisma.incident.findFirst({
+    where: { id, ...scope },
+    include: {
+      project: { select: { name: true, number: true } },
+      locateTicket: { select: { id: true, number: true, revision: true, lifecycle: true } },
+      events: { orderBy: { at: "desc" } },
+      notifications: { orderBy: { notifiedAt: "desc" } },
+      photos: {
+        orderBy: { createdAt: "desc" },
+        select: { id: true, url: true, kind: true, caption: true, capturedAt: true },
+      },
+      _count: { select: { photos: true } },
+    },
+  });
+  if (!r) return null;
+
+  return {
+    id: r.id,
+    number: r.number,
+    projectId: r.projectId,
+    projectName: r.project?.name ?? "",
+    projectNumber: r.project?.number ?? "",
+    type: r.type as IncidentTypeValue,
+    severity: r.severity as IncidentSeverityValue,
+    status: r.status as IncidentStatusValue,
+    occurredAt: r.occurredAt,
+    reportedAt: r.reportedAt,
+    summary: r.summary,
+    description: r.description,
+    locationText: r.locationText,
+    lat: r.lat,
+    lng: r.lng,
+    accuracyM: r.accuracyM,
+    injury: r.injury,
+    injuryCount: r.injuryCount,
+    workStopped: r.workStopped,
+    utilityOwner: r.utilityOwner,
+    utilityType: r.utilityType,
+    crew: r.subcontractorName,
+    reportedByName: r.reportedByName,
+    photoCount: r._count.photos,
+    ageDays: ageInDays(r.occurredAt),
+    repairStartedAt: r.repairStartedAt,
+    repairCompletedAt: r.repairCompletedAt,
+    repairNote: r.repairNote,
+    resolvedAt: r.resolvedAt,
+    resolutionNote: r.resolutionNote,
+    closedAt: r.closedAt,
+    // The live ticket. Null means it is no longer on file, which the screen
+    // says in those words rather than falling back to the snapshot and
+    // presenting stale text as current.
+    locate: r.locateTicket
+      ? {
+          id: r.locateTicket.id,
+          number: r.locateTicket.number,
+          revision: r.locateTicket.revision,
+          status: String(r.locateTicket.lifecycle),
+        }
+      : null,
+    locateSnapshot: r.locateSnapshotAt
+      ? {
+          number: r.locateNumberSnapshot,
+          revision: r.locateRevisionSnapshot,
+          at: r.locateSnapshotAt,
+        }
+      : null,
+    timeline: r.events.map((e) => ({
+      id: e.id,
+      type: String(e.type),
+      at: e.at,
+      actorName: e.actorName,
+      actorRole: e.actorRole,
+      detail: e.detail,
+      field: e.field,
+      fromValue: e.fromValue,
+      toValue: e.toValue,
+    })),
+    notifications: r.notifications.map((n) => ({
+      id: n.id,
+      party: String(n.party),
+      method: String(n.method),
+      partyName: n.partyName,
+      contact: n.contact,
+      notifiedAt: n.notifiedAt,
+      reference: n.reference,
+      note: n.note,
+      recordedByName: n.recordedByName,
+    })),
+    photos: r.photos,
+  };
+}
+
+export type IncidentKpis = {
+  open: number;
+  workStoppedNow: number;
+  strikes90d: number;
+  openOverSevenDays: number;
+  qualifyingSafety12m: number;
+};
+
+export async function getIncidentKpis(): Promise<IncidentKpis> {
+  const empty: IncidentKpis = {
+    open: 0,
+    workStoppedNow: 0,
+    strikes90d: 0,
+    openOverSevenDays: 0,
+    qualifyingSafety12m: 0,
+  };
+
+  const user = await viewer();
+  if (!user) return empty;
+  const scope = await incidentScope(user);
+  if (scope === null) return empty;
+
+  const now = Date.now();
+  const d90 = new Date(now - 90 * 86_400_000);
+  const d7 = new Date(now - 7 * 86_400_000);
+  const m12 = new Date(now - 365 * 86_400_000);
+
+  const open = { status: { in: OPEN_INCIDENT_STATUSES } } as const;
+
+  const [openCount, stopped, strikes, stale, safety] = await Promise.all([
+    prisma.incident.count({ where: { ...scope, ...open } }),
+    prisma.incident.count({ where: { ...scope, ...open, workStopped: true } }),
+    prisma.incident.count({
+      where: { ...scope, type: "UTILITY_STRIKE", occurredAt: { gte: d90 }, status: { not: "VOID" } },
+    }),
+    prisma.incident.count({ where: { ...scope, ...open, occurredAt: { lt: d7 } } }),
+    // The qualifying-safety definition, as a query: SAFETY by type, or anything
+    // that hurt somebody. VOID never counts. See isQualifyingSafetyIncident,
+    // which is the same rule in TypeScript and is what the tests pin.
+    prisma.incident.count({
+      where: {
+        ...scope,
+        status: { not: "VOID" },
+        occurredAt: { gte: m12 },
+        OR: [{ type: { in: SAFETY_INCIDENT_TYPES } }, { injury: true }],
+      },
+    }),
+  ]);
+
+  return {
+    open: openCount,
+    workStoppedNow: stopped,
+    strikes90d: strikes,
+    openOverSevenDays: stale,
+    qualifyingSafety12m: safety,
+  };
+}
+
+/**
+ * How long the company has gone without a qualifying safety incident.
+ *
+ * Company-wide, which is what the status bar claims. Measured from occurredAt,
+ * and bounded by how far back the records go — see safetyStreak, which holds
+ * the three honest answers and the reason none of them is a bare zero.
+ */
+export async function getSafetyStreak(): Promise<SafetyStreak> {
+  const user = await viewer();
+  if (!user) return { kind: "unknown" };
+  const scope = await incidentScope(user);
+  if (scope === null) return { kind: "unknown" };
+
+  const latest = await prisma.incident.findFirst({
+    where: {
+      ...scope,
+      status: { not: "VOID" },
+      OR: [{ type: { in: SAFETY_INCIDENT_TYPES } }, { injury: true }],
+    },
+    orderBy: { occurredAt: "desc" },
+    select: { occurredAt: true, number: true },
+  });
+
+  if (latest) {
+    return safetyStreak({ latestQualifying: latest, recordStart: null });
+  }
+
+  // Nothing qualifying. The streak is then bounded by how long there has been
+  // anything to look at, so the figure cannot imply a clean period nobody was
+  // keeping records for. The earliest project start is the honest beginning of
+  // the record: it is when this company's work began being tracked here.
+  const first = await prisma.project.findFirst({
+    orderBy: { createdAt: "asc" },
+    
+    select: { createdAt: true },
+  });
+
+  return safetyStreak({
+    latestQualifying: null,
+    recordStart: first?.createdAt ?? null,
+  });
+}
+
+/** Tickets on a job, for linking a strike to the 811 that covered it. */
+export async function getProjectLocateOptions(
+  projectId: string,
+): Promise<{ id: string; number: string; revision: string }[]> {
+  const user = await viewer();
+  if (!user) return [];
+  const allowed = await visibleProjectIds(user);
+  if (allowed !== null && !allowed.includes(projectId)) return [];
+
+  return prisma.locateTicket.findMany({
+    where: { projectId },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+    select: { id: true, number: true, revision: true },
+  });
+}
+
+/**
+ * The jobs this person may file an incident against.
+ *
+ * Scoped by `visibleProjectIds`, which is the same gate `assertProjectAccess`
+ * enforces on the server when the form is submitted — so the picker cannot
+ * offer a job the action would then refuse.
+ */
+export async function getProjectsForViewer(): Promise<
+  { id: string; name: string; number: string }[]
+> {
+  const user = await viewer();
+  if (!user) return [];
+  const allowed = await visibleProjectIds(user);
+
+  return prisma.project.findMany({
+    where: allowed === null ? {} : { id: { in: allowed } },
+    orderBy: { name: "asc" },
+    take: 300,
+    select: { id: true, name: true, number: true },
+  });
+}
+
+/**
+ * Photographs on a job that could be tagged to an incident.
+ *
+ * The project's own evidence, newest first — the same rows the gallery shows.
+ * Tagging one does not copy it anywhere; see `addIncidentEvidence`.
+ */
+export async function getTaggablePhotos(
+  projectId: string,
+  limit = 60,
+): Promise<{ id: string; url: string; caption: string; capturedAt: Date | null; incidentId: string | null }[]> {
+  const user = await viewer();
+  if (!user) return [];
+  const allowed = await visibleProjectIds(user);
+  if (allowed !== null && !allowed.includes(projectId)) return [];
+
+  return prisma.projectPhoto.findMany({
+    where: { projectId },
+    orderBy: [{ capturedAt: "desc" }, { createdAt: "desc" }],
+    take: limit,
+    select: { id: true, url: true, caption: true, capturedAt: true, incidentId: true },
+  });
 }

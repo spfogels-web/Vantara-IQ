@@ -87,7 +87,12 @@ model User {
   organization     Organization?             @relation(fields: [organizationId], references: [id])
   organizationId   String?
   subcontractor    Subcontractor?            @relation(fields: [subcontractorId], references: [id])
-  subcontractorId  String?
+  /// The crew, as a plain id plus the company name as it read at the time.
+  /// A relation would give a prettier join and a worse record: a company being
+  /// renamed or removed must not change who was on the job the day a line was
+  /// struck. Same reasoning as IncidentEvent.actorName.
+  subcontractorId   String?
+  subcontractorName String  @default("")
   /// Their job inside that company. Defaults to OWNER because every account
   /// that existed before this was the owner or their nominee — the person who
   /// onboarded the company. Only invited users get anything else.
@@ -384,6 +389,7 @@ model Project {
   materialImports   RateImport[]
   invoices          Invoice[]
   photos            ProjectPhoto[]
+  incidents         Incident[]
   rates             ProjectRate[]
   subInvoices       SubInvoice[]
   tasks             Task[]
@@ -1495,6 +1501,18 @@ model ProjectPhoto {
   /// table that can drift from it.
   billingHoldId   String?
 
+  /// The incident this photograph is evidence for, when it is.
+  ///
+  /// A tag on the one evidence store, exactly as `dailyId` and `billingHoldId`
+  /// are — not a second media table and not a copy of the blob. `projectId`
+  /// stays required, so an incident photograph is still a project photograph
+  /// and still carries its capture time, fix, accuracy and category. That is
+  /// what makes it possible to put a pre-construction photograph of a driveway
+  /// beside the incident photograph of the same driveway, which is the whole
+  /// argument a damage claim turns on.
+  incident   Incident? @relation(fields: [incidentId], references: [id], onDelete: SetNull)
+  incidentId String?
+
   /// Who uploaded it, as an account rather than a name that may change.
   uploadedByUserId String?
   /// When the file arrived, as distinct from when the shutter fired.
@@ -1507,6 +1525,7 @@ model ProjectPhoto {
   @@index([projectId, stage, createdAt])
   @@index([projectId, existingDamage])
   @@index([dailySheetId])
+  @@index([incidentId])
   /// For "everything photographed within so many metres of this complaint".
   /// A bounding box over these two columns is enough at this scale; PostGIS
   /// would be a dependency bought for a query nobody has run yet.
@@ -2259,6 +2278,7 @@ model LocateTicket {
   contractorLocates ContractorLocate[]
   checks            LocateTicketCheck[]
   changes           LocateTicketChange[]
+  incidents         Incident[]
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @updatedAt
 
@@ -2662,6 +2682,7 @@ model Conversation {
   /// not take the conversation about it with them.
   dailyId         String         @default("")
   locateId        String         @default("")
+  incidentId      String         @default("")
 
   createdByUserId String?
   createdAt       DateTime  @default(now())
@@ -3915,4 +3936,292 @@ model TimeEntryAudit {
   at          DateTime @default(now())
 
   @@index([timeEntryId, at])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Incidents
+//
+// A sibling of Daily, never a child of one — the project page has said so since
+// before the module existed. An incident is the record of something going
+// wrong on a job: a struck line, a cracked driveway, somebody hurt. It stands
+// on its own because the crew who has just put a backhoe through a gas main is
+// not going to fill in a production sheet first.
+//
+// Nothing here touches production, billing readiness, an invoice, WE BILL, WE
+// PAY or a subcontractor payment. An incident costs money, but what it costs is
+// settled by people, in writing, later — not by a status column moving.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// What went wrong, as the few things that are actually different.
+///
+/// SAFETY is somebody hurt. It is a type, but injury is also a Boolean on the
+/// record, because a struck gas line that put a man in hospital is both a
+/// strike and a safety incident and the metric has to see it as both. The type
+/// says what happened; the flag says whether it hurt anyone.
+enum IncidentType {
+  UTILITY_STRIKE
+  PROPERTY_DAMAGE
+  SAFETY
+  /// No harm done, reported anyway. Deliberately does not count toward the
+  /// safety metric: a company that resets its own streak for near misses
+  /// teaches its crews not to report them.
+  NEAR_MISS
+  VEHICLE
+  ENVIRONMENTAL
+  OTHER
+}
+
+enum IncidentSeverity {
+  MINOR
+  MODERATE
+  SERIOUS
+  CRITICAL
+}
+
+enum IncidentStatus {
+  REPORTED
+  UNDER_REVIEW
+  REPAIR_IN_PROGRESS
+  REPAIRED
+  RESOLVED
+  CLOSED
+  /// Filed in error. Never deleted — the timeline of a mistaken report is
+  /// itself a thing an insurer may ask about.
+  VOID
+}
+
+/// Every kind of thing that can happen to an incident, as a timeline entry.
+enum IncidentEventType {
+  REPORTED
+  WORK_STOPPED
+  WORK_RESUMED
+  EVIDENCE_ADDED
+  NOTIFICATION_RECORDED
+  STATUS_CHANGED
+  REPAIR_STARTED
+  REPAIR_COMPLETED
+  NOTE_ADDED
+  RESOLVED
+  CLOSED
+  REOPENED
+  VOIDED
+  /// A field was corrected after the fact. The correction is a new row naming
+  /// what moved, never an edit to the row that recorded the original.
+  FIELD_CORRECTED
+}
+
+enum NotifiedParty {
+  UTILITY_OWNER
+  ONE_CALL_811
+  CUSTOMER
+  PROPERTY_OWNER
+  EMERGENCY_SERVICES
+  INSURER
+  INTERNAL
+  OTHER
+}
+
+enum NotificationMethod {
+  PHONE
+  EMAIL
+  IN_PERSON
+  SMS
+  PORTAL
+  OTHER
+}
+
+model Incident {
+  id String @id @default(cuid())
+
+  /// The tenancy key, as the registry slug the rest of the application already
+  /// runs on, not the in-database Organization row's cuid.
+  ///
+  /// It is on the row for two reasons. Every root table is supposed to carry
+  /// one and none of them do, which is a Phase 0 test that fails on purpose; a
+  /// table being added today can at least not add to that debt. And it is what
+  /// the incident number is unique within, so that one contractor's INC-1000
+  /// and another's are two different incidents rather than a collision waiting
+  /// for the day the schemas merge.
+  organizationId String
+
+  /// INC-1000. Assigned once, by the server, and never changed or reused.
+  number String
+  /// The integer behind the label, kept so ordering and "what is next" do not
+  /// depend on parsing a formatted string.
+  seq    Int
+
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  projectId String
+
+  type     IncidentType
+  severity IncidentSeverity @default(MINOR)
+  status   IncidentStatus   @default(REPORTED)
+
+  /// When it happened, which is not when somebody got round to filing it.
+  /// Every safety figure is measured from this one; filing late must not be
+  /// able to flatter a streak.
+  occurredAt DateTime
+  reportedAt DateTime @default(now())
+
+  /// Where, in the words of whoever was standing there, plus a fix if the
+  /// phone could give one. Never inferred from the project's own coordinates —
+  /// a job is a mile long and "somewhere on the project" is not a location.
+  locationText String @default("")
+  lat          Float?
+  lng          Float?
+  accuracyM    Float?
+
+  summary     String
+  description String @default("")
+
+  /// Whether anyone was hurt, independent of type. See IncidentType.
+  injury      Boolean @default(false)
+  injuryCount Int     @default(0)
+  /// Whether the crew came off the job. Stopping work is the single most
+  /// consequential thing that happens in the first ten minutes.
+  workStopped Boolean @default(false)
+
+  utilityOwner String @default("")
+  utilityType  String @default("")
+
+  /// The live 811 ticket, where one exists.
+  locateTicket   LocateTicket? @relation(fields: [locateTicketId], references: [id], onDelete: SetNull)
+  locateTicketId String?
+
+  /// What the ticket said at the moment this was filed.
+  ///
+  /// Number and revision only. The ticket's status is deliberately not copied
+  /// here: it is a live fact that belongs to the ticket, and a frozen copy of
+  /// it would go stale while still reading as authoritative in a claim. The
+  /// screen shows the ticket's real status, as of now, or says the ticket is
+  /// no longer on file.
+  locateNumberSnapshot   String    @default("")
+  locateRevisionSnapshot String    @default("")
+  locateSnapshotAt       DateTime?
+
+  /// Who filed it. All three are nullable because any one of staff, a crew or
+  /// an employee can be the one standing there when it happens.
+  reportedByUserId String?
+  reportedByName   String  @default("")
+  /// The crew, as a plain id plus the company name as it read at the time.
+  /// A relation would give a prettier join and a worse record: a company being
+  /// renamed or removed must not change who was on the job the day a line was
+  /// struck. Same reasoning as IncidentEvent.actorName.
+  subcontractorId   String?
+  subcontractorName String  @default("")
+  employeeId       String?
+
+  repairStartedAt   DateTime?
+  repairCompletedAt DateTime?
+  repairNote        String    @default("")
+  resolvedAt        DateTime?
+  resolutionNote    String    @default("")
+  closedAt          DateTime?
+  closedByUserId    String?
+
+  events        IncidentEvent[]
+  notifications IncidentNotification[]
+  photos        ProjectPhoto[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Unique within the organisation, not across the platform. Under
+  /// database-per-organisation these behave exactly like a plain unique; the
+  /// difference only shows up the day two tenants share a schema, which is
+  /// precisely when a global unique would have been wrong.
+  @@unique([organizationId, number])
+  @@unique([organizationId, seq])
+  @@index([organizationId, status, occurredAt])
+  @@index([projectId, occurredAt])
+  @@index([subcontractorId, occurredAt])
+  @@index([employeeId, occurredAt])
+  @@index([type, occurredAt])
+  @@index([locateTicketId])
+}
+
+/// The operational history of an incident, append-only.
+///
+/// Rows are inserted and never updated or deleted. A correction to the incident
+/// writes a FIELD_CORRECTED row naming what moved and what it moved from, so
+/// the original reading survives alongside the corrected one.
+///
+/// This is not the security audit trail — AccessLog remains that. This is the
+/// account a person gives to a customer, a utility owner, an insurer or an
+/// attorney, and it has to read as a sequence of things that happened rather
+/// than a record of the current state.
+model IncidentEvent {
+  id         String   @id @default(cuid())
+  incident   Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  incidentId String
+
+  type IncidentEventType
+  at   DateTime          @default(now())
+
+  actorUserId String?
+  /// The actor's name and role as they were at the time. Denormalised on
+  /// purpose: somebody leaving the company must not silently rewrite who did
+  /// what two years ago.
+  actorName   String  @default("")
+  actorRole   String  @default("")
+
+  /// The line a person reads on the timeline.
+  detail String @default("")
+
+  /// Machine-readable movement, for STATUS_CHANGED and FIELD_CORRECTED.
+  field     String @default("")
+  fromValue String @default("")
+  toValue   String @default("")
+
+  @@index([incidentId, at])
+}
+
+/// Who was told, when, how, and what they said back.
+///
+/// A table rather than only a timeline entry, because the first question asked
+/// months later is "who did you call and what was their reference number", and
+/// that wants columns rather than prose. Recording one also writes a
+/// NOTIFICATION_RECORDED event, so the timeline stays complete.
+model IncidentNotification {
+  id         String   @id @default(cuid())
+  incident   Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  incidentId String
+
+  party     NotifiedParty
+  method    NotificationMethod
+  partyName String        @default("")
+  /// The number or address actually used, not the one on file.
+  contact   String        @default("")
+
+  notifiedAt DateTime
+  /// Their ticket or claim number, when they gave one.
+  reference  String   @default("")
+  note       String   @default("")
+
+  recordedByUserId String?
+  recordedByName   String   @default("")
+  createdAt        DateTime @default(now())
+
+  @@index([incidentId, notifiedAt])
+}
+
+/// Server-side counters, one row per organisation per thing being counted.
+///
+/// A counter row rather than a Postgres sequence. Under database-per-
+/// organisation a bare sequence would already be isolated, but the shared-
+/// schema direction is still open — the Phase 0 tests say so — and a counter
+/// keyed by organisation is correct under both, so nobody's incidents have to
+/// be renumbered the day that changes.
+///
+/// Incremented with UPDATE ... RETURNING inside the same transaction as the
+/// insert it numbers. That takes a row lock, so two crews reporting at the same
+/// moment serialise and cannot be handed the same number. A transaction that
+/// rolls back gives the value back, which is correct: no incident was created,
+/// so no number was used.
+model Counter {
+  organizationId String
+  name           String
+  value          Int    @default(0)
+
+  @@id([organizationId, name])
 }

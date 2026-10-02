@@ -148,6 +148,6 @@ async function main() {
 }
 
 main().catch((e) => {
-  console.error("\nRehearsal failed:", e instanceof Error ? e.message.split("\n")[0] : e);
+  console.error("Rehearsal failed:", e instanceof Error ? e.message : e);
   process.exit(1);
 });

@@ -1,11 +1,54 @@
 "use client";
 
 import * as React from "react";
-import { CloudSun, ShieldCheck } from "lucide-react";
+import { CloudSun, ShieldCheck, ShieldQuestion } from "lucide-react";
 
 import { LiveDot } from "@/components/common/status-pill";
+import type { SafetyStreak } from "@/lib/incidents";
 
-export function StatusBar() {
+/**
+ * The safety figure, which is a claim and therefore has to be true.
+ *
+ * This read "145 days incident free" for as long as the footer existed, with
+ * the 145 written into the file. It was a plausible number on a page full of
+ * real ones, which is the worst kind of false: nobody had reason to check it,
+ * and it asserted a clean safety record to anybody who walked past the screen.
+ *
+ * There are three honest answers and they are genuinely different sentences —
+ * see `safetyStreak`. None of them is a bare zero, and none of them is a number
+ * larger than the period the records actually cover.
+ */
+function Safety({ streak }: { streak: SafetyStreak }) {
+  if (streak.kind === "since") {
+    return (
+      <span className="flex items-center gap-1.5" title={`Since ${streak.incidentNumber}`}>
+        <ShieldCheck className={streak.days >= 30 ? "size-3.5 text-success" : "size-3.5 text-warning"} />
+        <span className="num text-foreground/80">{streak.days}</span>{" "}
+        {streak.days === 1 ? "day" : "days"} since a safety incident
+      </span>
+    );
+  }
+
+  if (streak.kind === "none") {
+    return (
+      <span className="flex items-center gap-1.5">
+        <ShieldCheck className="size-3.5 text-success" />
+        No safety incidents in{" "}
+        <span className="num text-foreground/80">{streak.days}</span>{" "}
+        {streak.days === 1 ? "day" : "days"} of records
+      </span>
+    );
+  }
+
+  return (
+    <span className="flex items-center gap-1.5">
+      <ShieldQuestion className="size-3.5 text-muted-foreground" />
+      No incident history yet
+    </span>
+  );
+}
+
+export function StatusBar({ safety }: { safety: SafetyStreak }) {
   const [lastSync, setLastSync] = React.useState<string>("just now");
 
   React.useEffect(() => {
@@ -29,10 +72,7 @@ export function StatusBar() {
           <CloudSun className="size-3.5 text-warning" />
           72°F · clear · Greenville, SC
         </span>
-        <span className="flex items-center gap-1.5">
-          <ShieldCheck className="size-3.5 text-success" />
-          <span className="num text-foreground/80">145</span> days incident free
-        </span>
+        <Safety streak={safety} />
         <span className="flex items-center gap-1.5">
           <span className="size-1.5 rounded-full bg-success" />
           All systems operational
