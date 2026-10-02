@@ -49,6 +49,19 @@ export type OrgSettingsView = {
   defaultState: string;
   /** The number a crew is told to ring. Empty when unset. */
   supportPhone: string;
+  /**
+   * Whether a route must be documented before production can be filed on it.
+   *
+   * True unless an admin has deliberately switched it off — including when no
+   * settings row can be read at all. Every other field here fails closed by
+   * permitting nothing; this one is a requirement rather than a permission, so
+   * failing closed means leaving it ON.
+   */
+  preConRequired: boolean;
+  /** Who switched it off and why. Empty while the requirement is on. */
+  preConWaivedBy: string;
+  preConWaiverReason: string;
+  preConWaivedAt: Date | null;
   /** False when no settings row exists, so callers can say so plainly. */
   configured: boolean;
 };
@@ -67,6 +80,11 @@ const UNCONFIGURED: OrgSettingsView = {
   locateProvider: "",
   defaultState: "",
   supportPhone: "",
+  // On, even with nothing configured. See the note on the field.
+  preConRequired: true,
+  preConWaivedBy: "",
+  preConWaiverReason: "",
+  preConWaivedAt: null,
   configured: false,
 };
 
@@ -89,6 +107,10 @@ export const orgSettings = cache(async (): Promise<OrgSettingsView> => {
     locateProvider: row.locateProvider,
     defaultState: row.defaultState,
     supportPhone: row.supportPhone,
+    preConRequired: row.preConRequired,
+    preConWaivedBy: row.preConWaivedBy,
+    preConWaiverReason: row.preConWaiverReason,
+    preConWaivedAt: row.preConWaivedAt,
     configured: true,
   };
 });

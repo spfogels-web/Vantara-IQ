@@ -2189,7 +2189,24 @@ export async function submitDailySheet(input: SheetPayload) {
   }
 
   const producedSomething = lineItems.some((l) => l.quantity > 0);
-  if (!sheet.dailyId && producedSomething && sheet.projectId) {
+
+  /**
+   * The requirement can be switched off, company-wide, by an admin.
+   *
+   * It exists because the rule is right and also absolute, and an absolute rule
+   * meets cases it was not written for: restoration work with no route to walk,
+   * a job inherited mid-build, an emergency repair that happened before anybody
+   * took a phone out. On 2 October thirteen live projects could not accept a
+   * production daily, and the crews on them had no way through that did not
+   * involve asserting a route was documented when it was not.
+   *
+   * Read here rather than cached in the client, so switching it back on takes
+   * effect on the next submission rather than the next deploy. Defaults to on
+   * when no settings row can be read — see `preConRequired`.
+   */
+  const { preConRequired } = await orgSettings();
+
+  if (preConRequired && !sheet.dailyId && producedSomething && sheet.projectId) {
     const project = await prisma.project.findUnique({
       where: { id: sheet.projectId },
       select: { preConStatus: true },

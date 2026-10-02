@@ -67,7 +67,7 @@ describe("a migration cannot be applied unless it has been reviewed", () => {
   });
 
   it("refuses a name that is not in the set", () => {
-    expect(REVIEWED["013"]).toBeUndefined();
+    expect(REVIEWED["014"]).toBeUndefined();
     expect(REVIEWED[""]).toBeUndefined();
     // The applier reads REVIEWED[key] and throws when it is undefined; this
     // holds the shape that makes that true.
@@ -84,6 +84,10 @@ describe("a migration cannot be applied unless it has been reviewed", () => {
     const entry = REVIEWED["012"];
     expect(entry, "012 is not in the reviewed set").toBeTruthy();
     expect(entry.sha256).toBe("762ab58196f1130bb0d24a6f6bdb13e31e7d04a871982704e9e2060f6731fcd2");
+
+    const p13 = REVIEWED["013"];
+    expect(p13, "013 is not in the reviewed set").toBeTruthy();
+    expect(sha256Of(p13.file), "013 has been edited since it was reviewed").toBe(p13.sha256);
     expect(sha256Of(entry.file), "012 has been edited since it was reviewed").toBe(entry.sha256);
   });
 
@@ -121,6 +125,21 @@ describe("a migration cannot be applied unless it has been reviewed", () => {
   });
 });
 
+/**
+ * Everything not yet applied, as one body of SQL.
+ *
+ * The committed schema is ahead of production by the sum of the pending
+ * migrations, not by any single one of them. Checking against only the newest
+ * would report every earlier pending change as drift, and checking against only
+ * the oldest would report the newest as drift — both of which teach people to
+ * ignore this test, which is worse than not having it.
+ */
+const PENDING_KEYS = ["012", "013"] as const;
+
+function pendingSql(): string {
+  return PENDING_KEYS.map((k) => readFileSync(REVIEWED[k].file, "utf8")).join("\n");
+}
+
 describe("the committed schema against production", () => {
   const url = productionUrl();
 
@@ -143,7 +162,7 @@ describe("the committed schema against production", () => {
 
   it("differs from production only in ways the pending migration explains", () => {
     if (!url) return; // the test above has already failed
-    const report = reportFor(url, readFileSync(join(PENDING, "012-incidents.sql"), "utf8"));
+    const report = reportFor(url, pendingSql());
 
     expect(
       report.unexpected.map((s) => s.sql.replace(/\s+/g, " ").slice(0, 140)),
@@ -153,7 +172,7 @@ describe("the committed schema against production", () => {
 
   it("would need nothing destructive to reconcile", () => {
     if (!url) return;
-    const report = reportFor(url, readFileSync(join(PENDING, "012-incidents.sql"), "utf8"));
+    const report = reportFor(url, pendingSql());
 
     expect(
       report.destructive.map((s) => s.sql.replace(/\s+/g, " ").slice(0, 140)),
@@ -163,7 +182,7 @@ describe("the committed schema against production", () => {
 
   it("still has something for the pending migration to do", () => {
     if (!url) return;
-    const report = reportFor(url, readFileSync(join(PENDING, "012-incidents.sql"), "utf8"));
+    const report = reportFor(url, pendingSql());
     // If this fails, 012 has already been applied — which is information, not
     // an error, but it should be a deliberate discovery rather than a surprise
     // halfway through an apply.

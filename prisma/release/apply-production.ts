@@ -49,6 +49,10 @@ export const REVIEWED: Record<string, { file: string; sha256: string }> = {
     file: "prisma/pending/004-fortitude-configuration.sql",
     sha256: "b7131bd24c3ce6e59c613265e30a7a6d4c368fc4911dc6e14be51f4bea489d86",
   },
+  "013": {
+    file: "prisma/pending/013-precon-requirement.sql",
+    sha256: "4328b1527a35aca697a49abc833ea55eabae7e0e29c3cd893bcbd7ca31473b56",
+  },
   "012": {
     file: "prisma/pending/012-incidents.sql",
     sha256: "762ab58196f1130bb0d24a6f6bdb13e31e7d04a871982704e9e2060f6731fcd2",

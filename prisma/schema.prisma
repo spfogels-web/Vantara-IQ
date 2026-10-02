@@ -171,6 +171,27 @@ model OrgSettings {
   /// until somebody turns it on.
   assistantEnabled Boolean @default(false)
 
+  /// Whether a route has to be documented before production can be filed on it.
+  ///
+  /// Defaults to true, and every path that cannot read a settings row treats it
+  /// as true, because this is a requirement rather than a feature: a missing
+  /// row must not quietly remove a rule. It is the one switch here where the
+  /// safe failure is "on".
+  ///
+  /// Turned off company-wide, by an admin, for the case the rule did not
+  /// anticipate — restoration work with no route to walk, a job inherited
+  /// mid-build, an emergency repair. It does not pretend the documentation
+  /// exists: every project keeps its own honest `preConStatus`, so a job that
+  /// was never walked still reads NOT_STARTED afterwards and anybody looking at
+  /// it can see what was true.
+  preConRequired Boolean @default(true)
+  /// Who switched it off and why, kept on the row so the current state carries
+  /// its own explanation rather than needing somebody to find the audit log.
+  /// Cleared when the requirement is put back.
+  preConWaivedBy     String    @default("")
+  preConWaivedAt     DateTime?
+  preConWaiverReason String    @default("")
+
   /// Terms this organisation bills its customers on, and pays its crews on.
   customerTerms  String
   subTerms       String

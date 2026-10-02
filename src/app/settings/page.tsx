@@ -16,6 +16,7 @@ import { alertsState } from "@/lib/alerts-switch";
 import { planBilling } from "@/lib/plan";
 import { PlanPanel } from "@/components/settings/plan-panel";
 import { AlertsSwitchPanel } from "@/components/settings/alerts-switch-panel";
+import { PreConSwitchPanel } from "@/components/settings/precon-switch-panel";
 import { AssistantSwitchPanel } from "@/components/settings/assistant-switch-panel";
 import { getCurrentUser, isStaff } from "@/lib/auth";
 import { orgSettings } from "@/lib/org-settings";
@@ -86,7 +87,8 @@ const integrations = [
 ];
 
 export default async function SettingsPage() {
-  const { smsAllowed, assistantEnabled, isDemo } = await orgSettings();
+  const { smsAllowed, assistantEnabled, isDemo, preConRequired, preConWaivedBy, preConWaivedAt, preConWaiverReason } =
+    await orgSettings();
   const [org, me, orgLogoUrl, myAlerts, alerts] = await Promise.all([
     getOrganization(),
     getCurrentUser(),
@@ -137,6 +139,19 @@ export default async function SettingsPage() {
             />
             <AlertsSwitchPanel state={alerts} />
           </Panel>
+        ) : null}
+
+        {/* Beside the alerts switch for the same reason: it is a company-wide
+            rule somebody can turn off, and a rule that is off should be
+            visible rather than buried on a project page. */}
+        {staff ? (
+          <PreConSwitchPanel
+            required={preConRequired}
+            waivedBy={preConWaivedBy}
+            waivedAt={preConWaivedAt}
+            reason={preConWaiverReason}
+            canEdit={me?.role === "ADMIN"}
+          />
         ) : null}
 
         {/* Beside the alerts switch, because they answer the same shape of
