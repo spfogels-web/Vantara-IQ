@@ -80,7 +80,17 @@ const GROUP_ORDER = [
 export async function buildRateSheetPdf(input: RateSheetInput): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
   pdf.setTitle(input.title);
-  pdf.setSubject(`Rate sheet for ${input.subcontractorName}`);
+  /**
+   * Metadata says nothing about who it is for or who produced it.
+   *
+   * A PDF's properties are not visible on the page and travel with the file, so
+   * a name left here is a name nobody checked. The sheet is deliberately
+   * anonymous; its metadata has to be as well, or the anonymity is cosmetic.
+   */
+  pdf.setSubject("Unit rates");
+  pdf.setAuthor("");
+  pdf.setProducer("");
+  pdf.setCreator("");
   pdf.setProducer("Vantara IQ");
 
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
@@ -103,8 +113,25 @@ export async function buildRateSheetPdf(input: RateSheetInput): Promise<Uint8Arr
     }
   }
 
-  page.drawText(input.companyName, { x: M + 160, y: y - 12, size: 13, font: bold, color: INK });
-  page.drawText(input.title, { x: M + 160, y: y - 27, size: 10, font: body, color: MUTED });
+  /**
+    * No company name, and no mark.
+    *
+    * This sheet goes out to several crews at once to agree rates against, and
+    * it is a price list rather than a letter — naming a company on it makes one
+    * copy look addressed to somebody and invites it being forwarded as that
+    * company's offer. The recipient writes themselves in at the foot.
+    *
+    * Nothing else on the page names anybody either: the subtitle carries the
+    * market and the job number rather than the project name, because these jobs
+    * are named after the customer and the prime above us.
+    */
+  const headX = input.companyName ? M + 160 : M;
+  if (input.companyName) {
+    page.drawText(input.companyName, { x: headX, y: y - 12, size: 13, font: bold, color: INK });
+    page.drawText(input.title, { x: headX, y: y - 27, size: 10, font: body, color: MUTED });
+  } else {
+    page.drawText(input.title, { x: headX, y: y - 12, size: 13, font: bold, color: INK });
+  }
   y -= 56;
 
   page.drawLine({ start: { x: M, y }, end: { x: PAGE.w - M, y }, thickness: 1, color: RULE });

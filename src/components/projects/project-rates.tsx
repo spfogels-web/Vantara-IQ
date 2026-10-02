@@ -6,7 +6,7 @@ import { Download, Loader2, Plus, Tags } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { formatCurrency, formatNumber, formatPercent, formatRate } from "@/lib/format";
-import type { ProjectRates } from "@/data/queries";
+import type { ProjectRateLine, ProjectRates } from "@/data/queries";
 import {
   addSubRate,
   applyCustomerRateCard,
@@ -151,8 +151,47 @@ setCardNote(
     () => lines.filter((l) => (l.subRate ?? 0) > 0).map((l) => l.code),
     [lines],
   );
+
+  /**
+   * What is ticked before anybody touches it: the work this job plans.
+   *
+   * The rest of the card can be ticked on, and is not on by default. A sheet
+   * that silently grew to the whole price book the day this screen started
+   * showing it would be a different offer than the one somebody sent last
+   * week, without anybody deciding to make it one.
+   */
+  const defaultPicked = React.useMemo(
+    () => lines.filter((l) => l.onJob && (l.subRate ?? 0) > 0).map((l) => l.code),
+    [lines],
+  );
   const [picked, setPicked] = React.useState<Set<string> | null>(null);
-  const chosen = picked ?? new Set(sendable);
+  const chosen = picked ?? new Set(defaultPicked);
+
+  /** The job's own work, then everything else on the card. */
+  const jobLines = lines.filter((l) => l.onJob);
+  const otherLines = lines.filter((l) => !l.onJob);
+  const [showAll, setShowAll] = React.useState(false);
+  const [find, setFind] = React.useState("");
+
+  /**
+   * How much of the rest of the card to draw at once.
+   *
+   * One customer's card carries 2,486 codes. Drawing them all puts 2,486 rows
+   * and 2,486 inputs on the page, which is slow to render and useless to read —
+   * nobody finds a code by scrolling that. So the fold shows the first screenful
+   * and the search narrows it, which is how somebody actually arrives here:
+   * knowing the code they want to price.
+   */
+  const CARD_PAGE = 60;
+  const needle = find.trim().toUpperCase();
+  const matching = needle
+    ? otherLines.filter(
+        (l) =>
+          l.code.toUpperCase().includes(needle) ||
+          l.description.toUpperCase().includes(needle),
+      )
+    : otherLines;
+  const shownOther = matching.slice(0, CARD_PAGE);
 
   // A code that stops being sendable — its rate cleared — must not linger in
   // the selection and put a stale line on a sheet.
@@ -179,16 +218,97 @@ setCardNote(
   const marginPct =
     totals.margin !== null && totals.revenue > 0 ? totals.margin / totals.revenue : null;
 
+  /** One row, drawn the same whether or not this job plans the work. */
+  const renderRow = (l: ProjectRateLine) => {
+                  const lineMargin =
+                    l.plannedRevenue !== null && l.plannedCost !== null
+                      ? l.plannedRevenue - l.plannedCost
+                      : null;
+                  return (
+                    <tr
+                      key={l.code}
+                      className="border-b border-border/40 last:border-0 hover:bg-foreground/[0.02]"
+                    >
+                      <td className="w-8 py-2 pl-4 pr-0 sm:pl-5">
+                        <input
+                          type="checkbox"
+                          aria-label={`Put ${l.code} on the sheet`}
+                          checked={chosen.has(l.code)}
+                          disabled={(l.subRate ?? 0) <= 0}
+                          onChange={() => toggle(l.code)}
+                          className="size-3.5 cursor-pointer accent-brand align-middle disabled:cursor-not-allowed disabled:opacity-30"
+                          title={(l.subRate ?? 0) > 0 ? undefined : "No pay rate set — nothing to quote"}
+                        />
+                      </td>
+                      <td className="num px-3 py-2 text-[12px] font-semibold uppercase text-brand-bright">
+                        {l.code}
+                      </td>
+                      <td className="max-w-[220px] truncate px-3 py-2 text-[12px] text-muted-foreground">
+                        {l.description}
+                      </td>
+                      <td className="num px-3 py-2 text-right text-[12px] text-muted-foreground">
+                        {formatNumber(l.planned)} {l.unit}
+                      </td>
+                      <td className="num px-3 py-2 text-right text-[12.5px] text-foreground">
+                        {l.customerRate !== null ? (
+                          formatRate(l.customerRate)
+                        ) : (
+                          <span className="text-warning">no rate</span>
+                        )}
+                      </td>
+                      {/* Editable with or without a crew: this is the number
+                          you move before sending the sheet, and the one that
+                          costs the job before anyone is picked. */}
+                      <td className="px-3 py-1.5 text-right">
+                        <span className="inline-flex items-center gap-1">
+                          {busy === l.code ? (
+                            <Loader2 className="size-3 animate-spin text-muted-foreground" />
+                          ) : l.subRate === null ? (
+                            <Plus className="size-3 text-warning" />
+                          ) : null}
+                          <input
+                            type="number"
+                            step="0.01"
+                            min={0}
+                            defaultValue={l.subRate ?? ""}
+                            placeholder="set"
+                            onBlur={(e) => void setPay(l, e.target.value)}
+                            className={cn(
+                              "num w-20 rounded border bg-foreground/[0.03] px-1.5 py-1 text-right text-[12.5px] text-foreground outline-none focus:border-brand/60 focus:bg-brand/[0.06]",
+                              l.subRate === null ? "border-warning/40" : "border-border/70",
+                            )}
+                          />
+                        </span>
+                      </td>
+                      <td
+                        className={cn(
+                          "num px-3 py-2 text-right text-[12.5px] font-medium",
+                          l.spread === null
+                            ? "text-muted-foreground"
+                            : l.spread > 0
+                              ? "text-success"
+                              : "text-critical",
+                        )}
+                      >
+                        {l.spread !== null ? formatRate(l.spread) : "—"}
+                      </td>
+                      <td className="num px-4 py-2 text-right text-[12.5px] text-foreground sm:px-5">
+                        {lineMargin !== null ? formatCurrency(lineMargin) : "—"}
+                      </td>
+                    </tr>
+                  );
+  };
+
   return (
     <Panel>
       <PanelHeader
         title="Rates on this job"
         description={
           crew
-            ? `What Globe pays us and what ${crew.company} is paid, on the ${lines.length} codes this job uses`
-            : `What the customer pays us on the ${lines.length} codes this job uses`
+            ? `What Globe pays us and what ${crew.company} is paid, on the ${jobLines.length} codes this job uses`
+            : `What the customer pays us on the ${jobLines.length} codes this job uses`
         }
-        count={lines.length}
+        count={jobLines.length}
         icon={<Tags className="size-3.5" />}
       >
         {/* Built from the rates as they stand, so a figure edited here is
@@ -325,85 +445,50 @@ setCardNote(
                 </tr>
               </thead>
               <tbody>
-                {lines.map((l) => {
-                  const lineMargin =
-                    l.plannedRevenue !== null && l.plannedCost !== null
-                      ? l.plannedRevenue - l.plannedCost
-                      : null;
-                  return (
-                    <tr
-                      key={l.code}
-                      className="border-b border-border/40 last:border-0 hover:bg-foreground/[0.02]"
-                    >
-                      <td className="w-8 py-2 pl-4 pr-0 sm:pl-5">
-                        <input
-                          type="checkbox"
-                          aria-label={`Put ${l.code} on the sheet`}
-                          checked={chosen.has(l.code)}
-                          disabled={(l.subRate ?? 0) <= 0}
-                          onChange={() => toggle(l.code)}
-                          className="size-3.5 cursor-pointer accent-brand align-middle disabled:cursor-not-allowed disabled:opacity-30"
-                          title={(l.subRate ?? 0) > 0 ? undefined : "No pay rate set — nothing to quote"}
-                        />
-                      </td>
-                      <td className="num px-3 py-2 text-[12px] font-semibold uppercase text-brand-bright">
-                        {l.code}
-                      </td>
-                      <td className="max-w-[220px] truncate px-3 py-2 text-[12px] text-muted-foreground">
-                        {l.description}
-                      </td>
-                      <td className="num px-3 py-2 text-right text-[12px] text-muted-foreground">
-                        {formatNumber(l.planned)} {l.unit}
-                      </td>
-                      <td className="num px-3 py-2 text-right text-[12.5px] text-foreground">
-                        {l.customerRate !== null ? (
-                          formatRate(l.customerRate)
-                        ) : (
-                          <span className="text-warning">no rate</span>
-                        )}
-                      </td>
-                      {/* Editable with or without a crew: this is the number
-                          you move before sending the sheet, and the one that
-                          costs the job before anyone is picked. */}
-                      <td className="px-3 py-1.5 text-right">
-                        <span className="inline-flex items-center gap-1">
-                          {busy === l.code ? (
-                            <Loader2 className="size-3 animate-spin text-muted-foreground" />
-                          ) : l.subRate === null ? (
-                            <Plus className="size-3 text-warning" />
-                          ) : null}
-                          <input
-                            type="number"
-                            step="0.01"
-                            min={0}
-                            defaultValue={l.subRate ?? ""}
-                            placeholder="set"
-                            onBlur={(e) => void setPay(l, e.target.value)}
-                            className={cn(
-                              "num w-20 rounded border bg-foreground/[0.03] px-1.5 py-1 text-right text-[12.5px] text-foreground outline-none focus:border-brand/60 focus:bg-brand/[0.06]",
-                              l.subRate === null ? "border-warning/40" : "border-border/70",
-                            )}
-                          />
-                        </span>
-                      </td>
-                      <td
-                        className={cn(
-                          "num px-3 py-2 text-right text-[12.5px] font-medium",
-                          l.spread === null
-                            ? "text-muted-foreground"
-                            : l.spread > 0
-                              ? "text-success"
-                              : "text-critical",
-                        )}
+                {jobLines.map(renderRow)}
+
+                {/* The rest of the price book, folded away. A crew hits work
+                    the print did not call for, and the rate wants setting before
+                    the hole is open rather than after — but it is not what this
+                    job is about, so it is one press away rather than in the way. */}
+                {otherLines.length > 0 ? (
+                  <tr className="border-b border-border/40">
+                    <td colSpan={8} className="px-4 py-2 sm:px-5">
+                      <button
+                        type="button"
+                        onClick={() => setShowAll((v) => !v)}
+                        className="focus-ring inline-flex items-center gap-1.5 rounded text-[12px] font-medium text-brand-bright hover:underline"
                       >
-                        {l.spread !== null ? formatRate(l.spread) : "—"}
-                      </td>
-                      <td className="num px-4 py-2 text-right text-[12.5px] text-foreground sm:px-5">
-                        {lineMargin !== null ? formatCurrency(lineMargin) : "—"}
-                      </td>
-                    </tr>
-                  );
-                })}
+                        {showAll ? "Hide" : "Show"} the other {otherLines.length} code
+                        {otherLines.length === 1 ? "" : "s"} on the rate card
+                      </button>
+                      {showAll ? (
+                        <>
+                          <span className="ml-2 text-[11.5px] text-muted-foreground">
+                            Not planned on this job, so they carry no quantity and change no
+                            margin. Set a pay rate and tick one to put it on the sheet.
+                          </span>
+                          <span className="mt-1.5 flex flex-wrap items-center gap-2">
+                            <input
+                              value={find}
+                              onChange={(e) => setFind(e.target.value)}
+                              placeholder="Find a code or description…"
+                              aria-label="Find a code on the rate card"
+                              className="h-7 w-64 rounded border border-border/70 bg-foreground/[0.03] px-2 text-[12px] text-foreground outline-none placeholder:text-muted-foreground/60 focus:border-brand/60"
+                            />
+                            <span className="num text-[11.5px] text-muted-foreground">
+                              {matching.length === shownOther.length
+                                ? `${matching.length} shown`
+                                : `${shownOther.length} of ${matching.length} — search to narrow`}
+                            </span>
+                          </span>
+                        </>
+                      ) : null}
+                    </td>
+                  </tr>
+                ) : null}
+
+                {showAll ? shownOther.map(renderRow) : null}
               </tbody>
               <tfoot>
                 <tr className="border-t border-border/70 bg-foreground/[0.02]">

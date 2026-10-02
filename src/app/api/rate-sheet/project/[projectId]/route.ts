@@ -3,11 +3,9 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { assertProjectAccess, notAuthorized, requireStaff } from "@/lib/authz";
 import { buildRateSheetPdf } from "@/lib/rate-sheet-pdf";
-import { companyLogo } from "@/lib/rate-sheet-logo";
 import { normalizeCode, rateFamilyOf } from "@/lib/unit-codes";
 import { getCodeProfile } from "@/data/code-profile";
 import { marketLabel } from "@/data/markets";
-import { orgName } from "@/lib/org-settings";
 
 export const runtime = "nodejs";
 
@@ -41,8 +39,9 @@ export async function GET(
     return NextResponse.json({ error: denied.message }, { status: 403 });
   }
 
-  const [project, org] = await Promise.all([
-    prisma.project.findFirst({
+  // The organisation is not read at all any more: nothing on this sheet names
+  // a company, so there is nothing to fetch it for.
+  const project = await prisma.project.findFirst({
       where: { id: projectId },
       select: {
         name: true,
@@ -57,10 +56,8 @@ export async function GET(
         // Planned quantity comes along because it decides which of two
         // disagreeing siblings is the one somebody meant.
         materials: { where: { inScope: true }, select: { code: true, planned: true } },
-      },
-    }),
-    prisma.organization.findFirst({ select: { name: true, logoUrl: true } }),
-  ]);
+    },
+  });
 
   if (!project) return NextResponse.json({ error: "Project not found." }, { status: 404 });
 
@@ -180,7 +177,6 @@ export async function GET(
     );
   }
 
-  const logo = await companyLogo(org?.logoUrl ?? null);
   const generatedOn = new Date().toLocaleDateString("en-US", {
     year: "numeric",
     month: "long",
@@ -188,7 +184,8 @@ export async function GET(
   });
 
   const pdf = await buildRateSheetPdf({
-    companyName: org?.name ?? (await orgName()),
+    // Deliberately blank — see the header note in rate-sheet-pdf.ts.
+    companyName: "",
     // Left for the recipient to be written in. The sheet goes out before
     // anyone is signed, so naming a company on it would be presumptuous and
     // would have to be corrected by hand on every copy.
@@ -215,11 +212,19 @@ export async function GET(
       .concat(" — rates below apply to approved daily production on this job."),
     terms: "NET 21 · Fast pay options available",
     lines,
-    logo,
+    logo: null,
     generatedOn,
   });
 
-  const safe = (project.number || project.name).replace(/[^\w.\-]+/g, "-").slice(0, 60);
+  /**
+   * The job number, never the project name.
+   *
+   * The name is the thing being kept off the page — these jobs are named after
+   * the customer and the prime — and a filename is read in an inbox before the
+   * page is ever opened. A job with no number gets no identifier at all rather
+   * than falling back to the one name that must not travel.
+   */
+  const safe = project.number.replace(/[^\w.\-]+/g, "-").slice(0, 60);
   return new NextResponse(Buffer.from(pdf), {
     headers: {
       "Content-Type": "application/pdf",

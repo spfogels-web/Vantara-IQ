@@ -3506,6 +3506,16 @@ export interface ProjectRateLine {
   spread: number | null;
   plannedRevenue: number | null;
   plannedCost: number | null;
+  /**
+   * Whether this job's material list actually calls for this code.
+   *
+   * False for the rest of the rate card, which is carried so a pay rate can be
+   * set on work this job does not plan but might hit — and so a sheet can be
+   * sent covering it. These contribute nothing to planned revenue, cost or
+   * margin: there is no quantity behind them, and inventing one to make a
+   * total look fuller would be inventing the job's budget.
+   */
+  onJob: boolean;
 }
 
 export interface ProjectRates {
@@ -3640,11 +3650,71 @@ export async function getProjectRates(projectId: string): Promise<ProjectRates> 
       spread: cr && sr ? Math.round((cr.rate - sr.rate) * 100) / 100 : null,
       plannedRevenue,
       plannedCost,
+      onJob: true,
     });
   }
 
   // Biggest money first — that is the line worth arguing about.
   lines.sort((a, b) => (b.plannedRevenue ?? 0) - (a.plannedRevenue ?? 0));
+
+  /**
+   * The rest of the rate card, after the work this job plans.
+   *
+   * A job's material list is not the whole price book. A crew hits work the
+   * print did not call for, and a rate agreed after the hole is open is a rate
+   * agreed badly — so the codes that matter are listed with their pay cell
+   * editable, whether or not this job plans any of them.
+   *
+   * MAIN_BILLABLE_CODES is the bound, not the whole card. One customer's card
+   * carries 2,480 codes, almost all of which this contractor will never build;
+   * listing them turns the panel into a price book to scroll rather than a set
+   * of rates to agree, and 2,480 inputs is a page nobody can use. That list is
+   * the fifty-five somebody chose on purpose, and on that same card it is the
+   * fifty-five that are actually built.
+   *
+   * A code already carrying a pay rate rides along whether or not it is on the
+   * list — somebody priced it deliberately and it must not vanish because a
+   * curated list disagrees.
+   *
+   * They carry no planned quantity, so they add nothing to revenue, cost or
+   * margin, and they are not counted as "missing a rate": a code this job does
+   * not build is not a gap in its budget.
+   */
+  const already = new Set(lines.map((l) => normalizeCode(l.code)));
+  const extra: ProjectRateLine[] = [];
+  const consider = [
+    ...customerRates.map((r) => ({ code: r.code, description: r.description, unit: r.unit })),
+    ...subRates.map((r) => ({ code: r.code, description: r.description, unit: r.unit })),
+  ];
+  for (const c of consider) {
+    const key = normalizeCode(c.code);
+    if (!key || already.has(key)) continue;
+
+    const cr = findRate(c.code, customerRates);
+    const sr = findRate(c.code, subRates);
+    // The codes that matter, plus anything somebody has already priced.
+    if (!isMainBillableCode(c.code) && !sr) continue;
+    already.add(key);
+    const srRow = sr
+      ? subRates.find((r) => normalizeCode(r.code) === normalizeCode(c.code))
+      : null;
+
+    extra.push({
+      code: c.code,
+      description: cr?.description || c.description || "",
+      unit: cr?.unit || c.unit || "",
+      planned: 0,
+      customerRate: cr?.rate ?? null,
+      subRate: sr?.rate ?? null,
+      subRateId: srRow?.id ?? null,
+      spread: cr && sr ? Math.round((cr.rate - sr.rate) * 100) / 100 : null,
+      plannedRevenue: null,
+      plannedCost: null,
+      onJob: false,
+    });
+  }
+  extra.sort((a, b) => a.code.localeCompare(b.code));
+  lines.push(...extra);
 
   return {
     crew,
