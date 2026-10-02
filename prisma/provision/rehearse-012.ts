@@ -86,7 +86,25 @@ async function main() {
     // From git HEAD, not the working tree: the working tree already has the
     // Incident models in it, and pushing those would create the very tables the
     // migration is supposed to create.
-    const headSchema = execFileSync("git", ["show", "HEAD:prisma/schema.prisma"], {
+    /**
+     * The schema as it stood immediately BEFORE this migration was written.
+     *
+     * Resolved as the parent of the commit that added the .sql file, rather
+     * than HEAD. It was HEAD while the work was uncommitted, and the moment it
+     * was committed HEAD started carrying the Incident models — which would
+     * have built the very tables 012 is supposed to create, turned every
+     * guarded statement into a no-op, and left the rehearsal reporting PASS
+     * while proving nothing.
+     */
+    const addedIn = execFileSync(
+      "git",
+      ["log", "--diff-filter=A", "--format=%H", "-1", "--", `prisma/pending/${MIGRATION}`],
+      { encoding: "utf8" },
+    ).trim();
+    const baseline = addedIn ? `${addedIn}^` : "HEAD";
+    console.log(`  baseline ${baseline === "HEAD" ? "HEAD (migration not yet committed)" : baseline.slice(0, 8)}\n`);
+
+    const headSchema = execFileSync("git", ["show", `${baseline}:prisma/schema.prisma`], {
       encoding: "utf8",
       maxBuffer: 32 * 1024 * 1024,
     });

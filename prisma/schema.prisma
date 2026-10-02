@@ -87,12 +87,7 @@ model User {
   organization     Organization?             @relation(fields: [organizationId], references: [id])
   organizationId   String?
   subcontractor    Subcontractor?            @relation(fields: [subcontractorId], references: [id])
-  /// The crew, as a plain id plus the company name as it read at the time.
-  /// A relation would give a prettier join and a worse record: a company being
-  /// renamed or removed must not change who was on the job the day a line was
-  /// struck. Same reasoning as IncidentEvent.actorName.
-  subcontractorId   String?
-  subcontractorName String  @default("")
+  subcontractorId  String?
   /// Their job inside that company. Defaults to OWNER because every account
   /// that existed before this was the owner or their nominee — the person who
   /// onboarded the company. Only invited users get anything else.
@@ -1525,6 +1520,12 @@ model ProjectPhoto {
   @@index([projectId, stage, createdAt])
   @@index([projectId, existingDamage])
   @@index([dailySheetId])
+  /// Declared late. Migration 010 created this index in production and the
+  /// model never named it, so `prisma migrate diff` wanted to drop it on every
+  /// comparison — and a `db push` against production would have. The index is
+  /// right; the schema was behind. Nothing to migrate: production already has
+  /// it, and this only makes a freshly built database match.
+  @@index([billingHoldId])
   @@index([incidentId])
   /// For "everything photographed within so many metres of this complaint".
   /// A bounding box over these two columns is enough at this scale; PostGIS
