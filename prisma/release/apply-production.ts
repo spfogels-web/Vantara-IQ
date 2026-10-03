@@ -59,6 +59,21 @@ export const REVIEWED: Record<string, { file: string; sha256: string }> = {
   },
 };
 
+/**
+ * Reviewed but not yet applied to production, newest last.
+ *
+ * Maintained by hand because the alternative is asking the database what it has
+ * and trusting the answer, and a migration that is half-applied answers
+ * "present" to every question anybody thinks to ask. A list somebody edits when
+ * they apply one is duller and harder to fool.
+ *
+ * EMPTY means production is level with the committed schema, and the gate
+ * asserts exactly that — so leaving a key in here after applying it fails the
+ * build, and so does adding a migration to `REVIEWED` without listing it here.
+ * 012 and 013 were applied on 2 October 2026 and removed.
+ */
+export const PENDING: readonly string[] = [];
+
 function main() {
   const key = process.argv[2];
   const entry = REVIEWED[key ?? ""];
@@ -113,7 +128,20 @@ function main() {
    * is drift, and this refuses rather than reporting it and carrying on.
    */
   console.log("\n  checking production against the committed schema…");
-  const report = reportFor(url, readFileSync(file, "utf8"));
+
+  /**
+   * Explained by the whole pending set, not by this file alone.
+   *
+   * The committed schema is ahead of production by the sum of what has not been
+   * applied yet. Checking against only the file in hand would call every other
+   * pending migration "drift" and refuse — so applying the first of two would
+   * be impossible, and the obvious workaround would be to stop checking.
+   *
+   * The file being applied still has to be one of them, which `REVIEWED` and
+   * the hash above already settle.
+   */
+  const pendingSql = PENDING.map((k) => readFileSync(REVIEWED[k].file, "utf8")).join("\n");
+  const report = reportFor(url, pendingSql);
   console.log(formatReport(report));
 
   if (report.unexpected.length > 0) {

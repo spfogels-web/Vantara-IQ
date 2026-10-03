@@ -24,7 +24,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { REVIEWED } from "../../prisma/release/apply-production";
+import { PENDING as PENDING_MIGRATIONS, REVIEWED } from "../../prisma/release/apply-production";
 import { formatReport, objectsCreatedBy, reportFor, sha256Of } from "../../prisma/release/production-diff";
 
 const PENDING = "prisma/pending";
@@ -74,21 +74,33 @@ describe("a migration cannot be applied unless it has been reviewed", () => {
     expect(Object.keys(REVIEWED).every((k) => /^\d{3}$/.test(k))).toBe(true);
   });
 
-  it("pins the bytes of the migration that is pending", () => {
+  it("pins the bytes of every reviewed migration", () => {
     /**
      * A reviewed migration is reviewed as a specific sequence of statements. A
      * file edited after review — by a rebase, a merge, a well-meant tidy — is a
      * different migration wearing a reviewed name, and nothing else in the
      * applier would notice.
      */
-    const entry = REVIEWED["012"];
-    expect(entry, "012 is not in the reviewed set").toBeTruthy();
-    expect(entry.sha256).toBe("762ab58196f1130bb0d24a6f6bdb13e31e7d04a871982704e9e2060f6731fcd2");
+    /**
+     * Every reviewed file, applied or not.
+     *
+     * The hash does not stop mattering once a migration has gone in — it is how
+     * anybody later proves what production actually received, against a file
+     * that has sat in the tree through a dozen rebases since.
+     */
+    for (const [key, entry] of Object.entries(REVIEWED)) {
+      if (!entry.sha256) continue;
+      expect(sha256Of(entry.file), key + " has been edited since it was reviewed").toBe(entry.sha256);
+    }
 
-    const p13 = REVIEWED["013"];
-    expect(p13, "013 is not in the reviewed set").toBeTruthy();
-    expect(sha256Of(p13.file), "013 has been edited since it was reviewed").toBe(p13.sha256);
-    expect(sha256Of(entry.file), "012 has been edited since it was reviewed").toBe(entry.sha256);
+    // The two applied on 2 October, named outright so a careless edit to
+    // REVIEWED cannot quietly re-point them.
+    expect(REVIEWED["012"].sha256).toBe(
+      "762ab58196f1130bb0d24a6f6bdb13e31e7d04a871982704e9e2060f6731fcd2",
+    );
+    expect(REVIEWED["013"].sha256).toBe(
+      "4328b1527a35aca697a49abc833ea55eabae7e0e29c3cd893bcbd7ca31473b56",
+    );
   });
 
   it("creates nothing destructive in the pending migration itself", () => {
@@ -134,7 +146,7 @@ describe("a migration cannot be applied unless it has been reviewed", () => {
  * the oldest would report the newest as drift — both of which teach people to
  * ignore this test, which is worse than not having it.
  */
-const PENDING_KEYS = ["012", "013"] as const;
+const PENDING_KEYS = PENDING_MIGRATIONS;
 
 function pendingSql(): string {
   return PENDING_KEYS.map((k) => readFileSync(REVIEWED[k].file, "utf8")).join("\n");
@@ -180,12 +192,33 @@ describe("the committed schema against production", () => {
     ).toEqual([]);
   });
 
-  it("still has something for the pending migration to do", () => {
+  it("agrees with the pending list about what is outstanding", () => {
     if (!url) return;
     const report = reportFor(url, pendingSql());
-    // If this fails, 012 has already been applied — which is information, not
-    // an error, but it should be a deliberate discovery rather than a surprise
-    // halfway through an apply.
-    expect(report.expected.length, "production already matches — 012 appears to be applied").toBeGreaterThan(0);
+
+    /**
+     * The pending list and the database have to tell the same story.
+     *
+     * Empty list, clean database: production is level with the schema, which is
+     * the state after a rollout. A non-empty list means there is work the
+     * database has not had yet, and the diff should show it.
+     *
+     * The two failures this catches are the ones people actually make: applying
+     * a migration and forgetting to take it out of PENDING, and adding one to
+     * REVIEWED without ever listing it — the second of which would let the
+     * whole production-diff check pass vacuously, because nothing would be
+     * expected and nothing unexpected.
+     */
+    if (PENDING_MIGRATIONS.length === 0) {
+      expect(
+        report.statements.length,
+        `nothing is listed as pending, but production is ${report.statements.length} statement(s) behind the schema`,
+      ).toBe(0);
+    } else {
+      expect(
+        report.expected.length,
+        `${PENDING_MIGRATIONS.join(", ")} listed as pending, but production already matches — were they applied without being removed from PENDING?`,
+      ).toBeGreaterThan(0);
+    }
   });
 });
